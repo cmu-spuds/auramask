@@ -1,0 +1,3 @@
+[submodule "lfw_pairs"]
+	path = lfw_pairs
+	url = git@github.com:PrettyLilLiars/lfw_pairs.git
