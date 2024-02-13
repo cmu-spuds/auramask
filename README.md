@@ -13,8 +13,13 @@ Then, install requirements in the requirements.txt file
 ```sh
 pip install -r requirements.txt
 ```
-Finally, get the pairwise LFW dataset
+Get the pairwise LFW dataset
 ```sh
 cd lfw_pairs
 tfds build --overwrite
+```
+Install the TensorFlow version of $L_{pips}$ similarity metric
+```sh
+cd lpips-tensorflow
+pip install .
 ```
