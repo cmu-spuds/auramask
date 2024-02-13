@@ -1,3 +1,6 @@
 [submodule "lfw_pairs"]
 	path = lfw_pairs
 	url = git@github.com:PrettyLilLiars/lfw_pairs.git
+[submodule "lpips-tensorflow"]
+	path = lpips-tensorflow
+	url = https://github.com/alexlee-gk/lpips-tensorflow
