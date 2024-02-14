@@ -81,11 +81,11 @@ class DecoderBlock(Layer):
 
         return x
 
-class AuraMask(tf.keras.Model):
+class UNet(tf.keras.Model):
     def __init__(self,
                  n_filters,
                  n_dims,
-                 name="AuraMask",
+                 name="UNet",
                  **kwargs):
         super().__init__(name=name, **kwargs)
         # Encoder includes multiple convolutional mini blocks with different maxpooling, dropout and filter parameters
@@ -124,6 +124,11 @@ class AuraMask(tf.keras.Model):
         x = self.conv2(x)
         
         return x
+
+
+"""Functional generation of UNet, good for validation of above.
+"""
+
 
 def EncoderMiniBlock(inputs, n_filters=32, dropout_prob=0.3, max_pooling=True):
     """
@@ -196,7 +201,7 @@ def DecoderMiniBlock(prev_layer_input, skip_layer_input, n_filters=32):
                  kernel_initializer='HeNormal')(conv)
     return conv
 
-def UNet(input_size=(128, 128, 3), n_filters=32, n_classes=3):
+def UNetGen(input_size=(128, 128, 3), n_filters=32, n_classes=3):
     """
     Combine both encoder and decoder blocks according to the U-Net research paper
     Return the model as output 

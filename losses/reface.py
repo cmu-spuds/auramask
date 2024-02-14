@@ -1,10 +1,9 @@
 # Imports
-import tensorflow as tf
-from tensorflow.keras.losses import Loss, cosine_similarity
+from keras.losses import Loss, cosine_similarity
 import lpips_tf
 from deepface.DeepFace import build_model
-from deepface.commons import functions
 from enum import Enum
+import tensorflow as tf
 
 class ReFaceLoss(Loss):
   """Computes the loss for Adversarial Transformation Network training as described by the ReFace paper.
@@ -75,12 +74,13 @@ class ReFaceLoss(Loss):
     Returns:
         tensorflow.Tensor : Normalized loss over models F
     """
-    loss = tf.Tensor(0)
+    loss = 0.0
     for f in self.F_set:
       model = f[0]
       in_shape = f[1]
-      #TODO: convert to right shape
-      loss = tf.add(loss, ReFaceLoss.f_cosine_similarity(model, x, x_adv))
+      x_in = tf.image.resize(x, in_shape)
+      x_adv_in = tf.image.resize(x_adv, in_shape)
+      loss = tf.add(loss, ReFaceLoss.f_cosine_similarity(x_in, x_adv_in, model))
     loss = tf.divide(loss, self.N)
     return loss
 
@@ -119,18 +119,16 @@ class FaceEmbedEnum(Enum):
   ARCFACE = "ArcFace"
   SFACE = "SFace"
   def get_model(self):
-    return build_model(model_name=self.value).model
-  def get_target_size(self):
-    return functions.find_target_size(model_name=self.value)    
+    model = build_model(model_name=self.value)
+    shape = model.input_shape
+    model = model.model
+    return (model, shape)
   @classmethod
   def build_F(cls, targets: list):
     F = set()
     for model_label in targets:
       assert model_label in cls
       F.add(
-        (
-          model_label.get_model(),
-          model_label.get_target_size(),
-        )
+        model_label.get_model()
       )
     return F
