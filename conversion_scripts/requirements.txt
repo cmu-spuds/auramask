@@ -1,0 +1,5 @@
+nobuco
+lpips
+tensorflow[and-cuda]
+torchvision
+opencv-python
