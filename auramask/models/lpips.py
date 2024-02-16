@@ -1,8 +1,7 @@
-from keras.losses import Loss
+from keras.models import Model, load_model
 from keras.layers import Layer
-from keras.models import load_model
+from keras_cv.layers import Resizing, Augmenter
 from keras.initializers import Zeros
-import tensorflow as tf
 from os import path
 
 class WeightLayer(Layer):
@@ -24,42 +23,34 @@ class WeightLayer(Layer):
     def call(self, *args, **kwargs):
         return self.weight
 
-custom_objects = {'WeightLayer': WeightLayer}
+class LPIPS(Model):
+  """Implementation of the perceptual loss model as described by "The Unreasonable Effectiveness of Deep Features as a Perceptual Metric"
 
-# TODO: Host for download
-_URL = 'conversion_scripts/compiled/'
-
-class LPIPS(Loss):
+  Args:
+      backbone (str): Choice of "alex", "vgg", or "squeeze"
+      spatial (bool): Spatial return type
+  """
   def __init__(self, 
               backbone="alex",
               spatial=False,
-              l=0.2,
-              name="LPIPS",
+              name="PerceptualSimilarity",
               **kwargs):
     super().__init__(name=name,**kwargs)
-    self.spatial = spatial
     self.backbone = backbone
-    self.l = l
+    self.spatial = spatial
     mdl_path = path.join(
-        path.expanduser("~/compiled"),
-        'lpips_%s%s.keras'%(backbone, 'spatial' if spatial else '')
-        )
-    self.net = load_model(mdl_path, custom_objects=custom_objects)
-  
-  def get_config(self):
-    return {
-      "name": self.name,
-      "backbone": self.backbone,
-      "spatial": self.spatial,
-      "reduction": self.reduction,
-    }
+          path.expanduser("~/compiled"),
+          'lpips_%s%s.keras'%(backbone, 'spatial' if spatial else '')
+          )
+    self.augmenter = Resizing(64,64)
+    self.net = load_model(mdl_path, custom_objects={'WeightLayer': WeightLayer})
     
+  def get_config(self):
+     return super().get_config()
+  
   def call(
     self,
-    y_true, # reference_img
-    y_pred, # compared_img
+    x
   ):
-    rs_y_true = tf.image.resize(y_true, (64, 64))
-    rs_y_pred = tf.image.resize(y_pred, (64, 64))
-    loss = tf.multiply(self.l, self.net([rs_y_true, rs_y_pred]))
-    return loss
+    y_true, y_pred = x
+    return self.net([self.augmenter(y_true), self.augmenter(y_pred)])

@@ -133,7 +133,7 @@ class AuraMask(Model):
         x_adv = tf.tanh(x_adv)
         x_adv = tf.multiply(self.eps, x_adv)
         x_adv = tf.add(x, x_adv)
-        x_adv = tf.clip_by_value(x_adv, 0, 1)
+        x_adv = tf.clip_by_value(x_adv, 0., 1.)
         return x_adv
     
     def train_step(self, data):
@@ -143,7 +143,6 @@ class AuraMask(Model):
             x_adv = self.generate_adversarial(x, training=True) # Forward pass
             # Compute Loss configured in 'compile()'
             loss = self.compute_loss(y=x, y_pred=x_adv)
-            
         # Compute Gradients
         trainable_vars = self.trainable_variables
         gradients = tape.gradient(loss, trainable_vars)
@@ -154,6 +153,6 @@ class AuraMask(Model):
             if metric.name == "loss":
                 metric.update_state(loss)
             else:
-                metric.update_state(data, x_adv)
+                metric.update_state(x, x_adv)
         return {m.name: m.result() for m in self.metrics}
         
