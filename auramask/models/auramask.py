@@ -1,7 +1,5 @@
 import tensorflow as tf
 from keras import Model
-from keras.losses import Loss
-from keras.metrics import Mean
 from keras.layers import Layer, Conv2D, MaxPooling2D, Dropout, BatchNormalization, Conv2DTranspose, concatenate
 # import keras.ops as np
 
@@ -93,7 +91,6 @@ class AuraMask(Model):
                  name="AuraMask",
                  **kwargs):
         super().__init__(name=name, **kwargs)
-        self.loss_fn = None
         self.eps = eps
 
         # Encoder includes multiple convolutional mini blocks with different maxpooling, dropout and filter parameters
@@ -136,10 +133,8 @@ class AuraMask(Model):
 
         return x
 
-    def compile(self, optimizer="rmsprop", loss=None, metrics=None, loss_weights=None, weighted_metrics=None, run_eagerly=None, steps_per_execution=None, jit_compile=None, pss_evaluation_shards=0, **kwargs):
-        self.loss_fn = loss
-        
-        return super().compile(optimizer, loss, metrics, loss_weights, weighted_metrics, run_eagerly, steps_per_execution, jit_compile, pss_evaluation_shards, **kwargs)
+    # def compile(self, optimizer="rmsprop", loss=None, metrics=None, loss_weights=None, weighted_metrics=None, run_eagerly=None, steps_per_execution=None, jit_compile=None, pss_evaluation_shards=0, **kwargs):
+    #     return super().compile(optimizer, loss, metrics, loss_weights, weighted_metrics, run_eagerly, steps_per_execution, jit_compile, pss_evaluation_shards, **kwargs)
 
     # def compute_loss(self, x=None, y=None, y_pred=None, sample_weight=None):
     #     for loss in self.losses + self.tracked_metrics:
@@ -155,7 +150,8 @@ class AuraMask(Model):
     #     with tf.GradientTape() as tape:
     #         x_adv = self(x, training=True) # Forward pass
     #         # Compute Loss configured in 'compile()'
-    #         loss = self.compute_loss(y=x, y_pred=x_adv)
+    #         loss = self.loss_fn(y_true=x, y_pred=x_adv)
+    #     if self.run_eagerly: print(loss)
     #     # Compute Gradients
     #     trainable_vars = self.trainable_variables
     #     gradients = tape.gradient(loss, trainable_vars)

@@ -24,7 +24,7 @@ class EmbeddingDistanceLoss(Loss):
     self.F_set = FaceEmbedEnum.build_F(F)
     self.cossim = CosineSimilarity(axis=1)
     
-    # self.step = 0
+    self.__step = tf.Variable(0, trainable=False, dtype=tf.int64)
     
     # tf.summary.text("F Loss Config", data=json.dumps(self.get_config()))
     
@@ -57,8 +57,8 @@ class EmbeddingDistanceLoss(Loss):
         print(f)
         raise e
     loss = tf.divide(loss, self.N)
-    # tf.summary.scalar(name="total", data=loss, step=self.step)
-    # self.step += 1
+    tf.summary.scalar(name="total", data=loss, step=self.__step)
+    self.__step.assign_add(1)
     return loss
         
   def f_cosine_similarity(self, x, x_adv, f):
@@ -82,7 +82,7 @@ class EmbeddingDistanceLoss(Loss):
     emb_adv = model(resize(x_adv))
     dist = self.cossim(emb_t, emb_adv)
     dist = tf.negative(dist)
-    # if self.N > 1: tf.summary.scalar(name="%s"%f[2], data=dist, step=self.step)
+    if self.N > 1: tf.summary.scalar(name="%s"%f[2], data=dist, step=self.__step)
     return dist
 
 class EmbeddingDistanceLossTracked(EmbeddingDistanceLoss):
