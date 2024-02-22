@@ -21,7 +21,7 @@ class EncoderBlock(Layer):
                             kernel_initializer='HeNormal')
 
         self.bn = BatchNormalization()
-        self.do = Dropout(dropout_prob) if dropout_prob > 0 else None
+        self.do = Dropout(dropout_prob)
         self.mp = MaxPooling2D(pool_size=(2,2)) if max_pooling else None
 
     def call(self, x):
@@ -32,8 +32,7 @@ class EncoderBlock(Layer):
         x = self.bn(x, training=False)
 
         # In case of overfitting, dropout will regularize the loss and gradient computation to shrink the influence of weights on output
-        if self.do:
-            x = self.do(x)
+        x = self.do(x)
 
         # Pooling reduces the size of the image while keeping the number of channels same
         # Pooling has been kept as optional as the last encoder layer does not use pooling (hence, makes the encoder block flexible to use)
@@ -133,29 +132,18 @@ class AuraMask(Model):
 
         return x
 
-    # def compile(self, optimizer="rmsprop", loss=None, metrics=None, loss_weights=None, weighted_metrics=None, run_eagerly=None, steps_per_execution=None, jit_compile=None, pss_evaluation_shards=0, **kwargs):
-    #     return super().compile(optimizer, loss, metrics, loss_weights, weighted_metrics, run_eagerly, steps_per_execution, jit_compile, pss_evaluation_shards, **kwargs)
-
-    # def compute_loss(self, x=None, y=None, y_pred=None, sample_weight=None):
-    #     for loss in self.losses + self.tracked_metrics:
-    #         if metric.name == "loss":
-    #             metric.update_state(loss)
-    #         else:
-    #             metric.update_state(x, x_adv)
-    #     return super().compute_loss(x, y, y_pred, sample_weight)
-
-    # def train_step(self, data):
-    #     x_adv, x = data
+    def train_step(self, data):
+        _, x = data
         
-    #     with tf.GradientTape() as tape:
-    #         x_adv = self(x, training=True) # Forward pass
-    #         # Compute Loss configured in 'compile()'
-    #         loss = self.loss_fn(y_true=x, y_pred=x_adv)
-    #     if self.run_eagerly: print(loss)
-    #     # Compute Gradients
-    #     trainable_vars = self.trainable_variables
-    #     gradients = tape.gradient(loss, trainable_vars)
-    #     # Update Weights
-    #     self.optimizer.apply_gradients(zip(gradients, trainable_vars))
-    #     # Update metrics (including the one that tracks loss)
-    #     return self.compute_metrics(x=x, y=x, y_pred=x_adv, sample_weight=None)
+        with tf.GradientTape() as tape:
+            y_pred = self(x, training=True) # Forward pass
+            # Compute Loss configured in 'compile()'
+            loss = self.compute_loss(y=x, y_pred=y_pred)
+
+        # Compute Gradients
+        trainable_vars = self.trainable_variables
+        gradients = tape.gradient(loss, trainable_vars)
+        # Update Weights
+        self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+        # Update metrics (including the one that tracks loss)
+        return self.compute_metrics(x=x, y=x, y_pred=y_pred, sample_weight=None)
