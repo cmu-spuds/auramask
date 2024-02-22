@@ -4,3 +4,4 @@ from __future__ import print_function
 
 from auramask.metrics.perceptual import PerceptualSimilarity
 from auramask.metrics.embeddistance import EmbeddingDistance
+from auramask.metrics.tracking import Tracking

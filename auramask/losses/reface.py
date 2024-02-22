@@ -20,10 +20,10 @@ class ReFaceLoss(Loss):
                name="ReFaceLoss",
                **kwargs):
     super().__init__(name=name,**kwargs)
+    self.l = l
     self.lpips = PerceptualLoss(
                   backbone=backbone,
-                  spatial=spatial,
-                  l=l
+                  spatial=spatial
                   )
     self.embeddist = EmbeddingDistanceLoss(
                       F,
@@ -42,5 +42,5 @@ class ReFaceLoss(Loss):
     y_pred, # perturbed images
   ):
     embedloss = self.embeddist(y_true, y_pred)
-    perceploss = self.lpips(y_true, y_pred)
+    perceploss = tf.multiply(self.l, self.lpips(y_true, y_pred))
     return tf.add(embedloss, perceploss)

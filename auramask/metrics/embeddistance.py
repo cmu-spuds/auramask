@@ -1,6 +1,6 @@
-from keras.metrics import Metric, CosineSimilarity
-from auramask.losses import FaceEmbedEnum
-from keras_cv.layers import Resizing
+from keras.metrics import Metric
+from keras.losses import CosineSimilarity
+from auramask.models import FaceEmbedEnum
 import tensorflow as tf
 
 class EmbeddingDistance(Metric):
@@ -10,31 +10,36 @@ class EmbeddingDistance(Metric):
 
   Args:
       F ([FaceEmbedEnum]): A set of face embedding extraction models for the model to attack.
-      l (float): L_{pips} loss coefficient (lambda)
   """
   def __init__(self, 
-               F: set|list[FaceEmbedEnum],
-               name="EmbeddingsLoss",
+               F: list[FaceEmbedEnum],
+               F_set: set = None,
+               name="Embedding Distance",
                **kwargs):
     super().__init__(name=name,**kwargs)
-    if type(F) is set[tuple]:
-      self.F_set = F
-      self.F = None
+    self.F = F
+    self.F = F
+    self.N = len(F)
+    if F_set:
+      self.F_set = F_set
     else:
-      self.F = F
-      self.N = len(F)
       self.F_set = FaceEmbedEnum.build_F(F)
-      self.cossim = CosineSimilarity(axis=1)
-    # TODO: Typechecking
-    # else:
-    #   raise TypeError
+    self.cossim = CosineSimilarity(axis=1)
     
-    self.distance = self.add_weight(name='norm of embeddings distance', initializer='zeros')
+    self.count = self.add_weight("count", initializer="zeros")
+    
+    self.distance = {
+      'FLoss': self.add_weight(name='FLoss', initializer='zeros'),
+    }
+    if self.N > 1:
+      for model in F:
+        self.distance[model.name.lower()] = self.add_weight(name="FLoss_%s"%model.name.lower(), initializer='zeros')
       
   def get_config(self):
     return {
       "name": self.name,
       "Cosine Similarity": self.cossim,
+      "F": self.F,
     }
         
   def f_cosine_similarity(self, x, x_adv, f):
@@ -52,13 +57,14 @@ class EmbeddingDistance(Metric):
     Returns:
         float: negated distance between computed embeddings
     """
-    emb_t = f(x)
-    emb_adv = f(x_adv)
+    model = f[0]
+    aug = f[1]
+    emb_t = model(aug(x))
+    emb_adv = model(aug(x_adv))
     dist = self.cossim(emb_t, emb_adv)
-    dist = tf.negative(dist)
-    return dist
+    return tf.negative(dist)
     
-  def update_state(self, y_true, y_pred):
+  def update_state(self, y_true, y_pred, sample_weight=None):
     """Compute the loss across the set of target models (F)
 
       Args:
@@ -68,18 +74,22 @@ class EmbeddingDistance(Metric):
       Returns:
           tensorflow.Tensor : Normalized loss over models F
     """
+    loss = 0.
     for f in self.F_set:
-      try:
-        model = f[0]
-        aug: Resizing = f[1]
-        self.distance.assign_add(self.f_cosine_similarity(aug(y_true), aug(y_pred), model))
-      except Exception as e:
-        print(model, aug)
-        raise e
-    self.distance.assign(tf.divide(self.distance, self.N))
+      dist = self.f_cosine_similarity(y_true, y_pred, f)
+      loss = tf.add(dist, loss)
+      if self.N>1: self.distance[f[2]].assign_add(dist)
+    self.distance['FLoss'].assign_add(tf.divide(loss, self.N))
+    self.count.assign_add(1)
+    print(self.distance)
+    print(self.count)
   
   def result(self):
+    for key in self.distance.keys():
+      self.distance[key].assign(tf.math.divide_no_nan(self.distance[key], self.count))
     return self.distance
   
   def reset_states(self):
-    self.distance.assign(0)
+    self.count.assign(0)
+    for key in self.distance.keys():
+      self.distance[key].assign(0.)
