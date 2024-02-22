@@ -93,3 +93,4 @@ class EmbeddingDistance(Metric):
     self.count.assign(0)
     for key in self.distance.keys():
       self.distance[key].assign(0.)
+
