@@ -1,5 +1,7 @@
 import tensorflow as tf
 from keras import Model
+from keras.losses import Loss
+from keras.metrics import Mean
 from keras.layers import Layer, Conv2D, MaxPooling2D, Dropout, BatchNormalization, Conv2DTranspose, concatenate
 # import keras.ops as np
 
@@ -91,8 +93,9 @@ class AuraMask(Model):
                  name="AuraMask",
                  **kwargs):
         super().__init__(name=name, **kwargs)
+        self.loss_fn = None
         self.eps = eps
-        
+
         # Encoder includes multiple convolutional mini blocks with different maxpooling, dropout and filter parameters
         self.cblock1 = EncoderBlock(n_filters=n_filters, dropout_prob=0, max_pooling=True)
         self.cblock2 = EncoderBlock(n_filters=n_filters*2,dropout_prob=0, max_pooling=True)
@@ -126,33 +129,37 @@ class AuraMask(Model):
         x = self.conv1(x)
         x = self.conv2(x)
         
+        x = tf.tanh(x)
+        x = tf.multiply(self.eps, x)
+        x = tf.add(x, inputs)
+        x = tf.clip_by_value(x, 0., 1.)
+
         return x
-    
-    def generate_adversarial(self, x, training=True):
-        x_adv = self(x, training=training)
-        x_adv = tf.tanh(x_adv)
-        x_adv = tf.multiply(self.eps, x_adv)
-        x_adv = tf.add(x, x_adv)
-        x_adv = tf.clip_by_value(x_adv, 0., 1.)
-        return x_adv
-    
-    def train_step(self, data):
-        x_adv, x = data
+
+    def compile(self, optimizer="rmsprop", loss=None, metrics=None, loss_weights=None, weighted_metrics=None, run_eagerly=None, steps_per_execution=None, jit_compile=None, pss_evaluation_shards=0, **kwargs):
+        self.loss_fn = loss
         
-        with tf.GradientTape() as tape:
-            x_adv = self.generate_adversarial(x, training=True) # Forward pass
-            # Compute Loss configured in 'compile()'
-            loss = self.compute_loss(y=x, y_pred=x_adv)
-        # Compute Gradients
-        trainable_vars = self.trainable_variables
-        gradients = tape.gradient(loss, trainable_vars)
-        # Update Weights
-        self.optimizer.apply_gradients(zip(gradients, trainable_vars))
-        # Update metrics (including the one that tracks loss)
-        for metric in self.metrics:
-            if metric.name == "loss":
-                metric.update_state(loss)
-            else:
-                metric.update_state(x, x_adv)
-        return {m.name: m.result() for m in self.metrics}
+        return super().compile(optimizer, loss, metrics, loss_weights, weighted_metrics, run_eagerly, steps_per_execution, jit_compile, pss_evaluation_shards, **kwargs)
+
+    # def compute_loss(self, x=None, y=None, y_pred=None, sample_weight=None):
+    #     for loss in self.losses + self.tracked_metrics:
+    #         if metric.name == "loss":
+    #             metric.update_state(loss)
+    #         else:
+    #             metric.update_state(x, x_adv)
+    #     return super().compute_loss(x, y, y_pred, sample_weight)
+
+    # def train_step(self, data):
+    #     x_adv, x = data
         
+    #     with tf.GradientTape() as tape:
+    #         x_adv = self(x, training=True) # Forward pass
+    #         # Compute Loss configured in 'compile()'
+    #         loss = self.compute_loss(y=x, y_pred=x_adv)
+    #     # Compute Gradients
+    #     trainable_vars = self.trainable_variables
+    #     gradients = tape.gradient(loss, trainable_vars)
+    #     # Update Weights
+    #     self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+    #     # Update metrics (including the one that tracks loss)
+    #     return self.compute_metrics(x=x, y=x, y_pred=x_adv, sample_weight=None)

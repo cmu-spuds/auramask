@@ -1,30 +1,27 @@
 from keras.losses import Loss
 from auramask.models import LPIPS
 import tensorflow as tf
-from os import path
 
 class PerceptualLoss(Loss):
   def __init__(self, 
               backbone="alex",
               spatial=False,
-              l=0.2,
               model: LPIPS|None = None,
-              name="PerceptualLoss",
+              name="lpips",
               **kwargs):
     super().__init__(name=name,**kwargs)
     if model:
       self.model = model
     else:
-      self.spatial = spatial
-      self.backbone = backbone
-      self.l = l
       self.model = LPIPS(backbone, spatial)
-  
+    
+    # tf.summary.text(name="Lpips Config", data=json.dumps(self.get_config()))
+    
+    # self.step: tf.int64 = 0
+    
   def get_config(self):
     return {
       "name": self.name,
-      "backbone": self.backbone,
-      "spatial": self.spatial,
       "model": self.model.get_config(),
       "reduction": self.reduction,
     }
@@ -34,4 +31,7 @@ class PerceptualLoss(Loss):
     y_true, # reference_img
     y_pred, # compared_img
   ):
-    return tf.multiply(self.l, self.model([y_true, y_pred]))
+    out = tf.reduce_mean(self.model([y_true, y_pred]))
+    # tf.summary.scalar(name="lpips", data=out, step=self.step)
+    # self.step = self.step + 1
+    return out

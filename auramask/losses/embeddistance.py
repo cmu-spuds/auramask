@@ -1,9 +1,10 @@
 # Imports
+from auramask.models import FaceEmbedEnum
 from keras.losses import Loss, CosineSimilarity
-from enum import Enum
-from deepface.DeepFace import build_model
-from keras_cv.layers import Resizing
 import tensorflow as tf
+# from trackedloss import TrackedLoss
+from keras.metrics import Mean
+import json
 
 class EmbeddingDistanceLoss(Loss):
   """Computes the loss for Adversarial Transformation Network training as described by the ReFace paper.
@@ -12,7 +13,6 @@ class EmbeddingDistanceLoss(Loss):
 
   Args:
       F ([FaceEmbedEnum]): A set of face embedding extraction models for the model to attack.
-      l (float): L_{pips} loss coefficient (lambda)
   """
   def __init__(self, 
                F,
@@ -24,10 +24,14 @@ class EmbeddingDistanceLoss(Loss):
     self.F_set = FaceEmbedEnum.build_F(F)
     self.cossim = CosineSimilarity(axis=1)
     
+    # self.step = 0
+    
+    # tf.summary.text("F Loss Config", data=json.dumps(self.get_config()))
+    
   def get_config(self):
     return {
       "name": self.name,
-      "F": self.F,
+      "F": str(self.F),
       "reduction": self.reduction,
     }
   
@@ -48,14 +52,14 @@ class EmbeddingDistanceLoss(Loss):
     loss = 0.0
     for f in self.F_set:
       try:
-        model = f[0]
-        aug: Resizing = f[1]
-        loss = tf.add(loss, self.f_cosine_similarity(aug(y_true), aug(y_pred), model))
+        loss = tf.add(loss, self.f_cosine_similarity(y_true, y_pred, f))
       except Exception as e:
-        print(model, aug)
+        print(f)
         raise e
     loss = tf.divide(loss, self.N)
-    return loss      
+    # tf.summary.scalar(name="total", data=loss, step=self.step)
+    # self.step += 1
+    return loss
         
   def f_cosine_similarity(self, x, x_adv, f):
     """Compute the cosine distance between the embeddings of the original image and perturbed image.
@@ -72,33 +76,45 @@ class EmbeddingDistanceLoss(Loss):
     Returns:
         float: negated distance between computed embeddings
     """
-    emb_t = f(x)
-    emb_adv = f(x_adv)
+    model = f[0]
+    resize = f[1]
+    emb_t = model(resize(x))
+    emb_adv = model(resize(x_adv))
     dist = self.cossim(emb_t, emb_adv)
     dist = tf.negative(dist)
+    # if self.N > 1: tf.summary.scalar(name="%s"%f[2], data=dist, step=self.step)
     return dist
 
-class FaceEmbedEnum(Enum):
-  VGGFACE = "VGG-Face"
-  FACENET = "Facenet"
-  FACENET512 = "Facenet512"
-  OPENFACE = "OpenFace"
-  DEEPFACE = "DeepFace"
-  DEEPID = "DeepID"
-  ARCFACE = "ArcFace"
-  SFACE = "SFace"
-  def get_model(self):
-    model = build_model(model_name=self.value)
-    shape = model.input_shape[::-1]
-    aug = Resizing(shape[0], shape[1])
-    model = model.model
-    return (model, aug)
-  @classmethod
-  def build_F(cls, targets: list):
-    F = set()
-    for model_label in targets:
-      assert model_label in cls
-      F.add(
-        model_label.get_model()
-      )
-    return F
+class EmbeddingDistanceLossTracked(EmbeddingDistanceLoss):
+  def __init__(self,
+               F,
+               name="EmbeddingsLoss",
+               **kwargs):
+    super().__init__(name=name, F=F, **kwargs)
+    self._metrics = {
+      'embed_dist': Mean('embed_dist', dtype=tf.float32)
+    }
+    
+    if self.N > 1:
+      for model in F:
+        self._metrics[model.name] = Mean("embed_dist_%s"%model.name.lower(), dtype=tf.float32)
+
+    # TrackedLoss.__init__(self, metrics=metrics)
+    
+  def call(
+    self,
+    y_true,
+    y_pred
+  ):
+    loss = super().call(y_true,y_pred)
+    self._metrics['embed_dist'].update_state(loss)
+    return loss
+    
+  def f_cosine_similarity(self, x, x_adv, f):
+    loss = super().f_cosine_similarity(x, x_adv, f)
+    if self.N > 1: self._metrics[f[2]].update_state(loss)
+    return loss
+    
+  @property
+  def metrics(self):
+    return list(self._metrics.values())
