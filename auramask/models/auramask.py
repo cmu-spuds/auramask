@@ -1,6 +1,9 @@
 import tensorflow as tf
 from keras import Model
 from keras.layers import Layer, Conv2D, MaxPooling2D, Dropout, BatchNormalization, Conv2DTranspose, concatenate
+from auramask.losses import EmbeddingDistanceLoss, PerceptualLoss
+from keras.metrics import Mean
+from keras.losses import cosine_similarity
 # import keras.ops as np
 
 class EncoderBlock(Layer):
@@ -91,6 +94,9 @@ class AuraMask(Model):
                  **kwargs):
         super().__init__(name=name, **kwargs)
         self.eps = eps
+        self.F = None
+        self.Lpips = None
+        
 
         # Encoder includes multiple convolutional mini blocks with different maxpooling, dropout and filter parameters
         self.cblock1 = EncoderBlock(n_filters=n_filters, dropout_prob=0, max_pooling=True)
@@ -132,13 +138,66 @@ class AuraMask(Model):
 
         return x
 
+    def compile(self, optimizer="rmsprop", loss=None, metrics=None, loss_weights=None, weighted_metrics=None, run_eagerly=None, steps_per_execution=None, jit_compile=None, pss_evaluation_shards=0, **kwargs):
+        if isinstance(loss, list):
+            weighted = isinstance(loss_weights, list)
+            w = 1.
+            for _ in range(len(loss)):
+                l = loss.pop()
+                if weighted:
+                    w = loss_weights.pop()
+                if isinstance(l, PerceptualLoss):
+                    self.Lpips = (l.model, Mean(name='lpips'), w)
+                elif isinstance(l, EmbeddingDistanceLoss):
+                    self.F = []
+                    for model,reg,name in l.F_set:
+                        self.F.append((model, reg, Mean(name=name), w))
+                else:
+                    loss.append(l)
+                    if weighted:
+                        loss_weights.append(w)
+                
+        return super().compile(optimizer, loss, metrics, loss_weights, weighted_metrics, run_eagerly, steps_per_execution, jit_compile, pss_evaluation_shards, **kwargs)
+
+    def compute_loss(self, x=None, y=None, y_pred=None, sample_weight=None):
+        del x
+        del sample_weight
+        embed_loss = 0.
+        for model, reg, metric, e_w in self.F:
+            embed_y = model(reg(y), training=False)
+            embed_pred = model(reg(y_pred), training=False)
+            sim = tf.negative(cosine_similarity(y_true=embed_y, y_pred=embed_pred, axis=-1))
+            sim = tf.reduce_mean(sim)
+            metric.update_state(sim)
+            embed_loss = tf.add(embed_loss, sim)
+        embed_loss = tf.divide(embed_loss, len(self.F))
+
+        model, metric, p_w = self.Lpips
+
+        sim_loss = tf.reduce_mean(model(y, y_pred, training=False))
+        metric.update_state(sim_loss)
+        
+        embed_loss = tf.multiply(embed_loss, e_w)
+        sim_loss = tf.multiply(sim_loss, p_w)
+        
+        return tf.add(embed_loss, sim_loss)
+
+    def get_metrics_result(self):
+        all_metrics = {}
+        for metric in [self.Lpips[1]] + [metric for _, _, metric, _ in self.F]:
+            all_metrics[metric.name] = metric.result()
+            metric.reset_state()
+                
+        return all_metrics
+
+    # @tf.function
     def train_step(self, data):
         _, x = data
         
         with tf.GradientTape() as tape:
+            # tape.watch(x)
             y_pred = self(x, training=True) # Forward pass
-            # Compute Loss configured in 'compile()'
-            loss = self.compute_loss(y=x, y_pred=y_pred)
+            loss = self.compute_loss(y=x, y_pred=y_pred) 
 
         # Compute Gradients
         trainable_vars = self.trainable_variables
@@ -146,4 +205,7 @@ class AuraMask(Model):
         # Update Weights
         self.optimizer.apply_gradients(zip(gradients, trainable_vars))
         # Update metrics (including the one that tracks loss)
-        return self.compute_metrics(x=x, y=x, y_pred=y_pred, sample_weight=None)
+        # Return a dict mapping metric names to current value
+        metrics = self.get_metrics_result()
+        metrics['loss'] = loss
+        return metrics
