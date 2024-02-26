@@ -1,6 +1,6 @@
 from keras.metrics import Metric
 from keras.losses import CosineSimilarity
-from auramask.models import FaceEmbedEnum
+from auramask.models.face_embeddings import FaceEmbedEnum
 import tensorflow as tf
 
 class EmbeddingDistance(Metric):

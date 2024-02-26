@@ -1,5 +1,5 @@
 from keras.losses import Loss
-from auramask.models import LPIPS
+from auramask.models.lpips import LPIPS
 import tensorflow as tf
 
 class PerceptualLoss(Loss):
