@@ -2,7 +2,7 @@ from enum import Enum
 from deepface.DeepFace import build_model
 from keras_cv.layers import Resizing
 
-class FaceEmbedEnum(Enum):
+class FaceEmbedEnum(str, Enum):
   VGGFACE = "VGG-Face"
   FACENET = "Facenet"
   FACENET512 = "Facenet512"
@@ -26,3 +26,5 @@ class FaceEmbedEnum(Enum):
         model_label.get_model()
       )
     return F
+  def toJSON(self):
+    return self.name
