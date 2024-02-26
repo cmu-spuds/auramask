@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras.layers import Layer, Input, Conv2D, MaxPooling2D, Dropout, BatchNormalization, Conv2DTranspose, concatenate
+from keras.layers import Layer, Input, Conv2D, MaxPooling2D, Dropout, BatchNormalization, Conv2DTranspose, concatenate
 
 class EncoderBlock(Layer):
     def __init__(self, n_filters=32, kernel=3, dropout_prob=0.3, max_pooling=True, name='UEncoder', **kwargs):

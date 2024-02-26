@@ -1,8 +1,7 @@
 # Imports
-from auramask.models import FaceEmbedEnum
+from auramask.models.face_embeddings import FaceEmbedEnum
 from keras.losses import Loss, CosineSimilarity
 import tensorflow as tf
-# from trackedloss import TrackedLoss
 from keras.metrics import Mean
 import json
 
