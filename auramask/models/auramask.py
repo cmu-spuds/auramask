@@ -1,7 +1,8 @@
 import tensorflow as tf
 from keras import Model
 from keras.layers import Layer, Conv2D, MaxPooling2D, Dropout, BatchNormalization, Conv2DTranspose, concatenate
-from auramask.losses import EmbeddingDistanceLoss, PerceptualLoss
+from auramask.losses.embeddistance import EmbeddingDistanceLoss
+from auramask.losses.perceptual import PerceptualLoss
 from keras.metrics import Mean
 from keras.losses import cosine_similarity
 # import keras.ops as np

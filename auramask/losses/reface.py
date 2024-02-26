@@ -1,7 +1,8 @@
 # Imports
 from keras.losses import Loss
 import tensorflow as tf
-from auramask.losses import PerceptualLoss, EmbeddingDistanceLoss
+from auramask.losses.perceptual import PerceptualLoss
+from auramask.losses.embeddistance import EmbeddingDistanceLoss
 
 class ReFaceLoss(Loss):
   """Computes the loss for Adversarial Transformation Network training as described by the ReFace paper.
