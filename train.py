@@ -76,7 +76,7 @@ def initialize_model():
     optimizer=optimizer,
     loss=[Lpips, FLoss],
     loss_weights=[hparams['lambda'],1.],
-    run_eagerly=True
+    run_eagerly=False
   )
   return model
 
@@ -98,10 +98,14 @@ class ImageCallback(Callback):
     return super().on_train_begin(logs)
   def on_train_batch_end(self, batch, logs=None):
     if batch % 20 == 0:
-      tf.summary.image("Augmented/%d"%self.epoch, self.model(self.sample), max_outputs=1, step=batch)
+      y, mask = self.model(self.sample)
+      tf.summary.image("Augmented/%d"%self.epoch, y, max_outputs=1, step=batch)
+      tf.summary.image("Mask/%d"%self.epoch, (mask * 0.5) + 0.5, max_outputs=1, step=batch)
     return super().on_train_batch_begin(batch, logs)
   def on_epoch_end(self, epoch, logs=None):
-    tf.summary.image("Augmented/epoch", self.model(self.sample), max_outputs=10, step=epoch)
+    y, mask = self.model(self.sample)
+    tf.summary.image("Augmented/epoch", y, max_outputs=10, step=epoch)
+    tf.summary.image("Mask/epoch", (mask * 0.5) + 0.5, max_outputs=10, step=epoch)
     self.epoch+=1
     return super().on_epoch_end(epoch, logs)
 
@@ -117,18 +121,18 @@ def run(model, x, callbacks=None, verbosity=0):
     batch_size=hparams['batch'],
     callbacks=callbacks,
     epochs=hparams['epoch'],
-    verbose=verbosity,
-    use_multiprocessing=True
+    verbose=verbosity
   )
   return training_history
 
 def main():
+  callbacks = None
   logdir = 'logs/nocrop/%s/%s/%s'%(branch, datetime.now().strftime("%Y%m%d"), datetime.now().strftime("%H%M%S"))
   ds, info = load_data()
   t_ds = get_training_data(ds)
   model = initialize_model()
   callbacks = init_callbacks(get_sample_data(t_ds), logdir)
-  history = run(model, t_ds, callbacks, 1)
+  history = run(model, t_ds, callbacks, 0)
 
 if __name__ == "__main__":
   main()
