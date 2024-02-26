@@ -1,6 +1,6 @@
 from enum import Enum
 from deepface.DeepFace import build_model
-from keras_cv.layers import Resizing
+# from keras_cv.layers import Resizing
 
 class FaceEmbedEnum(str, Enum):
   VGGFACE = "VGG-Face"
@@ -14,9 +14,11 @@ class FaceEmbedEnum(str, Enum):
   def get_model(self):
     model = build_model(model_name=self.value)
     shape = model.input_shape[::-1]
-    aug = Resizing(shape[0], shape[1])
+    # aug = Resizing(shape[0], shape[1])
     model = model.model
-    return (model, aug, self.name.lower())
+    for layer in model.layers:
+      layer.trainable = False
+    return (model, shape, self.name.lower())
   @classmethod
   def build_F(cls, targets: list):
     F = set()
