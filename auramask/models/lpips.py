@@ -50,7 +50,7 @@ class LPIPS(Model):
   
   def call(
     self,
-    x
+    y_true,
+    y_pred
   ):
-    y_true, y_pred = x
     return self.net([self.augmenter(y_true), self.augmenter(y_pred)])
