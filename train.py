@@ -104,10 +104,12 @@ class ImageCallback(TensorBoard):
   def __init__(
     self, 
     sample,
+    note='',
     **kwargs):
     super().__init__(**kwargs)
     self.sample = sample
     self.epoch = 0
+    self.note = note
     
   def on_train_begin(self, logs=None):
     super().on_train_begin(logs)
@@ -116,7 +118,8 @@ class ImageCallback(TensorBoard):
     tmp_hparams['input'] = str(tmp_hparams['input'])
     with self._train_writer.as_default():
       hp.hparams(tmp_hparams)
-      tf.summary.image("Original", self.sample, max_outputs=10, step=0)
+      if not (self.note == ''):
+        tf.summary.text("Run Note", self.note)
     
   def on_train_batch_end(self, batch, logs=None):
     with tf.name_scope('E%d-Batch'%self.epoch):
@@ -134,15 +137,14 @@ class ImageCallback(TensorBoard):
         with tf.name_scope('Epoch'):
           tf.summary.image("Augmented", y, max_outputs=10, step=epoch)
           tf.summary.image("Mask", (mask * 0.5) + 0.5, max_outputs=10, step=epoch)
-      epoch += 1
+      self.epoch += 1
 
-def init_callbacks(sample, logdir):
-  tensorboard_callback = ImageCallback(sample=sample, log_dir=logdir, update_freq=1, histogram_freq=1)
+def init_callbacks(sample, logdir, note=''):
+  tensorboard_callback = ImageCallback(sample=sample, log_dir=logdir, update_freq=1, histogram_freq=1, note=note)
   early_stop = EarlyStopping(monitor='loss', patience=3)
   return [tensorboard_callback, early_stop]
   
 def run(model, x, callbacks=None, verbosity=0):
-  # input("Note for Run:")
   training_history = model.fit(
     x=x,
     batch_size=hparams['batch'],
@@ -153,12 +155,13 @@ def run(model, x, callbacks=None, verbosity=0):
   return training_history
 
 def main():
+  note = input("Note for Run:")
   callbacks = None
   logdir = 'logs/%s/nocrop/%s/%s'%(branch, datetime.now().strftime("%m-%d"), datetime.now().strftime("%H.%M"))
   ds, info = load_data()
   t_ds = get_training_data(ds)
   model = initialize_model(True)
-  callbacks = init_callbacks(get_sample_data(t_ds), logdir)
+  callbacks = init_callbacks(get_sample_data(t_ds), logdir, note)
   history = run(model, t_ds, callbacks, 1)
 
 if __name__ == "__main__":
