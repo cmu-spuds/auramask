@@ -1,3 +1,5 @@
+import argparse
+
 from tensorflow.data import AUTOTUNE
 import tensorflow_datasets as tfds
 
@@ -19,6 +21,20 @@ from tensorboard.plugins.hparams import api as hp
 
 from datetime import datetime
 
+def createParser():
+  parser = argparse.ArgumentParser(
+    prog="AuraMask Training",
+    description="A training script for the AuraMask network",
+  )
+  parser.add_argument('-a', '--alpha', type=float, default=2e-4)
+  parser.add_argument('-e', '--epsilon', type=float, default=0.03)
+  parser.add_argument('-l', '--lambda', type=float, default=0.)
+  parser.add_argument('-B', '--batch_size', type=int, default=32)
+  parser.add_argument('-E', '--epochs', type=int, default=5)
+  parser.add_argument('--lpips_backbone', type=str, choices=['alex', 'vgg', 'squeeze'])
+  parser.add_argument('-F', type=str, nargs="+", choices=['vggface', 'facenet', 'facenet512', 'openface', 'deepface', 'deepid', 'arcface', 'sface'])
+  parser.add_argument('-S', '--seed', type=str, default=None)
+  parser.add_argument('--note', type=str, )
 
 def load_data():
   ds, info = tfds.load('lfw',
@@ -68,7 +84,7 @@ def initialize_loss():
   Lpips = PerceptualLoss(backbone=hparams['Lpips_backbone'])
   return (FLoss, Lpips)
   
-def initialize_model():
+def initialize_model(eager=False):
   model = AuraMask(n_filters=32, n_dims=3, eps=hparams['epsilon'])
   FLoss, Lpips = initialize_loss()
   optimizer = Adam(learning_rate=hparams['alpha'])
@@ -76,7 +92,7 @@ def initialize_model():
     optimizer=optimizer,
     loss=[Lpips, FLoss],
     loss_weights=[hparams['lambda'],1.],
-    run_eagerly=False
+    run_eagerly=eager
   )
   return model
 
@@ -84,38 +100,49 @@ def get_sample_data(ds, seed=None):
   for x, _ in ds.take(1):
     return x
 
-class ImageCallback(Callback):
-  def __init__(self, sample):
-    self.epoch = 0
+class ImageCallback(TensorBoard):
+  def __init__(
+    self, 
+    sample,
+    **kwargs):
+    super().__init__(**kwargs)
     self.sample = sample
-    super().__init__()
+    self.epoch = 0
+    
   def on_train_begin(self, logs=None):
+    super().on_train_begin(logs)
     tmp_hparams = hparams
     tmp_hparams['F'] = ",".join(tmp_hparams['F'])
     tmp_hparams['input'] = str(tmp_hparams['input'])
-    hp.hparams(tmp_hparams)
-    tf.summary.image("Original", self.sample, max_outputs=10, step=0)
-    return super().on_train_begin(logs)
+    with self._train_writer.as_default():
+      hp.hparams(tmp_hparams)
+      tf.summary.image("Original", self.sample, max_outputs=10, step=0)
+    
   def on_train_batch_end(self, batch, logs=None):
-    if batch % 20 == 0:
-      y, mask = self.model(self.sample)
-      tf.summary.image("Augmented/%d"%self.epoch, y, max_outputs=1, step=batch)
-      tf.summary.image("Mask/%d"%self.epoch, (mask * 0.5) + 0.5, max_outputs=1, step=batch)
-    return super().on_train_batch_begin(batch, logs)
+    with tf.name_scope('E%d-Batch'%self.epoch):
+      super().on_train_batch_end(batch, logs)
+      if batch % self.update_freq == 0:
+        y, mask = self.model(self.sample)
+        with self._train_writer.as_default():
+          tf.summary.image("Augmented", y, max_outputs=1, step=batch)
+          tf.summary.image("Mask", (mask * 0.5) + 0.5, max_outputs=1, step=batch)
+          
   def on_epoch_end(self, epoch, logs=None):
-    y, mask = self.model(self.sample)
-    tf.summary.image("Augmented/epoch", y, max_outputs=10, step=epoch)
-    tf.summary.image("Mask/epoch", (mask * 0.5) + 0.5, max_outputs=10, step=epoch)
-    self.epoch+=1
-    return super().on_epoch_end(epoch, logs)
+      super().on_epoch_end(epoch, logs)
+      y, mask = self.model(self.sample)
+      with self._train_writer.as_default():
+        with tf.name_scope('Epoch'):
+          tf.summary.image("Augmented", y, max_outputs=10, step=epoch)
+          tf.summary.image("Mask", (mask * 0.5) + 0.5, max_outputs=10, step=epoch)
+      epoch += 1
 
 def init_callbacks(sample, logdir):
-  tensorboard_callback = TensorBoard(log_dir=logdir, write_images=True, update_freq=1, histogram_freq=1)
+  tensorboard_callback = ImageCallback(sample=sample, log_dir=logdir, update_freq=1, histogram_freq=1)
   early_stop = EarlyStopping(monitor='loss', patience=3)
-  img_call = ImageCallback(sample)
-  return [tensorboard_callback, early_stop, img_call]
+  return [tensorboard_callback, early_stop]
   
 def run(model, x, callbacks=None, verbosity=0):
+  # input("Note for Run:")
   training_history = model.fit(
     x=x,
     batch_size=hparams['batch'],
@@ -127,12 +154,12 @@ def run(model, x, callbacks=None, verbosity=0):
 
 def main():
   callbacks = None
-  logdir = 'logs/nocrop/%s/%s/%s'%(branch, datetime.now().strftime("%Y%m%d"), datetime.now().strftime("%H%M%S"))
+  logdir = 'logs/%s/nocrop/%s/%s'%(branch, datetime.now().strftime("%m-%d"), datetime.now().strftime("%H.%M"))
   ds, info = load_data()
   t_ds = get_training_data(ds)
-  model = initialize_model()
+  model = initialize_model(True)
   callbacks = init_callbacks(get_sample_data(t_ds), logdir)
-  history = run(model, t_ds, callbacks, 0)
+  history = run(model, t_ds, callbacks, 1)
 
 if __name__ == "__main__":
   main()
