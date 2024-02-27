@@ -90,7 +90,7 @@ class AuraMask(Model):
     def __init__(self,
                  n_filters,
                  n_dims,
-                 eps = 0.2,
+                 eps = 0.02,
                  name="AuraMask",
                  **kwargs):
         super().__init__(name=name, **kwargs)
@@ -134,10 +134,11 @@ class AuraMask(Model):
         
         x = tf.tanh(x)
         x = tf.multiply(self.eps, x)
+        mask = x
         x = tf.add(x, inputs)
         x = tf.clip_by_value(x, 0., 1.)
 
-        return x
+        return x, mask
 
     def compile(self, optimizer="rmsprop", loss=None, metrics=None, loss_weights=None, weighted_metrics=None, run_eagerly=None, steps_per_execution=None, jit_compile=None, pss_evaluation_shards=0, **kwargs):
         if isinstance(loss, list):
@@ -164,9 +165,9 @@ class AuraMask(Model):
         del x
         del sample_weight
         embed_loss = 0.
-        for model, reg, metric, e_w in self.F:
-            embed_y = model(reg(y), training=False)
-            embed_pred = model(reg(y_pred), training=False)
+        for model, shape, metric, e_w in self.F:
+            embed_y = model(tf.image.resize(y, shape), training=False)
+            embed_pred = model(tf.image.resize(y_pred, shape), training=False)
             sim = tf.negative(cosine_similarity(y_true=embed_y, y_pred=embed_pred, axis=-1))
             sim = tf.reduce_mean(sim)
             metric.update_state(sim)
@@ -191,14 +192,14 @@ class AuraMask(Model):
                 
         return all_metrics
 
-    # @tf.function
+    @tf.function
     def train_step(self, data):
-        _, x = data
+        X, y = data
         
         with tf.GradientTape() as tape:
-            # tape.watch(x)
-            y_pred = self(x, training=True) # Forward pass
-            loss = self.compute_loss(y=x, y_pred=y_pred) 
+            tape.watch(X)
+            y_pred, _ = self(X, training=True) # Forward pass
+            loss = self.compute_loss(y=y, y_pred=y_pred)
 
         # Compute Gradients
         trainable_vars = self.trainable_variables
