@@ -15,8 +15,10 @@ class PerceptualLoss(Loss):
     else:
       self.model = LPIPS(backbone, spatial)
 
+    self.model.trainable = False
     for layer in self.model.layers:
       layer.trainable = False
+      layer._name = "%s/%s"%(name, layer.name)
 
     # tf.summary.text(name="Lpips Config", data=json.dumps(self.get_config()))
     
