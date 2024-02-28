@@ -1,5 +1,6 @@
 from enum import Enum
 from deepface.DeepFace import build_model
+import tensorflow as tf
 # from keras_cv.layers import Resizing
 
 class FaceEmbedEnum(str, Enum):
@@ -16,8 +17,11 @@ class FaceEmbedEnum(str, Enum):
     shape = model.input_shape[::-1]
     # aug = Resizing(shape[0], shape[1])
     model = model.model
+    model._name = self.name
+    model.trainable = False
     for layer in model.layers:
       layer.trainable = False
+      layer._name = "%s/%s"%(model.name, layer.name)
     return (model, shape, self.name.lower())
   @classmethod
   def build_F(cls, targets: list):

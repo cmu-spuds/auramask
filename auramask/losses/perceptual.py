@@ -15,12 +15,14 @@ class PerceptualLoss(Loss):
     else:
       self.model = LPIPS(backbone, spatial)
 
+    self.model.trainable = False
     for layer in self.model.layers:
       layer.trainable = False
+      layer._name = "%s/%s"%(name, layer.name)
 
     # tf.summary.text(name="Lpips Config", data=json.dumps(self.get_config()))
     
-    # self.__step = tf.Variable(0, trainable=False, dtype=tf.int64)
+    self.__step = tf.Variable(0, trainable=False, dtype=tf.int64)
     
   def get_config(self):
     return {
@@ -35,6 +37,6 @@ class PerceptualLoss(Loss):
     y_pred, # compared_img
   ):
     out = tf.reduce_mean(self.model([y_true, y_pred]))
-    # tf.summary.scalar(name="lpips", data=out, step=self.__step)
-    # self.__step.assign_add(1)
+    tf.summary.scalar(name="lpips", data=out, step=self.__step)
+    self.__step.assign_add(1)
     return out
