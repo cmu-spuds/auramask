@@ -1,7 +1,12 @@
 import argparse
+import enum
 
 from tensorflow.data import AUTOTUNE
 import tensorflow_datasets as tfds
+
+from random import choice
+from string import ascii_uppercase
+import numpy as np
 
 from auramask.losses.perceptual import PerceptualLoss
 from auramask.losses.embeddistance import EmbeddingDistanceLoss
@@ -22,7 +27,48 @@ from tensorboard.plugins.hparams import api as hp
 
 from datetime import datetime
 
-def createParser():
+hparams: dict = {
+  "alpha": 2e-4,
+  "epsilon": 0.03,
+  "lambda": 0.,
+  "batch": 32,
+  "optimizer": "adam",
+  "epochs": 500,
+  "F": [FaceEmbedEnum.ARCFACE],
+  "lpips_backbone": "alex",
+  "input": (256,256)
+}
+
+class EnumAction(argparse.Action):
+    """
+    Argparse action for handling Enums
+    """
+    def __init__(self, **kwargs):
+        # Pop off the type value
+        enum_type = kwargs.pop("type", None)
+
+        # Ensure an Enum subclass is provided
+        if enum_type is None:
+            raise ValueError("type must be assigned an Enum when using EnumAction")
+        if not issubclass(enum_type, enum.Enum):
+            raise TypeError("type must be an Enum when using EnumAction")
+
+        # Generate choices from the Enum
+        kwargs.setdefault("choices", tuple(e.name.lower() for e in enum_type))
+
+        super(EnumAction, self).__init__(**kwargs)
+
+        self._enum = enum_type
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        # Convert value back into an Enum
+        if isinstance(values, str):
+          value = self._enum[values.upper()]
+        elif isinstance(values, list):
+          value = [self._enum[x.upper()] for x in values]
+        setattr(namespace, self.dest, value)
+
+def parse_args():
   parser = argparse.ArgumentParser(
     prog="AuraMask Training",
     description="A training script for the AuraMask network",
@@ -30,12 +76,18 @@ def createParser():
   parser.add_argument('-a', '--alpha', type=float, default=2e-4)
   parser.add_argument('-e', '--epsilon', type=float, default=0.03)
   parser.add_argument('-l', '--lambda', type=float, default=0.)
-  parser.add_argument('-B', '--batch_size', type=int, default=32)
+  parser.add_argument('-B', '--batch_size', dest='batch', type=int, default=32)
   parser.add_argument('-E', '--epochs', type=int, default=5)
-  parser.add_argument('--lpips_backbone', type=str, choices=['alex', 'vgg', 'squeeze'])
-  parser.add_argument('-F', type=str, nargs="+", choices=['vggface', 'facenet', 'facenet512', 'openface', 'deepface', 'deepid', 'arcface', 'sface'])
-  parser.add_argument('-S', '--seed', type=str, default=None)
-  parser.add_argument('--note', type=str, )
+  parser.add_argument('-L', '--lpips_backbone', type=str, default='alex', choices=['alex', 'vgg', 'squeeze'])
+  parser.add_argument('-F', type=FaceEmbedEnum, nargs="+", required=True, action=EnumAction)
+  parser.add_argument('-S', '--seed', type=str, default=''.join(choice(ascii_uppercase) for _ in range(12)))
+  parser.add_argument('--log', default=True, type=bool, action=argparse.BooleanOptionalAction)
+  parser.add_argument('--split', type=str, default='train')
+  parser.add_argument('--n_filters', type=int, default=32)
+  parser.add_argument('--eager', default=False, type=bool, action=argparse.BooleanOptionalAction)
+  parser.add_argument('-v', '--verbose', default=1, type=int)
+  
+  return parser.parse_args()
 
 def load_data():
   ds, info = tfds.load('lfw',
@@ -45,22 +97,9 @@ def load_data():
                       with_info=True,
                       download=True,
                       as_supervised=False,
-                      split='train[0:64]')
+                      split=hparams['split'])
 
   return ds, info
-
-hparams = {
-  "alpha": 2e-4,
-  "epsilon": 0.03,
-  "lambda": 0.,
-  "batch": 32,
-  "optimizer": "adam",
-  # EPOCH = 500  # ReFace training
-  "epoch": 500,
-  "F": [FaceEmbedEnum.ARCFACE],
-  "Lpips_backbone": "alex",
-  "input": (256,256)
-}
 
 def get_training_data(ds):
   augmenter = Augmenter(
@@ -83,22 +122,28 @@ def get_training_data(ds):
 
 def initialize_loss():
   FLoss = EmbeddingDistanceLoss(F=hparams['F'])
-  Lpips = PerceptualLoss(backbone=hparams['Lpips_backbone'])
+  Lpips = PerceptualLoss(backbone=hparams['lpips_backbone'])
   return FLoss, Lpips
   
-def initialize_model(n_filters=32, eager=False):
-  model = AuraMask(n_filters=n_filters, n_dims=3, eps=hparams['epsilon'])
+def initialize_model():
+  model = AuraMask(n_filters=hparams['n_filters'], n_dims=3, eps=hparams['epsilon'])
   FLoss, Lpips = initialize_loss()
   optimizer = Adam(learning_rate=hparams['alpha'])
   model.compile(
     optimizer=optimizer,
     loss=[Lpips, FLoss],
     loss_weights=[hparams['lambda'],1.],
-    run_eagerly=eager
+    run_eagerly=hparams['eager']
   )
   return model
 
-def get_sample_data(ds, seed=None):
+def set_seed():
+  seed = hparams['seed']
+  seed = hash(seed) % (2**32)
+  print("Using seed", seed)
+  keras.utils.set_random_seed(seed)
+
+def get_sample_data(ds):
   for x, _ in ds.take(1):
     return x
 
@@ -110,7 +155,6 @@ class ImageCallback(TensorBoard):
     **kwargs):
     super().__init__(**kwargs)
     self.sample = sample
-    self.epoch = 0
     self.note = note
     
   def on_train_begin(self, logs=None):
@@ -119,14 +163,14 @@ class ImageCallback(TensorBoard):
     tmp_hparams['F'] = ",".join(tmp_hparams['F'])
     tmp_hparams['input'] = str(tmp_hparams['input'])
     with self._train_writer.as_default():
-      hp.hparams(tmp_hparams)
+      hp.hparams(tmp_hparams, trial_id='%s-%s-%s'%(branch, datetime.now().strftime("%m-%d"), datetime.now().strftime("%H.%M")))
       if not (self.note == ''):
         tf.summary.text("Run Note", self.note)
     
   def on_train_batch_end(self, batch, logs=None):
-    with tf.name_scope('E%d-Batch'%self.epoch):
+    with tf.name_scope('Batch'):
       super().on_train_batch_end(batch, logs)
-      if batch % self.update_freq == 0:
+      if not isinstance(self.update_freq, str) and batch % self.update_freq == 0:
         y, mask = self.model(self.sample)
         with self._train_writer.as_default():
           tf.summary.image("Augmented", y, max_outputs=1, step=batch)
@@ -134,13 +178,13 @@ class ImageCallback(TensorBoard):
           
   def on_epoch_end(self, epoch, logs=None):
       super().on_epoch_end(epoch, logs)
-      y, mask = self.model(self.sample)
-      with self._train_writer.as_default():
-        with tf.name_scope('Epoch'):
-          tf.summary.image("Augmented", y, max_outputs=10, step=epoch)
-          tf.summary.image("Mask", (mask * 0.5) + 0.5, max_outputs=10, step=epoch)
-      self.epoch += 1
-      
+      if (epoch+1) % self.histogram_freq == 0:
+        y, mask = self.model(self.sample)
+        with self._train_writer.as_default():
+          with tf.name_scope('Epoch'):
+            tf.summary.image("Augmented", y, max_outputs=10, step=epoch)
+            tf.summary.image("Mask", (mask * 0.5) + 0.5, max_outputs=10, step=epoch)
+            
   def _log_weights(self, epoch):
       """Logs the weights of the Model to TensorBoard."""
       with self._train_writer.as_default():
@@ -167,41 +211,45 @@ class ImageCallback(TensorBoard):
               self._train_writer.flush()
 
 def init_callbacks(sample, logdir, note=''):
+  # histogram_freq = hparams['epochs'] // 10
   tensorboard_callback = ImageCallback(
     sample=sample, 
     log_dir=logdir, 
-    write_graph=True, 
     update_freq=1, 
-    histogram_freq=10, 
+    histogram_freq=10,
     note=note,
-    # profile_batch=2,
   )
   # early_stop = EarlyStopping(monitor='loss', patience=3)
   return [tensorboard_callback]
   
-def run(model, x, callbacks=None, verbosity=0, steps=None):
-  training_history = model.fit(
-    x=x,
-    batch_size=hparams['batch'],
-    callbacks=callbacks,
-    epochs=hparams['epoch'],
-    verbose=verbosity,
-    steps_per_epoch=steps,
-  )
-  return training_history
-
 def main():
-  note = input("Note for Run:")
-  callbacks = None
-  logdir = 'logs/%s/nocrop/%s/%s'%(branch, datetime.now().strftime("%m-%d"), datetime.now().strftime("%H.%M"))
+  args = parse_args()
+  hparams.update(args.__dict__)
+  log = hparams.pop('log')
+  verbose = hparams.pop('verbose')
+  set_seed()
+
   ds, info = load_data()
   t_ds = get_training_data(ds)
-  model = initialize_model(n_filters=8, eager=False)
-  sample = get_sample_data(t_ds)
-  model(sample)
+  model = initialize_model()
+
+  if log:
+    note = input("Note for Run:")
+    logdir = 'logs/%s/%s/%s'%(branch, datetime.now().strftime("%m-%d"), datetime.now().strftime("%H.%M"))
+    sample = get_sample_data(t_ds)
+    model(sample)
+    callbacks = init_callbacks(sample, logdir, note)
+  else:
+    callbacks = None
   # model.summary(expand_nested=True, show_trainable=True)
-  callbacks = init_callbacks(sample, logdir, note)
-  history = run(model, t_ds, callbacks, 0, None)
+  training_history = model.fit(
+    x=t_ds,
+    batch_size=hparams['batch'],
+    callbacks=callbacks,
+    epochs=hparams['epochs'],
+    verbose=verbose,
+  )
+  return training_history
 
 if __name__ == "__main__":
   main()
