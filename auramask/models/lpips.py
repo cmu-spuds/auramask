@@ -3,6 +3,7 @@ from keras.layers import Layer
 from keras_cv.layers import Resizing, Augmenter
 from keras.initializers import Zeros
 from os import path
+import tensorflow as tf
 
 class WeightLayer(Layer):
     def __init__(self, weight_shape, weight_dtype, trainable, *args, **kwargs):
@@ -50,7 +51,7 @@ class LPIPS(Model):
   
   def call(
     self,
-    y_true,
-    y_pred
+    x
   ):
+    y_true, y_pred = x
     return self.net([self.augmenter(y_true), self.augmenter(y_pred)])
