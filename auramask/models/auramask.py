@@ -167,7 +167,7 @@ class AuraMask(Model):
         del sample_weight
         tloss = tf.constant(0, dtype=tf.float32)
         with tf.name_scope("EmbeddingDistance"):
-            embed_loss = 0.
+            embed_loss = tf.constant(0, dtype=tf.float32)
             for model, shape, metric, e_w in self.F:
                 with tf.name_scope(model.name):
                     embed_y = tf.stop_gradient(model(tf.image.resize(y, shape), training=False))
@@ -206,6 +206,7 @@ class AuraMask(Model):
         X, y = data
         
         with tf.GradientTape() as tape:
+            tape.watch(X)
             y_pred, _ = self(X, training=True) # Forward pass
             loss = self.compute_loss(y=y, y_pred=y_pred)
 
