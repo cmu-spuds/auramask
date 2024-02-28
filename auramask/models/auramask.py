@@ -99,20 +99,20 @@ class AuraMask(Model):
         self.Lpips = None
         
         # Encoder includes multiple convolutional mini blocks with different maxpooling, dropout and filter parameters
-        self.cblock1 = EncoderBlock(n_filters=n_filters, dropout_prob=0, max_pooling=True, name="AuraMask/cblock%d"%1)
-        self.cblock2 = EncoderBlock(n_filters=n_filters*2,dropout_prob=0, max_pooling=True, name="AuraMask/cblock%d"%2)
-        self.cblock3 = EncoderBlock(n_filters=n_filters*4,dropout_prob=0, max_pooling=True, name="AuraMask/cblock%d"%3)
-        self.cblock4 = EncoderBlock(n_filters=n_filters*8,dropout_prob=0.3, max_pooling=True, name="AuraMask/cblock%d"%4)
-        self.cblock5 = EncoderBlock(n_filters=n_filters*16, dropout_prob=0.3, max_pooling=False, name="AuraMask/cblock%d"%5)
+        self.cblock1 = EncoderBlock(n_filters=n_filters, dropout_prob=0, max_pooling=True, name="cblock%d"%1)
+        self.cblock2 = EncoderBlock(n_filters=n_filters*2,dropout_prob=0, max_pooling=True, name="cblock%d"%2)
+        self.cblock3 = EncoderBlock(n_filters=n_filters*4,dropout_prob=0, max_pooling=True, name="cblock%d"%3)
+        self.cblock4 = EncoderBlock(n_filters=n_filters*8,dropout_prob=0.3, max_pooling=True, name="cblock%d"%4)
+        self.cblock5 = EncoderBlock(n_filters=n_filters*16, dropout_prob=0.3, max_pooling=False, name="cblock%d"%5)
     
         # Decoder includes multiple mini blocks with decreasing number of filters
-        self.ublock6 = DecoderBlock(n_filters=n_filters * 8, name="AuraMask/ublock%d"%6)
-        self.ublock7 = DecoderBlock(n_filters=n_filters * 4, name="AuraMask/ublock%d"%7)
-        self.ublock8 = DecoderBlock(n_filters=n_filters * 2, name="AuraMask/ublock%d"%8)
-        self.ublock9 = DecoderBlock(n_filters=n_filters, name="AuraMask/ublock%d"%9)
+        self.ublock6 = DecoderBlock(n_filters=n_filters * 8, name="ublock%d"%6)
+        self.ublock7 = DecoderBlock(n_filters=n_filters * 4, name="ublock%d"%7)
+        self.ublock8 = DecoderBlock(n_filters=n_filters * 2, name="ublock%d"%8)
+        self.ublock9 = DecoderBlock(n_filters=n_filters, name="ublock%d"%9)
         
-        self.conv1 = Conv2D(n_filters, 3, activation='relu', padding='same', kernel_initializer='he_normal', name="AuraMask/conv1")
-        self.conv2 = Conv2D(n_dims, 1, padding='same', name="AuraMask/conv2")
+        self.conv1 = Conv2D(n_filters, 3, activation='relu', padding='same', kernel_initializer='he_normal', name="conv1")
+        self.conv2 = Conv2D(n_dims, 1, padding='same', name="conv2")
 
     def call(self, inputs):
         ## Encoder Path
@@ -148,7 +148,8 @@ class AuraMask(Model):
                 if weighted:
                     w = loss_weights.pop()
                 if isinstance(l, PerceptualLoss):
-                    self.Lpips = (l.model, Mean(name='lpips'), w)
+                    if w>0:
+                        self.Lpips = (l.model, Mean(name='lpips'), w)
                 elif isinstance(l, EmbeddingDistanceLoss):
                     self.F = []
                     for model,reg,name in l.F_set:
@@ -160,46 +161,51 @@ class AuraMask(Model):
                 
         return super().compile(optimizer, loss, metrics, loss_weights, weighted_metrics, run_eagerly, steps_per_execution, jit_compile, pss_evaluation_shards, **kwargs)
 
-    # @tf.function
+    @tf.function
     def compute_loss(self, x=None, y=None, y_pred=None, sample_weight=None):
         del x
         del sample_weight
+        tloss = tf.constant(0, dtype=tf.float32)
         with tf.name_scope("EmbeddingDistance"):
-            embed_loss = 0.
+            embed_loss = tf.constant(0, dtype=tf.float32)
             for model, shape, metric, e_w in self.F:
                 with tf.name_scope(model.name):
-                    embed_y = model(tf.image.resize(y, shape), training=False)
+                    embed_y = tf.stop_gradient(model(tf.image.resize(y, shape), training=False))
                     embed_pred = model(tf.image.resize(y_pred, shape), training=False)
                     sim = tf.negative(cosine_similarity(y_true=embed_y, y_pred=embed_pred, axis=-1))
                     sim = tf.reduce_mean(sim)
                 metric.update_state(sim)
                 embed_loss = tf.add(embed_loss, sim)
             embed_loss = tf.divide(embed_loss, len(self.F))
+        tloss = tf.add(tloss, tf.multiply(embed_loss, e_w))
 
         with tf.name_scope("Perceptual"):
-            model, metric, p_w = self.Lpips
-            sim_loss = tf.reduce_mean(model(y, y_pred, training=False))
-            metric.update_state(sim_loss)       
+            if self.Lpips:
+                model, metric, p_w = self.Lpips
+                sim_loss = tf.reduce_mean(model([y, y_pred], training=False))
+                metric.update_state(sim_loss)       
+                tloss = tf.add(tloss, tf.multiply(sim_loss, p_w))
 
-        embed_loss = tf.multiply(embed_loss, e_w)
-        sim_loss = tf.multiply(sim_loss, p_w)
-        
-        return tf.add(embed_loss, sim_loss)
+        return tloss
 
     def get_metrics_result(self):
         all_metrics = {}
-        for metric in [self.Lpips[1]] + [metric for _, _, metric, _ in self.F]:
-            all_metrics[metric.name] = metric.result()
-            metric.reset_state()
-                
+        if self.Lpips:
+            for metric in [self.Lpips[1]] + [metric for _, _, metric, _ in self.F]:
+                all_metrics[metric.name] = metric.result()
+                metric.reset_state()
+        else:
+            for _, _, metric, _ in self.F:
+                all_metrics[metric.name] = metric.result()
+                metric.reset_state()
+
         return all_metrics
 
-    # @tf.function
+    @tf.function
     def train_step(self, data):
         X, y = data
         
         with tf.GradientTape() as tape:
-            tape.watch(X)
             y_pred, _ = self(X, training=True) # Forward pass
             loss = self.compute_loss(y=y, y_pred=y_pred)
 
