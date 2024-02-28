@@ -167,7 +167,7 @@ class AuraMask(Model):
         del sample_weight
         tloss = tf.constant(0, dtype=tf.float32)
         with tf.name_scope("EmbeddingDistance"):
-            embed_loss = tf.constant(0, dtype=tf.float32)
+            embed_loss = 0.
             for model, shape, metric, e_w in self.F:
                 with tf.name_scope(model.name):
                     embed_y = tf.stop_gradient(model(tf.image.resize(y, shape), training=False))
