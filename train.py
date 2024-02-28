@@ -12,6 +12,7 @@ from auramask.models.auramask import AuraMask
 from git import Repo
 branch = Repo('./').active_branch.name
 
+import keras
 from keras_cv.layers import Resizing, Rescaling, Augmenter
 from keras.optimizers import Adam
 from keras.callbacks import TensorBoard, EarlyStopping, Callback
@@ -43,7 +44,8 @@ def load_data():
                       }),
                       with_info=True,
                       download=True,
-                      as_supervised=False)
+                      as_supervised=False,
+                      split='train[0:64]')
 
   return ds, info
 
@@ -54,7 +56,7 @@ hparams = {
   "batch": 32,
   "optimizer": "adam",
   # EPOCH = 500  # ReFace training
-  "epoch": 2,
+  "epoch": 500,
   "F": [FaceEmbedEnum.ARCFACE],
   "Lpips_backbone": "alex",
   "input": (256,256)
@@ -73,7 +75,7 @@ def get_training_data(ds):
     outputs = augmenter(inputs)
     return outputs['images'], outputs['images']
   
-  train_ds = ds['train'].batch(hparams['batch']).map(
+  train_ds = ds.batch(hparams['batch']).map(
     lambda x: preprocess_data(x['image']),
     num_parallel_calls=AUTOTUNE).prefetch(AUTOTUNE)
   
@@ -84,8 +86,8 @@ def initialize_loss():
   Lpips = PerceptualLoss(backbone=hparams['Lpips_backbone'])
   return FLoss, Lpips
   
-def initialize_model(eager=False):
-  model = AuraMask(n_filters=32, n_dims=3, eps=hparams['epsilon'])
+def initialize_model(n_filters=32, eager=False):
+  model = AuraMask(n_filters=n_filters, n_dims=3, eps=hparams['epsilon'])
   FLoss, Lpips = initialize_loss()
   optimizer = Adam(learning_rate=hparams['alpha'])
   model.compile(
@@ -144,20 +146,24 @@ class ImageCallback(TensorBoard):
       with self._train_writer.as_default():
           with tf.summary.record_if(True):
               for layer in self.model.layers:
-                  for weight in layer.weights:
-                      weight_name = weight.name.replace(":", "_")
-                      # Add a suffix to prevent summary tag name collision.
-                      histogram_weight_name = "%s/%s/histogram"%(layer.name, weight_name)
-                      tf.summary.histogram(
-                          histogram_weight_name, weight, step=epoch
-                      )
-                      if self.write_images:
-                          # Add a suffix to prevent summary tag name
-                          # collision.
-                          image_weight_name = "%s/%s/image"%(layer.name, weight_name)
-                          self._log_weight_as_image(
-                              weight, image_weight_name, epoch
-                          )
+                if isinstance(layer, keras.Model):
+                  prefix=layer.name + '/'
+                else:
+                  prefix=''
+                for weight in layer.weights:
+                    weight_name = weight.name.replace(":", "_")
+                    # Add a suffix to prevent summary tag name collision.
+                    histogram_weight_name = "%s%s/histogram"%(prefix, weight_name)
+                    tf.summary.histogram(
+                        histogram_weight_name, weight, step=epoch
+                    )
+                    if self.write_images:
+                        # Add a suffix to prevent summary tag name
+                        # collision.
+                        image_weight_name = "%s%s/image"%(prefix, weight_name)
+                        self._log_weight_as_image(
+                            weight, image_weight_name, epoch
+                        )
               self._train_writer.flush()
 
 def init_callbacks(sample, logdir, note=''):
@@ -166,12 +172,12 @@ def init_callbacks(sample, logdir, note=''):
     log_dir=logdir, 
     write_graph=True, 
     update_freq=1, 
-    histogram_freq=1, 
+    histogram_freq=10, 
     note=note,
     # profile_batch=2,
   )
-  early_stop = EarlyStopping(monitor='loss', patience=3)
-  return [tensorboard_callback, early_stop]
+  # early_stop = EarlyStopping(monitor='loss', patience=3)
+  return [tensorboard_callback]
   
 def run(model, x, callbacks=None, verbosity=0, steps=None):
   training_history = model.fit(
@@ -190,12 +196,12 @@ def main():
   logdir = 'logs/%s/nocrop/%s/%s'%(branch, datetime.now().strftime("%m-%d"), datetime.now().strftime("%H.%M"))
   ds, info = load_data()
   t_ds = get_training_data(ds)
-  model = initialize_model(False)
+  model = initialize_model(n_filters=8, eager=False)
   sample = get_sample_data(t_ds)
-  model.build(sample.shape)
-  model.summary(expand_nested=True, show_trainable=True)
+  model(sample)
+  # model.summary(expand_nested=True, show_trainable=True)
   callbacks = init_callbacks(sample, logdir, note)
-  history = run(model, t_ds, callbacks, 1, 10)
+  history = run(model, t_ds, callbacks, 0, None)
 
 if __name__ == "__main__":
   main()
