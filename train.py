@@ -1,12 +1,12 @@
 import argparse
 import enum
-
 from tensorflow.data import AUTOTUNE
 import tensorflow_datasets as tfds
 
 from random import choice
 from string import ascii_uppercase
-import numpy as np
+
+from auramask.callbacks.callbacks import ImageCallback
 
 from auramask.losses.perceptual import PerceptualLoss
 from auramask.losses.embeddistance import EmbeddingDistanceLoss
@@ -20,10 +20,6 @@ branch = Repo('./').active_branch.name
 import keras
 from keras_cv.layers import Resizing, Rescaling, Augmenter
 from keras.optimizers import Adam
-from keras.callbacks import TensorBoard, EarlyStopping, Callback
-
-import tensorflow as tf
-from tensorboard.plugins.hparams import api as hp
 
 from datetime import datetime
 
@@ -38,6 +34,7 @@ hparams: dict = {
   "lpips_backbone": "alex",
   "input": (256,256)
 }
+
 
 class EnumAction(argparse.Action):
     """
@@ -151,80 +148,17 @@ def get_sample_data(ds):
   for x, _ in ds.take(1):
     return x
 
-class ImageCallback(TensorBoard):
-  def __init__(
-    self, 
-    sample,
-    note='',
-    mask_frequency = None,
-    **kwargs):
-    super().__init__(**kwargs)
-    self.sample = sample
-    self.note = note
-    self.mask_frequency = mask_frequency
-    
-  def on_train_begin(self, logs=None):
-    super().on_train_begin(logs)
-    tmp_hparams = hparams
-    tmp_hparams['F'] = ",".join(tmp_hparams['F'])
-    tmp_hparams['input'] = str(tmp_hparams['input'])
-    with self._train_writer.as_default():
-      hp.hparams(tmp_hparams, trial_id='%s-%s-%s'%(branch, datetime.now().strftime("%m-%d"), datetime.now().strftime("%H.%M")))
-      if not (self.note == ''):
-        tf.summary.text("Run Note", self.note)
-    
-  def on_train_batch_end(self, batch, logs=None):
-    with tf.name_scope('Batch'):
-      super().on_train_batch_end(batch, logs)
-      if not isinstance(self.update_freq, str) and batch % self.update_freq == 0:
-        y, mask = self.model(self.sample)
-        with self._train_writer.as_default():
-          tf.summary.image("Augmented", y, max_outputs=1, step=batch)
-          tf.summary.image("Mask", (mask * 0.5) + 0.5, max_outputs=1, step=batch)
-          
-  def on_epoch_end(self, epoch, logs=None):
-      super().on_epoch_end(epoch, logs)
-      if self.histogram_freq and (epoch+1) % self.histogram_freq == 0:
-        y, mask = self.model(self.sample)
-        with self._train_writer.as_default():
-          with tf.name_scope('Epoch'):
-            tf.summary.image("Augmented", y, max_outputs=2, step=epoch)
-            tf.summary.image("Mask", (mask * 0.5) + 0.5, max_outputs=2, step=epoch)
-            
-  def _log_weights(self, epoch):
-      """Logs the weights of the Model to TensorBoard."""
-      with self._train_writer.as_default():
-          with tf.summary.record_if(True):
-              for layer in self.model.layers:
-                if isinstance(layer, keras.Model):
-                  prefix=layer.name + '/'
-                else:
-                  prefix=''
-                for weight in layer.weights:
-                    weight_name = weight.name.replace(":", "_")
-                    # Add a suffix to prevent summary tag name collision.
-                    histogram_weight_name = "%s%s/histogram"%(prefix, weight_name)
-                    tf.summary.histogram(
-                        histogram_weight_name, weight, step=epoch
-                    )
-                    if self.write_images:
-                        # Add a suffix to prevent summary tag name
-                        # collision.
-                        image_weight_name = "%s%s/image"%(prefix, weight_name)
-                        self._log_weight_as_image(
-                            weight, image_weight_name, epoch
-                        )
-              self._train_writer.flush()
 
-def init_callbacks(sample, logdir, note=''):
+def init_callbacks(sample, logdir, note='', summary=False):
   # histogram_freq = hparams['epochs'] // 10
   tensorboard_callback = ImageCallback(
     sample=sample, 
     log_dir=logdir, 
-    update_freq=1, 
-    histogram_freq=100,
-    mask_frequency=25,
+    update_freq='epoch',
+    histogram_freq=1,
     note=note,
+    model_summary=summary,
+    hparams=hparams
   )
   # early_stop = EarlyStopping(monitor='loss', patience=3)
   return [tensorboard_callback]
@@ -244,10 +178,10 @@ def main():
     logdir = 'logs/%s/%s/%s'%(branch, datetime.now().strftime("%m-%d"), datetime.now().strftime("%H.%M"))
     sample = get_sample_data(t_ds)
     model(sample)
-    callbacks = init_callbacks(sample, logdir, note)
+    callbacks = init_callbacks(sample, logdir, note, summary=True)
   else:
     callbacks = None
-  # model.summary(expand_nested=True, show_trainable=True)
+
   training_history = model.fit(
     x=t_ds,
     batch_size=hparams['batch'],
