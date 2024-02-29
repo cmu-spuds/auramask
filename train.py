@@ -83,7 +83,7 @@ def parse_args():
   parser.add_argument('-S', '--seed', type=str, default=''.join(choice(ascii_uppercase) for _ in range(12)))
   parser.add_argument('--log', default=True, type=bool, action=argparse.BooleanOptionalAction)
   parser.add_argument('--split', type=str, default='train')
-  parser.add_argument('--n_filters', type=int, default=32)
+  parser.add_argument('--n_filters', type=int, default=64)
   parser.add_argument('--eager', default=False, type=bool, action=argparse.BooleanOptionalAction)
   parser.add_argument('-v', '--verbose', default=1, type=int)
   
@@ -94,14 +94,15 @@ def load_data():
                       decoders=tfds.decode.PartialDecoding({
                         'image': True,
                       }),
+                      shuffle_files=True,
                       with_info=True,
                       download=True,
                       as_supervised=False,
                       split=hparams['split'])
 
-  return ds, info
+  return get_training_data(ds, info)
 
-def get_training_data(ds):
+def get_training_data(ds, info):
   augmenter = Augmenter(
     [
       Rescaling(1./255),
@@ -114,9 +115,13 @@ def get_training_data(ds):
     outputs = augmenter(inputs)
     return outputs['images'], outputs['images']
   
-  train_ds = ds.batch(hparams['batch']).map(
+  train_ds = ds.map(
     lambda x: preprocess_data(x['image']),
-    num_parallel_calls=AUTOTUNE).prefetch(AUTOTUNE)
+    num_parallel_calls=AUTOTUNE)
+  train_ds = train_ds.cache()
+  train_ds = train_ds.shuffle(info.splits[hparams['split']].num_examples)
+  train_ds = train_ds.batch(hparams['batch'])
+  train_ds = train_ds.prefetch(AUTOTUNE)
   
   return train_ds
 
@@ -140,7 +145,6 @@ def initialize_model():
 def set_seed():
   seed = hparams['seed']
   seed = hash(seed) % (2**32)
-  print("Using seed", seed)
   keras.utils.set_random_seed(seed)
 
 def get_sample_data(ds):
@@ -152,10 +156,12 @@ class ImageCallback(TensorBoard):
     self, 
     sample,
     note='',
+    mask_frequency = None,
     **kwargs):
     super().__init__(**kwargs)
     self.sample = sample
     self.note = note
+    self.mask_frequency = mask_frequency
     
   def on_train_begin(self, logs=None):
     super().on_train_begin(logs)
@@ -178,12 +184,12 @@ class ImageCallback(TensorBoard):
           
   def on_epoch_end(self, epoch, logs=None):
       super().on_epoch_end(epoch, logs)
-      if (epoch+1) % self.histogram_freq == 0:
+      if self.histogram_freq and (epoch+1) % self.histogram_freq == 0:
         y, mask = self.model(self.sample)
         with self._train_writer.as_default():
           with tf.name_scope('Epoch'):
-            tf.summary.image("Augmented", y, max_outputs=10, step=epoch)
-            tf.summary.image("Mask", (mask * 0.5) + 0.5, max_outputs=10, step=epoch)
+            tf.summary.image("Augmented", y, max_outputs=2, step=epoch)
+            tf.summary.image("Mask", (mask * 0.5) + 0.5, max_outputs=2, step=epoch)
             
   def _log_weights(self, epoch):
       """Logs the weights of the Model to TensorBoard."""
@@ -216,7 +222,8 @@ def init_callbacks(sample, logdir, note=''):
     sample=sample, 
     log_dir=logdir, 
     update_freq=1, 
-    histogram_freq=10,
+    histogram_freq=100,
+    mask_frequency=25,
     note=note,
   )
   # early_stop = EarlyStopping(monitor='loss', patience=3)
@@ -229,8 +236,7 @@ def main():
   verbose = hparams.pop('verbose')
   set_seed()
 
-  ds, info = load_data()
-  t_ds = get_training_data(ds)
+  t_ds = load_data()
   model = initialize_model()
 
   if log:
