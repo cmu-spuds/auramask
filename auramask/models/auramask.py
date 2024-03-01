@@ -25,7 +25,7 @@ class AuraMask(Model):
         self.model = models.unet_2d((None, None, 3), filters, n_labels=n_dims,
                             stack_num_down=1, stack_num_up=1,
                             activation='ReLU', output_activation='Softmax', 
-                            batch_norm=True, pool='max', unpool='nearest', name='UNet')
+                            batch_norm=True, pool='max', unpool='nearest')
         
     def call(self, inputs):
         x = self.model(inputs)
