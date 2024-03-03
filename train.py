@@ -18,6 +18,7 @@ from git import Repo
 branch = Repo('./').active_branch.name
 
 import keras
+from keras.layers import CenterCrop
 from keras_cv.layers import Resizing, Rescaling, Augmenter
 from keras.optimizers import Adam
 
@@ -75,19 +76,22 @@ def parse_args():
   parser.add_argument('-l', '--lambda', type=float, default=0.)
   parser.add_argument('-B', '--batch_size', dest='batch', type=int, default=32)
   parser.add_argument('-E', '--epochs', type=int, default=5)
-  parser.add_argument('-L', '--lpips_backbone', type=str, default='alex', choices=['alex', 'vgg', 'squeeze'])
+  parser.add_argument('-d', '--depth', type=int, default=5)
+  parser.add_argument('-L', '--lpips', type=str, default='alex', choices=['alex', 'vgg', 'squeeze', 'none'])
   parser.add_argument('-F', type=FaceEmbedEnum, nargs="+", required=True, action=EnumAction)
   parser.add_argument('-S', '--seed', type=str, default=''.join(choice(ascii_uppercase) for _ in range(12)))
   parser.add_argument('--log', default=True, type=bool, action=argparse.BooleanOptionalAction)
-  parser.add_argument('--split', type=str, default='train')
+  parser.add_argument('--t_split', type=str, default='train')
+  parser.add_argument('--v_split', type=str, default='test')
   parser.add_argument('--n_filters', type=int, default=64)
   parser.add_argument('--eager', default=False, type=bool, action=argparse.BooleanOptionalAction)
   parser.add_argument('-v', '--verbose', default=1, type=int)
+  parser.add_argument('--note', default=True, type=bool, action=argparse.BooleanOptionalAction)
   
   return parser.parse_args()
 
 def load_data():
-  ds, info = tfds.load('lfw',
+  (t_ds, v_ds), info = tfds.load('lfw',
                       decoders=tfds.decode.PartialDecoding({
                         'image': True,
                       }),
@@ -95,46 +99,50 @@ def load_data():
                       with_info=True,
                       download=True,
                       as_supervised=False,
-                      split=hparams['split'])
+                      split=[hparams['t_split'], hparams['v_split']])
 
-  return get_training_data(ds, info)
+  return get_data_generator(t_ds, info, hparams['t_split']), get_data_generator(v_ds, info, hparams['v_split'])
 
-def get_training_data(ds, info):
+def get_data_generator(ds, info, split):
   augmenter = Augmenter(
     [
       Rescaling(1./255),
-      Resizing(hparams['input'][0],hparams['input'][1]),
+      Resizing(hparams['input'][0],hparams['input'][1], crop_to_aspect_ratio=True),
+      CenterCrop(224,224)
     ]
   )
 
   def preprocess_data(images, augment=True):
     inputs = {"images": images}
-    outputs = augmenter(inputs)
-    return outputs['images'], outputs['images']
+    outputs = augmenter(inputs['images'])
+    return outputs, outputs
   
-  train_ds = ds.map(
+  gen_ds = ds.map(
     lambda x: preprocess_data(x['image']),
     num_parallel_calls=AUTOTUNE)
-  train_ds = train_ds.cache()
-  train_ds = train_ds.shuffle(info.splits[hparams['split']].num_examples)
-  train_ds = train_ds.batch(hparams['batch'])
-  train_ds = train_ds.prefetch(AUTOTUNE)
+  gen_ds = gen_ds.cache()
+  gen_ds = gen_ds.shuffle(info.splits[split].num_examples)
+  gen_ds = gen_ds.batch(hparams['batch'])
+  gen_ds = gen_ds.prefetch(AUTOTUNE)
   
-  return train_ds
+  return gen_ds
 
 def initialize_loss():
   FLoss = EmbeddingDistanceLoss(F=hparams['F'])
-  Lpips = PerceptualLoss(backbone=hparams['lpips_backbone'])
-  return FLoss, Lpips
+  if hparams['lpips_backbone'] != 'none':
+    return [PerceptualLoss(backbone=hparams['lpips_backbone']), FLoss], [hparams['lambda'], 1.]
+  else:
+    return [FLoss], [1.]
   
 def initialize_model():
-  model = AuraMask(n_filters=hparams['n_filters'], n_dims=3, eps=hparams['epsilon'])
-  FLoss, Lpips = initialize_loss()
+  model = AuraMask(n_filters=hparams['n_filters'], n_dims=3, eps=hparams['epsilon'], depth=hparams['depth'])
+  hparams['model'] = model.model.name
+  losses, losses_w = initialize_loss()
   optimizer = Adam(learning_rate=hparams['alpha'])
   model.compile(
     optimizer=optimizer,
-    loss=[Lpips, FLoss],
-    loss_weights=[hparams['lambda'],1.],
+    loss=losses,
+    loss_weights=losses_w,
     run_eagerly=hparams['eager']
   )
   return model
@@ -155,7 +163,9 @@ def init_callbacks(sample, logdir, note='', summary=False):
     sample=sample, 
     log_dir=logdir, 
     update_freq='epoch',
-    histogram_freq=1,
+    histogram_freq=100,
+    image_frequency=50,
+    mask_frequency=25,
     note=note,
     model_summary=summary,
     hparams=hparams
@@ -167,27 +177,32 @@ def main():
   args = parse_args()
   hparams.update(args.__dict__)
   log = hparams.pop('log')
+  note = hparams.pop('note')
   verbose = hparams.pop('verbose')
   set_seed()
 
-  t_ds = load_data()
+  t_ds, v_ds = load_data()
+
   model = initialize_model()
 
   if log:
-    note = input("Note for Run:")
+    if note:
+      note = input("Note for Run:")
+    else:
+      note = ''
     logdir = 'logs/%s/%s/%s'%(branch, datetime.now().strftime("%m-%d"), datetime.now().strftime("%H.%M"))
-    sample = get_sample_data(t_ds)
+    sample = get_sample_data(v_ds)
     model(sample)
-    callbacks = init_callbacks(sample, logdir, note, summary=True)
+    callbacks = init_callbacks(sample, logdir, note, summary=False)
   else:
     callbacks = None
 
   training_history = model.fit(
     x=t_ds,
-    batch_size=hparams['batch'],
     callbacks=callbacks,
     epochs=hparams['epochs'],
     verbose=verbose,
+    validation_data=v_ds
   )
   return training_history
 
