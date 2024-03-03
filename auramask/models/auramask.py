@@ -25,7 +25,7 @@ class AuraMask(Model):
         self.model = models.unet_2d((None, None, 3), filters, n_labels=n_dims,
                             stack_num_down=1, stack_num_up=1,
                             activation='ReLU', output_activation='Softmax', 
-                            batch_norm=True, pool='max', unpool='nearest')
+                            batch_norm=True, pool='max', unpool='nearest', weights=None)
         
     def call(self, inputs):
         x = self.model(inputs)
@@ -118,6 +118,16 @@ class AuraMask(Model):
         self.optimizer.apply_gradients(zip(gradients, trainable_vars))
         # Update metrics (including the one that tracks loss)
         # Return a dict mapping metric names to current value
+        metrics = self.get_metrics_result()
+        metrics['loss'] = loss
+        return metrics
+    
+    def test_step(self, data):
+        X, y, = data
+
+        y_pred, _ = self(X, training=False)
+        # Updates stateful loss metrics.
+        loss = self.compute_loss(y=y, y_pred=y_pred)
         metrics = self.get_metrics_result()
         metrics['loss'] = loss
         return metrics
