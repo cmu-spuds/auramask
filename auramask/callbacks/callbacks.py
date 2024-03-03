@@ -50,6 +50,7 @@ class ImageCallback(TensorBoard):
     self.model_summary = model_summary
     self.image_frequency = image_frequency
     self.hparams = hparams
+    self._should_write_loss_model_weight = histogram_freq > 0
     
   def on_train_begin(self, logs=None):
     super().on_train_begin(logs)
@@ -61,9 +62,9 @@ class ImageCallback(TensorBoard):
 
       hp.hparams(tmp_hparams, trial_id='%s-%s'%(datetime.now().strftime("%m-%d"), datetime.now().strftime("%H.%M")))
       if not (self.note == ''):
-        tf.summary.text("Run Note", self.note)
+        tf.summary.text("Run Note", self.note, 0)
       if self.model_summary:
-        tf.summary.text("Model Structure", get_model_summary(self.model))
+        tf.summary.text("Model Structure", get_model_summary(self.model), 0)
 
   # def _push_writer(self, writer, step):
   #   """Sets the default writer for custom batch-level summaries."""
@@ -82,21 +83,22 @@ class ImageCallback(TensorBoard):
   #   summary_context[0].__enter__()
   #   summary_context[1].__enter__()    
 
-  def on_train_batch_end(self, batch, logs=None):
-    super().on_train_batch_end(batch, logs)
-    if self.image_frequency and batch % self.image_frequency == 0:
-      y, mask = self.model(self.sample)
-      tf.summary.image("Augmented", y, max_outputs=1, step=batch)
-      tf.summary.image("Mask", (mask * 0.5) + 0.5, max_outputs=1, step=batch)
-        
+  # def on_train_batch_end(self, batch, logs=None):
+  #   super().on_train_batch_end(batch, logs)
+  #   if self.image_frequency and batch % self.image_frequency == 0:
+  #     y, mask = self.model(self.sample)
+  #     tf.summary.image("Augmented", y, max_outputs=1, step=batch)
+  #     tf.summary.image("Mask", (mask * 0.5) + 0.5, max_outputs=1, step=batch)
   def on_epoch_end(self, epoch, logs=None):
     super().on_epoch_end(epoch, logs)
     with self._train_writer.as_default():
       with tf.name_scope('Epoch'):
-        if self.histogram_freq and (epoch+1) % self.histogram_freq == 0:
+        _should_update_img = self.image_frequency and (epoch) % self.image_frequency == 0
+        _should_update_mask = self.mask_frequency and (epoch) % self.mask_frequency == 0
+        if _should_update_img or _should_update_mask:
           y, mask = self.model(self.sample)
-          tf.summary.image("Augmented", y, max_outputs=2, step=epoch)
-          tf.summary.image("Mask", (mask * 0.5) + 0.5, max_outputs=2, step=epoch)
+          if _should_update_img: tf.summary.image("Augmented", y, max_outputs=2, step=epoch)
+          if _should_update_mask: tf.summary.image("Mask", (mask * 0.5) + 0.5, max_outputs=2, step=epoch)
   
   def _log_epoch_metrics(self, epoch, logs):
     with tf.name_scope('Epoch'):
@@ -109,6 +111,7 @@ class ImageCallback(TensorBoard):
             for layer in self.model.layers:
               if isinstance(layer, Model):
                 prefix=layer.name + '/'
+                if not self._should_write_loss_model_weight: continue
               else:
                 prefix=''
               for weight in layer.weights:
@@ -125,4 +128,5 @@ class ImageCallback(TensorBoard):
                       self._log_weight_as_image(
                           weight, image_weight_name, epoch
                       )
+            self._should_write_loss_model_weight = False
             self._train_writer.flush()
