@@ -1,7 +1,9 @@
 from enum import Enum
 from deepface.DeepFace import build_model
 import tensorflow as tf
-# from keras_cv.layers import Resizing
+from keras import Sequential
+from keras.layers import Subtract, Multiply
+from keras_cv.layers import Resizing, Rescaling
 
 class FaceEmbedEnum(str, Enum):
   VGGFACE = "VGG-Face"
@@ -13,16 +15,24 @@ class FaceEmbedEnum(str, Enum):
   ARCFACE = "ArcFace"
   SFACE = "SFace"
   def get_model(self):
-    model = build_model(model_name=self.value)
-    shape = model.input_shape[::-1]
-    # aug = Resizing(shape[0], shape[1])
-    model = model.model
-    model._name = self.name
+    d_model = build_model(model_name=self.value)
+    shape = d_model.input_shape[::-1]
+    if self == FaceEmbedEnum.ARCFACE or self == FaceEmbedEnum.FACENET:
+      rs = Rescaling(1, offset=-1) # convert to [-1,1]
+    elif self == FaceEmbedEnum.VGGFACE:
+      rs = Rescaling(255, offset=0) # convert to [0, 256)
+    else:
+      rs = Rescaling(1, offset=0) # stay in [0, 1)
+    model = Sequential([
+      Resizing(shape[0], shape[1]),
+      rs,
+      d_model.model
+    ], name=self.name)
     model.trainable = False
     for layer in model.layers:
       layer.trainable = False
       layer._name = "%s/%s"%(model.name, layer.name)
-    return (model, shape, self.name.lower())
+    return model
   @classmethod
   def build_F(cls, targets: list):
     F = set()
