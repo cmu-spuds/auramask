@@ -106,9 +106,9 @@ def load_data():
 def get_data_generator(ds, info, split):
   augmenter = Augmenter(
     [
-      Rescaling(1./255),
+      Rescaling(scale=1./255, offset=0),
       Resizing(hparams['input'][0],hparams['input'][1], crop_to_aspect_ratio=True),
-      CenterCrop(224,224)
+      CenterCrop(224,224),
     ]
   )
 
@@ -136,6 +136,7 @@ def initialize_loss():
   
 def initialize_model():
   model = AuraMask(n_filters=hparams['n_filters'], n_dims=3, eps=hparams['epsilon'], depth=hparams['depth'])
+
   hparams['model'] = model.model.name
   losses, losses_w = initialize_loss()
   optimizer = Adam(learning_rate=hparams['alpha'])
