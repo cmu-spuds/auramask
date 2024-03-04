@@ -22,10 +22,10 @@ class AuraMask(Model):
         
         filters = [n_filters * pow(2, i) for i in range(depth)]
         
-        self.model = models.unet_2d((None, None, 3), filters, n_labels=n_dims,
-                            stack_num_down=1, stack_num_up=1,
+        self.model = models.r2_unet_2d((None, None, 3), filters, n_labels=n_dims,
+                            stack_num_down=1, stack_num_up=1, recur_num=2,
                             activation='ReLU', output_activation='Softmax', 
-                            batch_norm=True, pool='max', unpool='nearest', weights=None)
+                            batch_norm=True, pool='max', unpool='nearest')
         
     def call(self, inputs):
         x = self.model(inputs)
