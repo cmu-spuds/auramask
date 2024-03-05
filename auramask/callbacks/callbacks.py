@@ -109,7 +109,9 @@ class ImageCallback(TensorBoard):
     with self._train_writer.as_default():
         with tf.summary.record_if(True):
             for layer in self.model.layers:
-              if isinstance(layer, Model):
+              if layer is self.model.model:
+                prefix=layer.name + '/'
+              elif isinstance(layer, Model):
                 prefix=layer.name + '/'
                 if not self._should_write_loss_model_weight: continue
               else:

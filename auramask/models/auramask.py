@@ -2,6 +2,8 @@ import tensorflow as tf
 from keras import Model
 from auramask.losses.embeddistance import EmbeddingDistanceLoss
 from auramask.losses.perceptual import PerceptualLoss
+from keras.activations import tanh
+from keras.layers import Rescaling
 from keras.metrics import Mean
 from keras.losses import cosine_similarity
 from keras_unet_collection import models, base, utils
@@ -22,21 +24,22 @@ class AuraMask(Model):
         
         filters = [n_filters * pow(2, i) for i in range(depth)]
         
-        self.model = models.r2_unet_2d((None, None, 3), filters, n_labels=n_dims,
-                            stack_num_down=1, stack_num_up=1, recur_num=2,
-                            activation='ReLU', output_activation='Softmax', 
+        self.model = models.unet_2d((None, None, 3), filters, n_labels=n_dims,
+                            stack_num_down=1, stack_num_up=1,
+                            activation='ReLU', output_activation=None, 
                             batch_norm=True, pool='max', unpool='nearest')
         
-    def call(self, inputs):
-        x = self.model(inputs)
         
-        x = tf.tanh(x)
-        x = tf.multiply(self.eps, x)
-        mask = x
-        x = tf.add(x, inputs)
-        x = tf.clip_by_value(x, 0., 1.)
+    def call(self, inputs):
+        mask = Rescaling(1, offset=-1)(inputs)  # Scale to -1 to 1
+        mask = self.model(mask)
+        mask = tanh(mask)
+        
+        mask = tf.multiply(self.eps, mask)
+        out = tf.add(mask, inputs)
+        out = tf.clip_by_value(out, 0., 1.)
 
-        return x, mask
+        return out, mask
 
     def compile(self, optimizer="rmsprop", loss=None, metrics=None, loss_weights=None, weighted_metrics=None, run_eagerly=None, steps_per_execution=None, jit_compile=None, pss_evaluation_shards=0, **kwargs):
         if isinstance(loss, list):
@@ -53,8 +56,8 @@ class AuraMask(Model):
                         del l
                 elif isinstance(l, EmbeddingDistanceLoss):
                     self.F = []
-                    for model,reg,name in l.F_set:
-                        self.F.append((model, reg, Mean(name=name), w))
+                    for model in l.F:
+                        self.F.append((model, Mean(name=model.name), w))
                 else:
                     loss.append(l)
                     if weighted:
@@ -69,10 +72,10 @@ class AuraMask(Model):
         tloss = tf.constant(0, dtype=tf.float32)
         with tf.name_scope("EmbeddingDistance"):
             embed_loss = tf.constant(0, dtype=tf.float32)
-            for model, shape, metric, e_w in self.F:
+            for model, metric, e_w in self.F:
                 with tf.name_scope(model.name):
-                    embed_y = tf.stop_gradient(model(tf.image.resize(y, shape), training=False))
-                    embed_pred = model(tf.image.resize(y_pred, shape), training=False)
+                    embed_y = tf.stop_gradient(model(y, training=False))
+                    embed_pred = model(y_pred, training=False)
                     sim = tf.negative(cosine_similarity(y_true=embed_y, y_pred=embed_pred, axis=-1))
                     sim = tf.reduce_mean(sim)
                 metric.update_state(sim)
@@ -92,11 +95,11 @@ class AuraMask(Model):
     def get_metrics_result(self):
         all_metrics = {}
         if self.Lpips:
-            for metric in [self.Lpips[1]] + [metric for _, _, metric, _ in self.F]:
+            for metric in [self.Lpips[1]] + [metric for _, metric, _ in self.F]:
                 all_metrics[metric.name] = metric.result()
                 metric.reset_state()
         else:
-            for _, _, metric, _ in self.F:
+            for _, metric, _ in self.F:
                 all_metrics[metric.name] = metric.result()
                 metric.reset_state()
 
