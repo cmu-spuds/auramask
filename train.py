@@ -19,7 +19,7 @@ branch = Repo('./').active_branch.name
 
 import keras
 from keras.layers import CenterCrop
-from keras_cv.layers import Resizing, Rescaling, Augmenter
+from keras_cv.layers import Resizing, Rescaling, Augmenter, RandAugment
 from keras.optimizers import Adam
 
 from datetime import datetime
@@ -35,7 +35,6 @@ hparams: dict = {
   "lpips_backbone": "alex",
   "input": (256,256)
 }
-
 
 class EnumAction(argparse.Action):
     """
@@ -101,30 +100,49 @@ def load_data():
                       as_supervised=False,
                       split=[hparams['t_split'], hparams['v_split']])
 
-  return get_data_generator(t_ds, info, hparams['t_split']), get_data_generator(v_ds, info, hparams['v_split'])
+  return get_data_generator(t_ds, info, hparams['t_split']), get_data_generator(v_ds, info, hparams['v_split'], False)
 
-def get_data_generator(ds, info, split):
+def get_data_generator(ds, info, split, augment=True):
+  loader = Augmenter(
+    [
+      Rescaling(scale=1./255, offset=0),
+      Resizing(hparams['input'][0], hparams['input'][1], crop_to_aspect_ratio=True),
+      CenterCrop(224, 224)
+    ]
+  )
+  
   augmenter = Augmenter(
     [
-      Rescaling(1./255),
-      Resizing(hparams['input'][0],hparams['input'][1], crop_to_aspect_ratio=True),
-      CenterCrop(224,224)
+      RandAugment(
+        value_range=(0,1),
+        augmentations_per_image=3,
+        magnitude=0.5,
+        seed=hparams['seed']
+        )
     ]
   )
 
+  def load_img(images):
+    outputs = loader(images)
+    return outputs
+
   def preprocess_data(images, augment=True):
-    inputs = {"images": images}
-    outputs = augmenter(inputs['images'])
+    if augment:
+      outputs = augmenter(images)
+    else:
+      outputs = images
     return outputs, outputs
+
+  t_ds = ds.map(lambda x: load_img(x['image']), num_parallel_calls=AUTOTUNE)
   
-  gen_ds = ds.map(
-    lambda x: preprocess_data(x['image']),
-    num_parallel_calls=AUTOTUNE)
-  gen_ds = gen_ds.cache()
-  gen_ds = gen_ds.shuffle(info.splits[split].num_examples)
-  gen_ds = gen_ds.batch(hparams['batch'])
-  gen_ds = gen_ds.prefetch(AUTOTUNE)
-  
+  gen_ds = (
+    t_ds
+    .cache()
+    .shuffle(info.splits[split].num_examples)
+    .batch(hparams['batch'])
+    .map(lambda x: preprocess_data(x, augment))
+    .prefetch(buffer_size=AUTOTUNE)
+  )  
   return gen_ds
 
 def initialize_loss():
@@ -136,6 +154,7 @@ def initialize_loss():
   
 def initialize_model():
   model = AuraMask(n_filters=hparams['n_filters'], n_dims=3, eps=hparams['epsilon'], depth=hparams['depth'])
+
   hparams['model'] = model.model.name
   losses, losses_w = initialize_loss()
   optimizer = Adam(learning_rate=hparams['alpha'])
@@ -151,6 +170,7 @@ def set_seed():
   seed = hparams['seed']
   seed = hash(seed) % (2**32)
   keras.utils.set_random_seed(seed)
+  hparams['seed'] = seed
 
 def get_sample_data(ds):
   for x, _ in ds.take(1):
