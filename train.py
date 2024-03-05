@@ -1,5 +1,6 @@
 import argparse
 import enum
+import os
 from tensorflow.data import AUTOTUNE
 import tensorflow_datasets as tfds
 
@@ -35,6 +36,16 @@ hparams: dict = {
   "lpips_backbone": "alex",
   "input": (256,256)
 }
+
+def dir_path(path):
+  if path:
+    path = os.path.abspath(path)
+    if os.path.isdir(path):
+      print(path)
+      return path
+    else:
+      raise argparse.ArgumentTypeError(f"readable_dir:{path} is not a valid path")
+  return
 
 class EnumAction(argparse.Action):
     """
@@ -73,16 +84,17 @@ def parse_args():
   parser.add_argument('-a', '--alpha', type=float, default=2e-4)
   parser.add_argument('-e', '--epsilon', type=float, default=0.03)
   parser.add_argument('-l', '--lambda', type=float, default=0.)
-  parser.add_argument('-B', '--batch_size', dest='batch', type=int, default=32)
+  parser.add_argument('-B', '--batch-size', dest='batch', type=int, default=32)
   parser.add_argument('-E', '--epochs', type=int, default=5)
   parser.add_argument('-d', '--depth', type=int, default=5)
   parser.add_argument('-L', '--lpips', type=str, default='alex', choices=['alex', 'vgg', 'squeeze', 'none'])
   parser.add_argument('-F', type=FaceEmbedEnum, nargs="+", required=True, action=EnumAction)
   parser.add_argument('-S', '--seed', type=str, default=''.join(choice(ascii_uppercase) for _ in range(12)))
   parser.add_argument('--log', default=True, type=bool, action=argparse.BooleanOptionalAction)
-  parser.add_argument('--t_split', type=str, default='train')
-  parser.add_argument('--v_split', type=str, default='test')
-  parser.add_argument('--n_filters', type=int, default=64)
+  parser.add_argument('--log-dir', default=None, type=dir_path)
+  parser.add_argument('--t-split', type=str, default='train')
+  parser.add_argument('--v-split', type=str, default='test')
+  parser.add_argument('--n-filters', type=int, default=64)
   parser.add_argument('--eager', default=False, type=bool, action=argparse.BooleanOptionalAction)
   parser.add_argument('-v', '--verbose', default=1, type=int)
   parser.add_argument('--note', default=True, type=bool, action=argparse.BooleanOptionalAction)
@@ -197,6 +209,7 @@ def main():
   args = parse_args()
   hparams.update(args.__dict__)
   log = hparams.pop('log')
+  logdir = hparams.pop('log_dir')
   note = hparams.pop('note')
   verbose = hparams.pop('verbose')
   set_seed()
@@ -210,7 +223,10 @@ def main():
       note = input("Note for Run:")
     else:
       note = ''
-    logdir = 'logs/%s/%s/%s'%(branch, datetime.now().strftime("%m-%d"), datetime.now().strftime("%H.%M"))
+    if not logdir:
+      logdir = os.path.join('logs', branch, datetime.now().strftime("%m-%d"), datetime.now().strftime("%H.%M"))
+    else:
+      logdir = os.path.join(logdir, branch, datetime.now().strftime("%m-%d"), datetime.now().strftime("%H.%M"))
     sample = get_sample_data(v_ds)
     model(sample)
     callbacks = init_callbacks(sample, logdir, note, summary=False)
