@@ -230,8 +230,6 @@ def main():
       note = ''
     if not logdir:
       logdir = os.path.join('logs', branch, datetime.now().strftime("%m-%d"), datetime.now().strftime("%H.%M"))
-    else:
-      logdir = os.path.join(logdir, datetime.now().strftime("%m-%d"), datetime.now().strftime("%H.%M"))
     sample = get_sample_data(v_ds)
     model(sample)
     callbacks = init_callbacks(sample, logdir, note, summary=False)
