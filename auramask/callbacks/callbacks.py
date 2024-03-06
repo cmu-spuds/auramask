@@ -1,5 +1,6 @@
 import io
 from datetime import datetime
+import os
 
 from keras import Model
 from keras.callbacks import TensorBoard
@@ -23,6 +24,7 @@ class ImageCallback(TensorBoard):
     image_frequency=None,
     mask_frequency=None,
     model_summary=False,
+    model_checkpoint_frequency=None,
     log_dir="logs",
     histogram_freq=0,
     write_graph=True,
@@ -48,6 +50,7 @@ class ImageCallback(TensorBoard):
     self.note = note
     self.mask_frequency = mask_frequency
     self.model_summary = model_summary
+    self.model_checkpoint_frequency=model_checkpoint_frequency
     self.image_frequency = image_frequency
     self.hparams = hparams
     self._should_write_loss_model_weight = histogram_freq > 0
@@ -59,8 +62,10 @@ class ImageCallback(TensorBoard):
         tmp_hparams = self.hparams
         tmp_hparams['F'] = ",".join(tmp_hparams['F'])
         tmp_hparams['input'] = str(tmp_hparams['input'])
-
-      hp.hparams(tmp_hparams, trial_id='%s-%s'%(datetime.now().strftime("%m-%d"), datetime.now().strftime("%H.%M")))
+      if os.environ['SLURM_JOB_NAME'] and os.environ['SLURM_ARRAY_TASK_ID']:
+        hp.hparams(tmp_hparams, trial_id='%s-%s'%(os.environ['SLURM_JOB_NAME'], os.environ['SLURM_ARRAY_TASK_ID']))
+      else:
+        hp.hparams(tmp_hparams)
       if not (self.note == ''):
         tf.summary.text("Run Note", self.note, 0)
       if self.model_summary:
@@ -91,6 +96,9 @@ class ImageCallback(TensorBoard):
   #     tf.summary.image("Mask", (mask * 0.5) + 0.5, max_outputs=1, step=batch)
   def on_epoch_end(self, epoch, logs=None):
     super().on_epoch_end(epoch, logs)
+    _should_checkpoint = self.model_checkpoint_frequency and epoch > 0 and (epoch) % self.model_checkpoint_frequency == 0
+    if _should_checkpoint:
+      self.model.save_weights(os.path.join(self.log_dir, '%04d-model.weights.h5'%(epoch)), overwrite=True)
     with self._train_writer.as_default():
       with tf.name_scope('Epoch'):
         _should_update_img = self.image_frequency and (epoch) % self.image_frequency == 0
@@ -99,6 +107,11 @@ class ImageCallback(TensorBoard):
           y, mask = self.model(self.sample)
           if _should_update_img: tf.summary.image("Augmented", y, max_outputs=2, step=epoch)
           if _should_update_mask: tf.summary.image("Mask", (mask * 0.5) + 0.5, max_outputs=2, step=epoch)
+    
+  
+  def on_train_end(self, logs=None):
+    self.model.save(os.path.join(self.log_dir, 'model.keras'))
+    return super().on_train_end(logs)
   
   def _log_epoch_metrics(self, epoch, logs):
     with tf.name_scope('Epoch'):

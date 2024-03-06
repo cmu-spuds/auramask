@@ -203,6 +203,7 @@ def init_callbacks(sample, logdir, note='', summary=False):
     histogram_freq=100,
     image_frequency=50,
     mask_frequency=25,
+    model_checkpoint_frequency=100,
     note=note,
     model_summary=summary,
     hparams=hparams
@@ -213,6 +214,7 @@ def init_callbacks(sample, logdir, note='', summary=False):
 def main():
   args = parse_args()
   hparams.update(args.__dict__)
+  print(hparams)
   log = hparams.pop('log')
   logdir = hparams.pop('log_dir')
   note = hparams.pop('note')
@@ -230,6 +232,8 @@ def main():
       note = ''
     if not logdir:
       logdir = os.path.join('logs', branch, datetime.now().strftime("%m-%d"), datetime.now().strftime("%H.%M"))
+    else:
+      logdir = os.path.join(logdir, datetime.now().strftime("%m-%d"), datetime.now().strftime("%H.%M"))
     sample = get_sample_data(v_ds)
     model(sample)
     callbacks = init_callbacks(sample, logdir, note, summary=False)
