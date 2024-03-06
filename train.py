@@ -34,7 +34,7 @@ hparams: dict = {
   "optimizer": "adam",
   "epochs": 500,
   "F": [FaceEmbedEnum.ARCFACE],
-  "lpips_backbone": "alex",
+  "lpips": "alex",
   "input": (256,256)
 }
 
@@ -164,8 +164,8 @@ def get_data_generator(ds, info, split, augment=True):
 
 def initialize_loss():
   FLoss = EmbeddingDistanceLoss(F=hparams['F'])
-  if hparams['lpips_backbone'] != 'none':
-    return [PerceptualLoss(backbone=hparams['lpips_backbone']), FLoss], [hparams['lambda'], 1.]
+  if hparams['lpips'] != 'none':
+    return [PerceptualLoss(backbone=hparams['lpips']), FLoss], [hparams['lambda'], 1.]
   else:
     return [FLoss], [1.]
   
@@ -203,7 +203,7 @@ def init_callbacks(sample, logdir, note='', summary=False):
     histogram_freq=100,
     image_frequency=50,
     mask_frequency=25,
-    model_checkpoint_frequency=100,
+    model_checkpoint_frequency=50,
     note=note,
     model_summary=summary,
     hparams=hparams
