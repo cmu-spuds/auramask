@@ -1,6 +1,7 @@
 import argparse
 import enum
 import os
+from pathlib import Path
 from tensorflow.data import AUTOTUNE
 import tensorflow_datasets as tfds
 
@@ -39,12 +40,16 @@ hparams: dict = {
 
 def dir_path(path):
   if path:
-    path = os.path.abspath(path)
-    if os.path.isdir(path):
-      print(path)
-      return path
-    else:
-      raise argparse.ArgumentTypeError(f"readable_dir:{path} is not a valid path")
+    path = Path(path)
+    try:
+      if not path.parent.parent.exists():
+        raise FileNotFoundError()
+      path.mkdir(parents=True, exist_ok=True)
+      return str(path.absolute())
+    except FileNotFoundError as e:
+      raise argparse.ArgumentTypeError(f"The directory {path} cannot have more than 2 missing parents.")
+    except FileExistsError as e:
+      raise argparse.ArgumentTypeError(f"The directory {path} exists as a file")
   return
 
 class EnumAction(argparse.Action):
@@ -225,8 +230,6 @@ def main():
       note = ''
     if not logdir:
       logdir = os.path.join('logs', branch, datetime.now().strftime("%m-%d"), datetime.now().strftime("%H.%M"))
-    else:
-      logdir = os.path.join(logdir, branch, datetime.now().strftime("%m-%d"), datetime.now().strftime("%H.%M"))
     sample = get_sample_data(v_ds)
     model(sample)
     callbacks = init_callbacks(sample, logdir, note, summary=False)
