@@ -126,7 +126,8 @@ class ImageCallback(TensorBoard):
                 prefix=layer.name + '/'
               elif isinstance(layer, Model):
                 prefix=layer.name + '/'
-                if not self._should_write_loss_model_weight: continue
+                continue
+                # if not self._should_write_loss_model_weight: continue
               else:
                 prefix=''
               for weight in layer.weights:

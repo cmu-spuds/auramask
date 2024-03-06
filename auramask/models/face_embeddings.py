@@ -13,7 +13,6 @@ class FaceEmbedEnum(str, Enum):
   DEEPFACE = "DeepFace"
   DEEPID = "DeepID"
   ARCFACE = "ArcFace"
-  SFACE = "SFace"
   def get_model(self):
     d_model = build_model(model_name=self.value)
     shape = d_model.input_shape[::-1]
