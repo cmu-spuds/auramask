@@ -41,7 +41,7 @@ class EmbeddingDistanceLoss(Loss):
       Returns:
           tensorflow.Tensor : Normalized loss over models F
     """
-    loss = 0.0
+    loss = tf.constant(0, dtype=tf.float32)
     for f in self.F_set:
       try:
         loss = tf.add(loss, self.f_cosine_similarity(y_true, y_pred, f))
