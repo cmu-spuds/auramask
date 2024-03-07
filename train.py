@@ -24,6 +24,8 @@ from keras.layers import CenterCrop
 from keras_cv.layers import Resizing, Rescaling, Augmenter, RandAugment
 from keras.optimizers import Adam
 
+import tensorflow as tf
+
 from datetime import datetime
 
 hparams: dict = {
@@ -170,10 +172,13 @@ def initialize_loss():
     return [FLoss], [1.]
   
 def initialize_model():
-  model = AuraMask(n_filters=hparams['n_filters'], n_dims=3, eps=hparams['epsilon'], depth=hparams['depth'])
+  with tf.device('gpu:0'):
+    model = AuraMask(n_filters=hparams['n_filters'], n_dims=3, eps=hparams['epsilon'], depth=hparams['depth'])
 
   hparams['model'] = model.model.name
-  losses, losses_w = initialize_loss()
+  
+  with tf.device('gpu:0'):
+    losses, losses_w = initialize_loss()
   optimizer = Adam(learning_rate=hparams['alpha'])
   model.compile(
     optimizer=optimizer,

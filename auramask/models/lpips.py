@@ -1,9 +1,8 @@
 from keras.models import Model, load_model
 from keras.layers import Layer
-from keras_cv.layers import Resizing, Augmenter
+from keras_cv.layers import Resizing
 from keras.initializers import Zeros
 from os import path
-import tensorflow as tf
 
 class WeightLayer(Layer):
     def __init__(self, weight_shape, weight_dtype, trainable, *args, **kwargs):
