@@ -71,5 +71,4 @@ class EmbeddingDistanceLoss(Loss):
     emb_adv = model(x_adv)
     dist = self.cossim(emb_t, emb_adv)
     dist = tf.negative(dist)
-    if self.N > 1: tf.summary.scalar(name="%s"%f[2], data=dist, step=self.__step)
     return dist
