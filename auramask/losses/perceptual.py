@@ -32,4 +32,7 @@ class PerceptualLoss(Loss):
     y_true, # reference_img
     y_pred, # compared_img
   ):
-    return tf.reduce_mean(self.model([y_true, y_pred]))
+    loss = self.model([y_true, y_pred]) # in [0, 1]
+    loss = tf.subtract(loss, 0.5)
+    loss = tf.divide(loss, 0.5)
+    return loss

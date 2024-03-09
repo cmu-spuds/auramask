@@ -1,16 +1,17 @@
 from auramask.models.nima import NIMA
-from keras.losses import Loss, cosine_similarity
+from keras.losses import Loss, mean_squared_error
 import tensorflow as tf
 import numpy as np
 
 @tf.function
 def _normalize_labels(labels):
-    return labels / tf.reduce_sum(labels)
+  normed = labels / tf.reduce_sum(labels)
+  return normed
 
 @tf.function
 def calc_mean_score(score_dist):
-    score_dist = _normalize_labels(score_dist)
-    return tf.reduce_sum((score_dist * tf.range(1, 11, dtype=tf.float32)))
+  score_dist = _normalize_labels(score_dist)
+  return tf.reduce_sum((score_dist * tf.range(1, 11, dtype=tf.float32)))
 
 
 class AestheticLoss(Loss):
@@ -29,7 +30,7 @@ class AestheticLoss(Loss):
     for layer in self.model.layers:
       layer.trainable = False
       layer._name = "%s/%s"%(name, layer.name)
-      
+            
   def get_config(self):
     return {
       "name": self.name,
@@ -38,7 +39,8 @@ class AestheticLoss(Loss):
     }
   
   def call(self, y_true, y_pred):
-    mean = calc_mean_score(self.model(y_pred))
-    mean = tf.multiply(2., tf.divide(mean, 10.))
-    mean = tf.negative(tf.subtract(mean, 1))
+    mean = self.model(y_pred)
+    mean = tf.map_fn(calc_mean_score, mean)
+    mean = tf.subtract(mean, 5.)    # Calculate score between [-5, 5]
+    mean = tf.divide(mean, 5.)  # Convert to [-1, 1]
     return mean

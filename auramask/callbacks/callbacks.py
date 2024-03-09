@@ -46,7 +46,11 @@ class ImageCallback(TensorBoard):
                      embeddings_metadata=embeddings_metadata,
                      **kwargs
                      )
-    self.sample = sample
+    self._should_have_vandt = isinstance(sample, tuple)
+    if self._should_have_vandt:
+      self.sample = tf.concat(sample, axis=0)
+    else:
+      self.sample = sample
     self.note = note
     self.mask_frequency = mask_frequency
     self.model_summary = model_summary
@@ -60,7 +64,8 @@ class ImageCallback(TensorBoard):
     with self._train_writer.as_default():
       if self.hparams:
         tmp_hparams = self.hparams
-        tmp_hparams['F'] = ",".join(tmp_hparams['F'])
+        if tmp_hparams['F']: tmp_hparams['F'] = ",".join(tmp_hparams['F'])
+        else: tmp_hparams['F'] = ''
         tmp_hparams['input'] = str(tmp_hparams['input'])
       if os.getenv('SLURM_JOB_NAME') and os.getenv('SLURM_ARRAY_TASK_ID'):
         hp.hparams(tmp_hparams, trial_id='%s-%s'%(os.environ['SLURM_JOB_NAME'], os.environ['SLURM_ARRAY_TASK_ID']))
@@ -104,9 +109,17 @@ class ImageCallback(TensorBoard):
         _should_update_img = self.image_frequency and (epoch) % self.image_frequency == 0
         _should_update_mask = self.mask_frequency and (epoch) % self.mask_frequency == 0
         if _should_update_img or _should_update_mask:
-          y, mask = self.model(self.sample)
-          if _should_update_img: tf.summary.image("Augmented", y, max_outputs=2, step=epoch)
-          if _should_update_mask: tf.summary.image("Mask", (mask * 0.5) + 0.5, max_outputs=2, step=epoch)
+          y, mask = self.model(self.sample[0])
+          if self._should_have_vandt:
+            if _should_update_img:
+              tf.summary.image("Augmented", y, max_outputs=2, step=epoch)
+              tf.summary.image("TAugmented", y[-4:], max_outputs=2, step=epoch)
+            if _should_update_mask:
+              tf.summary.image("Mask", (mask * 0.5) + 0.5, max_outputs=2, step=epoch)            
+              tf.summary.image("TMask", (mask[-4:] * 0.5) + 0.5, max_outputs=2, step=epoch)            
+          else:
+            if _should_update_img: tf.summary.image("Augmented", y, max_outputs=2, step=epoch)
+            if _should_update_mask: tf.summary.image("Mask", (mask * 0.5) + 0.5, max_outputs=2, step=epoch)
     
   
   def on_train_end(self, logs=None):

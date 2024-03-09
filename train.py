@@ -12,6 +12,7 @@ from auramask.callbacks.callbacks import ImageCallback
 
 from auramask.losses.perceptual import PerceptualLoss
 from auramask.losses.embeddistance import EmbeddingDistanceLoss
+from auramask.losses.aesthetic import AestheticLoss
 
 from auramask.models.face_embeddings import FaceEmbedEnum
 from auramask.models.auramask import AuraMask
@@ -23,6 +24,7 @@ import keras
 from keras.layers import CenterCrop
 from keras_cv.layers import Resizing, Rescaling, Augmenter, RandAugment
 from keras.optimizers import Adam
+from keras.losses import MeanSquaredError
 
 import tensorflow as tf
 
@@ -91,11 +93,13 @@ def parse_args():
   parser.add_argument('-a', '--alpha', type=float, default=2e-4)
   parser.add_argument('-e', '--epsilon', type=float, default=0.03)
   parser.add_argument('-l', '--lambda', type=float, default=0.)
+  parser.add_argument('-g', '--gamma', type=float, default=0.1)
   parser.add_argument('-B', '--batch-size', dest='batch', type=int, default=32)
   parser.add_argument('-E', '--epochs', type=int, default=5)
   parser.add_argument('-d', '--depth', type=int, default=5)
   parser.add_argument('-L', '--lpips', type=str, default='alex', choices=['alex', 'vgg', 'squeeze', 'none'])
-  parser.add_argument('-F', type=FaceEmbedEnum, nargs="+", required=True, action=EnumAction)
+  parser.add_argument('--aesthetic', default=False, type=bool, action=argparse.BooleanOptionalAction)
+  parser.add_argument('-F', type=FaceEmbedEnum, nargs="+", required=False, action=EnumAction)
   parser.add_argument('-S', '--seed', type=str, default=''.join(choice(ascii_uppercase) for _ in range(12)))
   parser.add_argument('--log', default=True, type=bool, action=argparse.BooleanOptionalAction)
   parser.add_argument('--log-dir', default=None, type=dir_path)
@@ -119,7 +123,7 @@ def load_data():
                       as_supervised=False,
                       split=[hparams['t_split'], hparams['v_split']])
 
-  return get_data_generator(t_ds, info, hparams['t_split']), get_data_generator(v_ds, info, hparams['v_split'], False)
+  return get_data_generator(t_ds, info, hparams['t_split'], True), get_data_generator(v_ds, info, hparams['v_split'], False)
 
 def get_data_generator(ds, info, split, augment=True):
   loader = Augmenter(
@@ -165,11 +169,23 @@ def get_data_generator(ds, info, split, augment=True):
   return gen_ds
 
 def initialize_loss():
-  FLoss = EmbeddingDistanceLoss(F=hparams['F'])
-  if hparams['lpips'] != 'none':
-    return [PerceptualLoss(backbone=hparams['lpips']), FLoss], [hparams['lambda'], 1.]
-  else:
-    return [FLoss], [1.]
+  losses = []
+  weights = []
+  if hparams['F']:
+    losses.append(EmbeddingDistanceLoss(F=hparams['F']))
+    weights.append(1.)
+  if hparams['aesthetic']:
+    losses.append(AestheticLoss())
+    weights.append(hparams['gamma'])
+  if hparams['lambda'] > 0:
+    if hparams['lpips'] != 'none':
+      losses.append(PerceptualLoss(backbone=hparams['lpips']))
+      weights.append(hparams['lambda'])
+    else:
+      losses.append(MeanSquaredError())
+      weights.append(hparams['lambda'])
+
+  return losses, weights
   
 def initialize_model():
   with tf.device('gpu:0'):
@@ -196,18 +212,17 @@ def set_seed():
 
 def get_sample_data(ds):
   for x, _ in ds.take(1):
-    return x
-
-
+    return x[:5]
+  
 def init_callbacks(sample, logdir, note='', summary=False):
   # histogram_freq = hparams['epochs'] // 10
   tensorboard_callback = ImageCallback(
     sample=sample, 
     log_dir=logdir, 
     update_freq='epoch',
-    histogram_freq=100,
-    image_frequency=50,
-    mask_frequency=25,
+    histogram_freq=10,
+    image_frequency=5,
+    mask_frequency=0,
     model_checkpoint_frequency=50,
     note=note,
     model_summary=summary,
@@ -219,7 +234,7 @@ def init_callbacks(sample, logdir, note='', summary=False):
 def main():
   args = parse_args()
   hparams.update(args.__dict__)
-  print(hparams)
+  # print(hparams)
   log = hparams.pop('log')
   logdir = hparams.pop('log_dir')
   note = hparams.pop('note')
@@ -239,9 +254,10 @@ def main():
       logdir = os.path.join('logs', branch, datetime.now().strftime("%m-%d"), datetime.now().strftime("%H.%M"))
     else:
       logdir = os.path.join(logdir, datetime.now().strftime("%m-%d"), datetime.now().strftime("%H.%M"))
-    sample = get_sample_data(v_ds)
-    model(sample)
-    callbacks = init_callbacks(sample, logdir, note, summary=False)
+    v_samp = get_sample_data(v_ds)
+    # t_samp = get_sample_data(t_ds)
+    model(v_samp)
+    callbacks = init_callbacks(v_samp, logdir, note, summary=False)
   else:
     callbacks = None
 

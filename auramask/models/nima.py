@@ -1,5 +1,5 @@
 from keras.models import Model, load_model
-from keras_cv.layers import Resizing
+from keras_cv.layers import Augmenter, Rescaling, Resizing
 from os import path
 
 class NIMA(Model):
@@ -18,7 +18,7 @@ class NIMA(Model):
     self.backbone=backbone
     self.kind=kind
     self.augmenter = Resizing(224,224)
-    
+        
     mdl_path = path.join(
       path.expanduser("~/compiled"),
       'nima_%s_%s.keras'%(kind, backbone)
