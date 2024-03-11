@@ -177,7 +177,7 @@ def initialize_loss():
     losses.append(EmbeddingDistanceLoss(F=hparams['F']))
     weights.append(1.)
   if hparams['aesthetic']:
-    losses.append(AestheticLoss())
+    losses.append(AestheticLoss(kind='nima'))
     weights.append(hparams['gamma'])
   if hparams['lambda'] > 0:
     if hparams['lpips'] == 'none':
@@ -231,8 +231,8 @@ def init_callbacks(sample, logdir, note='', summary=False):
     update_freq='epoch',
     histogram_freq=10,
     image_frequency=5,
-    mask_frequency=0,
-    model_checkpoint_frequency=50,
+    mask_frequency=5,
+    model_checkpoint_frequency=0,
     note=note,
     model_summary=summary,
     hparams=hparams

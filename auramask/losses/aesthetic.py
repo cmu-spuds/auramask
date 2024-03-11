@@ -1,4 +1,5 @@
 from auramask.models.nima import NIMA
+from auramask.models.vila import VILA
 from keras.losses import Loss
 # import keras.ops as np
 import tensorflow as np
@@ -15,19 +16,25 @@ def calc_mean_score(score_dist):
 class AestheticLoss(Loss):
   def __init__(self,
                backbone="imagenet",
-               model: NIMA|None = None,
+               kind="nima",
+               model: NIMA|VILA|None = None,
                name="AestheticLoss",
                **kwargs):
     super().__init__(name=name, **kwargs)
     if model:
       self.model = model
     else:
-      self.model = NIMA(backbone=backbone, kind="aesthetic")
-    
+      if kind == 'nima':
+        self.model = NIMA(backbone=backbone, kind="aesthetic")
+        for layer in self.model.layers:
+          layer.trainable = False
+          layer._name = "%s/%s"%(name, layer.name)
+      elif kind == 'vila':
+        self.model = VILA()
+        for layer in self.model.layers:
+          layer._name = "%s/%s"%(name, layer.name)
+
     self.model.trainable = False
-    for layer in self.model.layers:
-      layer.trainable = False
-      layer._name = "%s/%s"%(name, layer.name)
             
   def get_config(self):
     return {

@@ -4,7 +4,7 @@ from auramask.losses.embeddistance import EmbeddingDistanceLoss
 from auramask.losses.perceptual import PerceptualLoss
 from auramask.losses.aesthetic import AestheticLoss
 from auramask.losses.ssim import SSIMLoss
-from keras.activations import tanh
+from keras.activations import tanh, sigmoid
 from keras.layers import Rescaling
 from keras.metrics import Mean
 from keras.losses import cosine_similarity, MeanSquaredError
@@ -25,6 +25,8 @@ class AuraMask(Model):
         self.Lpips = None
         self.A = None
         
+        self.masked = True
+        
         self.inscale = Rescaling(2, offset=-1)
         
         filters = [n_filters * pow(2, i) for i in range(depth)]
@@ -38,12 +40,13 @@ class AuraMask(Model):
     def call(self, inputs):
         mask = self.inscale(inputs)  # Scale to -1 to 1
         mask = self.model(mask)
-        mask = tanh(mask)
-        # out = tf.add(0.5, tf.multiply(mask, 0.5))
-        mask = tf.multiply(self.eps, mask)
-        out = tf.add(mask, inputs)
-        out = tf.clip_by_value(out, 0., 1.)
-
+        if self.masked:             # Generate a mask added to the input
+            mask = tanh(mask)
+            mask = tf.multiply(self.eps, mask)
+            out = tf.add(mask, inputs)
+            out = tf.clip_by_value(out, 0., 1.)
+        else:                       # Regenerate the input image
+            out = sigmoid(mask)
         return out, mask
 
     def compile(self, optimizer="rmsprop", loss=None, metrics=None, loss_weights=None, weighted_metrics=None, run_eagerly=None, steps_per_execution=None, jit_compile=None, pss_evaluation_shards=0, **kwargs):
@@ -127,11 +130,11 @@ class AuraMask(Model):
     @tf.function
     def train_step(self, data):
         X, _ = data
-        
+        y = tf.identity(X)
         with tf.GradientTape() as tape:
             tape.watch(X)
             y_pred, _ = self(X, training=True) # Forward pass
-            loss = self.compute_loss(y=X, y_pred=y_pred)
+            loss = self.compute_loss(y=y, y_pred=y_pred)
 
         # Compute Gradients
         trainable_vars = self.trainable_variables

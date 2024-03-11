@@ -11,7 +11,7 @@ class VILA(Model):
                **kwargs):
     super().__init__(name=name, **kwargs)
 
-    self.net = hub.KerasLayer('https://tfhub.dev/google/vila/image/1')
+    self.net = hub.KerasLayer('https://tfhub.dev/google/vila/image/1', signature='serving_default', output_key='predictions')
     
   def get_config(self):
     return self().get_config()
