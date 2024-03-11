@@ -1,5 +1,6 @@
 from keras.models import Model, load_model
-from keras_cv.layers import Augmenter, Rescaling, Resizing
+# from keras.layers import TFSMLayer
+from keras_cv.layers import Resizing
 from os import path
 
 class NIMA(Model):
@@ -25,6 +26,7 @@ class NIMA(Model):
     )
     
     self.net = load_model(mdl_path)
+    # self.net = TFSMLayer(mdl_path, call_endpoint='serve')
     
   def get_config(self):
     return self().get_config()

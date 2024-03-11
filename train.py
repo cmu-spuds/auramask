@@ -13,6 +13,7 @@ from auramask.callbacks.callbacks import ImageCallback
 from auramask.losses.perceptual import PerceptualLoss
 from auramask.losses.embeddistance import EmbeddingDistanceLoss
 from auramask.losses.aesthetic import AestheticLoss
+from auramask.losses.ssim import SSIMLoss
 
 from auramask.models.face_embeddings import FaceEmbedEnum
 from auramask.models.auramask import AuraMask
@@ -97,7 +98,7 @@ def parse_args():
   parser.add_argument('-B', '--batch-size', dest='batch', type=int, default=32)
   parser.add_argument('-E', '--epochs', type=int, default=5)
   parser.add_argument('-d', '--depth', type=int, default=5)
-  parser.add_argument('-L', '--lpips', type=str, default='alex', choices=['alex', 'vgg', 'squeeze', 'none'])
+  parser.add_argument('-L', '--lpips', type=str, default='alex', choices=['alex', 'vgg', 'squeeze', 'mse', 'ssim', 'none'])
   parser.add_argument('--aesthetic', default=False, type=bool, action=argparse.BooleanOptionalAction)
   parser.add_argument('-F', type=FaceEmbedEnum, nargs="+", required=False, action=EnumAction)
   parser.add_argument('-S', '--seed', type=str, default=''.join(choice(ascii_uppercase) for _ in range(12)))
@@ -140,6 +141,7 @@ def get_data_generator(ds, info, split, augment=True):
         value_range=(0,1),
         augmentations_per_image=3,
         magnitude=0.5,
+        geometric=False,
         seed=hparams['seed']
         )
     ]
@@ -154,7 +156,7 @@ def get_data_generator(ds, info, split, augment=True):
       outputs = augmenter(images)
     else:
       outputs = images
-    return outputs, outputs
+    return outputs, [False]*hparams['batch']
 
   t_ds = ds.map(lambda x: load_img(x['image']), num_parallel_calls=AUTOTUNE)
   
@@ -178,11 +180,16 @@ def initialize_loss():
     losses.append(AestheticLoss())
     weights.append(hparams['gamma'])
   if hparams['lambda'] > 0:
-    if hparams['lpips'] != 'none':
-      losses.append(PerceptualLoss(backbone=hparams['lpips']))
+    if hparams['lpips'] == 'none':
+      pass
+    elif hparams['lpips'] == 'mse':
+      losses.append(MeanSquaredError())
+      weights.append(hparams['lambda'])
+    elif hparams['lpips'] == 'ssim':
+      losses.append(SSIMLoss())
       weights.append(hparams['lambda'])
     else:
-      losses.append(MeanSquaredError())
+      losses.append(PerceptualLoss(backbone=hparams['lpips']))
       weights.append(hparams['lambda'])
 
   return losses, weights
@@ -211,8 +218,10 @@ def set_seed():
   hparams['seed'] = seed
 
 def get_sample_data(ds):
+  out = None
   for x, _ in ds.take(1):
-    return x[:5]
+    out = tf.identity(x[:5])
+  return out
   
 def init_callbacks(sample, logdir, note='', summary=False):
   # histogram_freq = hparams['epochs'] // 10
@@ -255,9 +264,9 @@ def main():
     else:
       logdir = os.path.join(logdir, datetime.now().strftime("%m-%d"), datetime.now().strftime("%H.%M"))
     v_samp = get_sample_data(v_ds)
-    # t_samp = get_sample_data(t_ds)
+    t_samp = get_sample_data(t_ds)
     model(v_samp)
-    callbacks = init_callbacks(v_samp, logdir, note, summary=False)
+    callbacks = init_callbacks((v_samp, t_samp), logdir, note, summary=False)
   else:
     callbacks = None
 

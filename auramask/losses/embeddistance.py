@@ -1,7 +1,7 @@
 # Imports
 from auramask.models.face_embeddings import FaceEmbedEnum
-from keras.losses import Loss, CosineSimilarity
-import tensorflow as tf
+from keras.losses import Loss, cosine_similarity
+import tensorflow as np
 
 class EmbeddingDistanceLoss(Loss):
   """Computes the loss for Adversarial Transformation Network training as described by the ReFace paper.
@@ -17,8 +17,7 @@ class EmbeddingDistanceLoss(Loss):
                **kwargs):
     super().__init__(name=name,**kwargs)
     self.F = FaceEmbedEnum.build_F(F)
-    self.N = tf.constant(len(F))
-    self.cossim = CosineSimilarity(axis=1)
+    self.N = np.constant(len(F), dtype=np.float32)
     
   def get_config(self):
     return {
@@ -41,34 +40,11 @@ class EmbeddingDistanceLoss(Loss):
       Returns:
           tensorflow.Tensor : Normalized loss over models F
     """
-    loss = tf.constant(0, dtype=tf.float32)
-    for f in self.F_set:
-      try:
-        loss = tf.add(loss, self.f_cosine_similarity(y_true, y_pred, f))
-      except Exception as e:
-        print(f)
-        raise e
-    loss = tf.divide(loss, self.N)
-    return loss
-        
-  def f_cosine_similarity(self, x, x_adv, f):
-    """Compute the cosine distance between the embeddings of the original image and perturbed image.
-    Embeddings Loss
-    $$
-      loss \leftarrow \dfrac{1}{\left\|\mathbb{F}\right\|} \sum^{\mathbb{F}}_{f} - \dfrac{f(x) \cdot f(x_{adv})} {\left\| f(x)\right\|_{2}\left\| f(x_{adv})\right\|_{2}}
-    $$
-
-    Args:
-        x (_type_): Original image
-        x_adv (_type_): Adversarially perturbed image
-        f (tensorflow.keras.Model): Face embedding extraction model
-
-    Returns:
-        float: negated distance between computed embeddings
-    """
-    model = f
-    emb_t = model(x)
-    emb_adv = model(x_adv)
-    dist = self.cossim(emb_t, emb_adv)
-    dist = tf.negative(dist)
-    return dist
+    loss = 0.
+    for f in self.F:
+      emb_t = np.stop_gradient(f(y_true))
+      emb_adv = f(y_pred)
+      sim = np.negative(cosine_similarity(emb_t, emb_adv, -1))
+      loss = np.add(loss, sim)
+    return np.divide(loss, self.N)
+  

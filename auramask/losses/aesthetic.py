@@ -1,17 +1,15 @@
 from auramask.models.nima import NIMA
-from keras.losses import Loss, mean_squared_error
-import tensorflow as tf
-import numpy as np
+from keras.losses import Loss
+# import keras.ops as np
+import tensorflow as np
 
-@tf.function
 def _normalize_labels(labels):
-  normed = labels / tf.reduce_sum(labels)
+  normed = labels / np.reduce_sum(labels)
   return normed
 
-@tf.function
 def calc_mean_score(score_dist):
   score_dist = _normalize_labels(score_dist)
-  return tf.reduce_sum((score_dist * tf.range(1, 11, dtype=tf.float32)))
+  return np.reduce_sum((score_dist * np.range(1, 11, dtype=np.float32)))
 
 
 class AestheticLoss(Loss):
@@ -40,7 +38,6 @@ class AestheticLoss(Loss):
   
   def call(self, y_true, y_pred):
     mean = self.model(y_pred)
-    mean = tf.map_fn(calc_mean_score, mean)
-    mean = tf.subtract(mean, 5.)    # Calculate score between [-5, 5]
-    mean = tf.divide(mean, 5.)  # Convert to [-1, 1]
+    mean = np.map_fn(calc_mean_score, mean)
+    mean = 1 - np.divide(mean, 10.)  # Convert to [0, 1]
     return mean

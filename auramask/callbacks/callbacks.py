@@ -109,7 +109,7 @@ class ImageCallback(TensorBoard):
         _should_update_img = self.image_frequency and (epoch) % self.image_frequency == 0
         _should_update_mask = self.mask_frequency and (epoch) % self.mask_frequency == 0
         if _should_update_img or _should_update_mask:
-          y, mask = self.model(self.sample[0])
+          y, mask = self.model(self.sample)
           if self._should_have_vandt:
             if _should_update_img:
               tf.summary.image("Augmented", y, max_outputs=2, step=epoch)
