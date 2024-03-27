@@ -1,6 +1,5 @@
 from keras.losses import Loss
 from auramask.models.lpips import LPIPS
-import tensorflow as tf
 
 class PerceptualLoss(Loss):
   def __init__(self, 
@@ -32,4 +31,5 @@ class PerceptualLoss(Loss):
     y_true, # reference_img
     y_pred, # compared_img
   ):
-    return tf.reduce_mean(self.model([y_true, y_pred]))
+    loss = self.model([y_true, y_pred]) # in [0, 1]
+    return loss
