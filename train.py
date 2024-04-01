@@ -17,10 +17,6 @@ from auramask.losses.ssim import SSIMLoss
 
 from auramask.models.face_embeddings import FaceEmbedEnum
 from auramask.models.auramask import AuraMask
-
-from git import Repo
-branch = Repo('./').active_branch.name
-
 import keras
 from keras.layers import CenterCrop
 from keras_cv.layers import Resizing, Rescaling, Augmenter, RandAugment
@@ -30,6 +26,9 @@ from keras.losses import MeanSquaredError
 import tensorflow as tf
 
 from datetime import datetime
+
+from git import Repo
+branch = Repo('./').active_branch.name
 
 hparams: dict = {
   "alpha": 2e-4,
