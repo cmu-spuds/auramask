@@ -129,8 +129,7 @@ class AuraMask(Model):
 
     @tf.function
     def train_step(self, data):
-        X, _ = data
-        y = tf.identity(X)
+        X, y = data
         with tf.GradientTape() as tape:
             tape.watch(X)
             y_pred, _ = self(X, training=True) # Forward pass
