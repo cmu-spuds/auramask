@@ -114,9 +114,10 @@ def parse_args():
   return parser.parse_args()
 
 def load_data():
-  (t_ds, v_ds) = load_dataset('logasja/lfw',
-                    split=[hparams['t_split'], hparams['v_split']])
-  
+  (t_ds, v_ds) = load_dataset('logasja/lfw', 'aug',
+                    split=[hparams['t_split'], hparams['v_split']],
+                    )
+
   t_ds = t_ds.to_tf_dataset(
     batch_size=hparams['batch'],
     shuffle=True
@@ -150,24 +151,21 @@ def get_data_generator(ds, augment=True):
   )
 
   def load_img(images):
-    outputs = loader(images)
-    return outputs
+    x = loader(images['orig'])
+    x = preprocess_data(x, augment)
+    y = loader(images['aug'])
+    return x, y
 
   def preprocess_data(images, augment=True):
     if augment:
-      outputs = augmenter(images)
+      x = augmenter(images)
     else:
-      outputs = images
-    return outputs, tf.identity(outputs)
+      x = images
+    return x
 
-  t_ds = ds.map(lambda x: load_img(x['image']), num_parallel_calls=AUTOTUNE)
-  
-  gen_ds = (
-    t_ds
-    .map(lambda x: preprocess_data(x, augment))
-    .prefetch(buffer_size=AUTOTUNE)
-  )  
-  return gen_ds
+  t_ds = ds.map(lambda x: load_img(x), num_parallel_calls=AUTOTUNE)
+
+  return t_ds
 
 def initialize_loss():
   losses = []

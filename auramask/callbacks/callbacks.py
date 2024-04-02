@@ -75,7 +75,8 @@ class ImageCallback(TensorBoard):
         tf.summary.text("Run Note", self.note, 0)
       if self.model_summary:
         tf.summary.text("Model Structure", get_model_summary(self.model), 0)
-
+      tf.summary.image("Validation", self.sample[:4], max_outputs=2, step=0)
+      tf.summary.image("Training", self.sample[-4:], max_outputs=2, step=0)
   # def _push_writer(self, writer, step):
   #   """Sets the default writer for custom batch-level summaries."""
   #   if self.update_freq == "epoch":
