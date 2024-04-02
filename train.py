@@ -2,8 +2,9 @@ import argparse
 import enum
 import os
 from pathlib import Path
+from cv2 import batchDistance
 from tensorflow.data import AUTOTUNE
-import tensorflow_datasets as tfds
+from datasets import load_dataset, Dataset
 
 from random import choice
 from string import ascii_uppercase
@@ -113,19 +114,21 @@ def parse_args():
   return parser.parse_args()
 
 def load_data():
-  (t_ds, v_ds), info = tfds.load('lfw',
-                      decoders=tfds.decode.PartialDecoding({
-                        'image': True,
-                      }),
-                      shuffle_files=True,
-                      with_info=True,
-                      download=True,
-                      as_supervised=False,
-                      split=[hparams['t_split'], hparams['v_split']])
+  (t_ds, v_ds) = load_dataset('logasja/lfw',
+                    split=[hparams['t_split'], hparams['v_split']])
+  
+  t_ds = t_ds.to_tf_dataset(
+    batch_size=hparams['batch'],
+    shuffle=True
+  )
 
-  return get_data_generator(t_ds, info, hparams['t_split'], True), get_data_generator(v_ds, info, hparams['v_split'], False)
+  v_ds = v_ds.to_tf_dataset(
+    batch_size=hparams['batch']
+  )
 
-def get_data_generator(ds, info, split, augment=True):
+  return get_data_generator(t_ds, True), get_data_generator(v_ds, False)
+
+def get_data_generator(ds, augment=True):
   loader = Augmenter(
     [
       Rescaling(scale=1./255, offset=0),
@@ -155,15 +158,12 @@ def get_data_generator(ds, info, split, augment=True):
       outputs = augmenter(images)
     else:
       outputs = images
-    return outputs, [False]*hparams['batch']
+    return outputs, tf.identity(outputs)
 
   t_ds = ds.map(lambda x: load_img(x['image']), num_parallel_calls=AUTOTUNE)
   
   gen_ds = (
     t_ds
-    .cache()
-    .shuffle(info.splits[split].num_examples)
-    .batch(hparams['batch'])
     .map(lambda x: preprocess_data(x, augment))
     .prefetch(buffer_size=AUTOTUNE)
   )  
