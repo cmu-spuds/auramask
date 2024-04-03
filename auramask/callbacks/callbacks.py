@@ -18,7 +18,7 @@ def get_model_summary(model):
 class ImageCallback(TensorBoard):
   def __init__(
     self, 
-    sample,
+    sample: dict,
     hparams=None,
     note='',
     image_frequency=None,
@@ -46,11 +46,8 @@ class ImageCallback(TensorBoard):
                      embeddings_metadata=embeddings_metadata,
                      **kwargs
                      )
-    self._should_have_vandt = isinstance(sample, tuple)
-    if self._should_have_vandt:
-      self.sample = tf.concat(sample, axis=0)
-    else:
-      self.sample = sample
+    self.t_sample = sample['train'] if ('train' in sample) else None
+    self.v_sample = sample['validation'] if ('validation' in sample) else None
     self.note = note
     self.mask_frequency = mask_frequency
     self.model_summary = model_summary
@@ -75,8 +72,8 @@ class ImageCallback(TensorBoard):
         tf.summary.text("Run Note", self.note, 0)
       if self.model_summary:
         tf.summary.text("Model Structure", get_model_summary(self.model), 0)
-      tf.summary.image("Validation", self.sample[:4], max_outputs=2, step=0)
-      tf.summary.image("Training", self.sample[-4:], max_outputs=2, step=0)
+      tf.summary.image("Epoch/Validation", tf.concat([self.v_sample[0], self.v_sample[1]], axis=2), max_outputs=2, step=-1)
+      tf.summary.image("Epoch/Training", tf.concat([self.t_sample[0], self.t_sample[1]], axis=2), max_outputs=2, step=-1)
   # def _push_writer(self, writer, step):
   #   """Sets the default writer for custom batch-level summaries."""
   #   if self.update_freq == "epoch":
@@ -110,18 +107,13 @@ class ImageCallback(TensorBoard):
         _should_update_img = self.image_frequency and (epoch) % self.image_frequency == 0
         _should_update_mask = self.mask_frequency and (epoch) % self.mask_frequency == 0
         if _should_update_img or _should_update_mask:
-          y, mask = self.model(self.sample)
-          if self._should_have_vandt:
-            if _should_update_img:
-              tf.summary.image("Augmented", y, max_outputs=2, step=epoch)
-              tf.summary.image("TAugmented", y[-4:], max_outputs=2, step=epoch)
-            if _should_update_mask:
-              tf.summary.image("Mask", (mask * 0.5) + 0.5, max_outputs=2, step=epoch)            
-              tf.summary.image("TMask", (mask[-4:] * 0.5) + 0.5, max_outputs=2, step=epoch)            
-          else:
-            if _should_update_img: tf.summary.image("Augmented", y, max_outputs=2, step=epoch)
-            if _should_update_mask: tf.summary.image("Mask", (mask * 0.5) + 0.5, max_outputs=2, step=epoch)
-    
+          y, mask = self.model(tf.concat([self.t_sample[0], self.v_sample[0]], axis=0))
+          if _should_update_img:
+            tf.summary.image("Training", tf.concat([y[:5], self.t_sample[1][:5]], axis=2), max_outputs=2, step=epoch)
+            tf.summary.image("Validation", tf.concat([y[-5:], self.v_sample[1][:5]], axis=2), max_outputs=2, step=epoch)
+          if _should_update_mask:
+            tf.summary.image("Training Mask", (mask * 0.5) + 0.5, max_outputs=2, step=epoch)
+            tf.summary.image("Validation Mask", (mask[-5:] * 0.5) + 0.5, max_outputs=2, step=epoch)
   
   def on_train_end(self, logs=None):
     self.model.save(os.path.join(self.log_dir, 'model.keras'))

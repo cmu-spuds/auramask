@@ -22,6 +22,7 @@ class AuraMask(Model):
         super().__init__(name=name, **kwargs)
         self.eps = eps
         self.F = None
+        self._losses
         self.Lpips = None
         self.A = None
         
@@ -35,7 +36,6 @@ class AuraMask(Model):
                             stack_num_down=2, stack_num_up=2,
                             activation='ReLU', output_activation=None, 
                             batch_norm=True, pool='max', unpool='nearest')
-        
         
     def call(self, inputs):
         mask = self.inscale(inputs)  # Scale to -1 to 1
@@ -58,8 +58,10 @@ class AuraMask(Model):
                 if weighted:
                     w = loss_weights.pop()
                 if isinstance(l, (PerceptualLoss, MeanSquaredError, SSIMLoss)):
-                    if w>0:
-                        self.Lpips = (l, Mean(name=l.name), w)
+                    if not self.Lpips and w>0:
+                        self.Lpips = [(l, Mean(name=l.name), w)]
+                    elif w>0:
+                        self.Lpips.append((l, Mean(name=l.name), w))
                     else:
                         del l
                 elif isinstance(l, EmbeddingDistanceLoss):
@@ -96,10 +98,10 @@ class AuraMask(Model):
 
         with tf.name_scope("Perceptual"):
             if self.Lpips:
-                model, metric, p_w = self.Lpips
-                sim_loss = model(y, y_pred)
-                metric.update_state(sim_loss)
-                tloss = tf.add(tloss, tf.multiply(sim_loss, p_w))
+                for model, metric, p_w in self.Lpips:
+                    sim_loss = model(y, y_pred)
+                    metric.update_state(sim_loss)
+                    tloss = tf.add(tloss, tf.multiply(sim_loss, p_w))
 
         with tf.name_scope("Aesthetic"):
             if self.A:
@@ -117,9 +119,9 @@ class AuraMask(Model):
             all_metrics[metric.name] = metric.result()
             metric.reset_state()
         if self.Lpips:
-            _, metric, _ = self.Lpips
-            all_metrics[metric.name] = metric.result()
-            metric.reset_state()
+            for _, metric, _ in self.Lpips:
+                all_metrics[metric.name] = metric.result()
+                metric.reset_state()
         if self.F:
             for _, metric, _ in self.F:
                 all_metrics[metric.name] = metric.result()

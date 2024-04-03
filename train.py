@@ -98,7 +98,7 @@ def parse_args():
   parser.add_argument('-B', '--batch-size', dest='batch', type=int, default=32)
   parser.add_argument('-E', '--epochs', type=int, default=5)
   parser.add_argument('-d', '--depth', type=int, default=5)
-  parser.add_argument('-L', '--lpips', type=str, default='alex', choices=['alex', 'vgg', 'squeeze', 'mse', 'ssim', 'none'])
+  parser.add_argument('-L', '--lpips', type=str, default='alex', choices=['alex', 'vgg', 'squeeze', 'mse', 'ssim', 'ssim+mse', 'none'])
   parser.add_argument('--aesthetic', default=False, type=bool, action=argparse.BooleanOptionalAction)
   parser.add_argument('-F', type=FaceEmbedEnum, nargs="+", required=False, action=EnumAction)
   parser.add_argument('-S', '--seed', type=str, default=''.join(choice(ascii_uppercase) for _ in range(12)))
@@ -127,7 +127,7 @@ def load_data():
     batch_size=hparams['batch']
   )
 
-  return get_data_generator(t_ds, True), get_data_generator(v_ds, False)
+  return get_data_generator(t_ds, False), get_data_generator(v_ds, False)
 
 def get_data_generator(ds, augment=True):
   loader = Augmenter(
@@ -137,7 +137,7 @@ def get_data_generator(ds, augment=True):
       CenterCrop(224, 224)
     ]
   )
-  
+
   augmenter = Augmenter(
     [
       RandAugment(
@@ -185,6 +185,11 @@ def initialize_loss():
     elif hparams['lpips'] == 'ssim':
       losses.append(SSIMLoss())
       weights.append(hparams['lambda'])
+    elif hparams['lpips'] == 'ssim+mse':
+      losses.append(SSIMLoss())
+      weights.append(hparams['lambda'])
+      losses.append(MeanSquaredError())
+      weights.append(hparams['lambda'])
     else:
       losses.append(PerceptualLoss(backbone=hparams['lpips']))
       weights.append(hparams['lambda'])
@@ -216,9 +221,10 @@ def set_seed():
 
 def get_sample_data(ds):
   out = None
-  for x, _ in ds.take(1):
-    out = tf.identity(x[:5])
-  return out
+  for x, y in ds.take(1):
+    inp = tf.identity(x[:5])
+    outp = tf.identity(y[:5])
+  return tf.stack([inp, outp])
   
 def init_callbacks(sample, logdir, note='', summary=False):
   # histogram_freq = hparams['epochs'] // 10
@@ -260,10 +266,10 @@ def main():
       logdir = os.path.join('logs', branch, datetime.now().strftime("%m-%d"), datetime.now().strftime("%H.%M"))
     else:
       logdir = os.path.join(logdir, datetime.now().strftime("%m-%d"), datetime.now().strftime("%H.%M"))
-    v_samp = get_sample_data(v_ds)
-    t_samp = get_sample_data(t_ds)
-    model(v_samp)
-    callbacks = init_callbacks((v_samp, t_samp), logdir, note, summary=False)
+    v = get_sample_data(v_ds)
+    t = get_sample_data(t_ds)
+    model(v[0])
+    callbacks = init_callbacks({'validation': v, 'train': t}, logdir, note, summary=False)
   else:
     callbacks = None
 

@@ -10,5 +10,5 @@ class SSIMLoss(Loss):
     self.k2 = tf.constant(k2, dtype=tf.float32)
     
   def call(self, y_true, y_pred):
-    ssim = 1 - tf.image.ssim_multiscale(y_true, y_pred, max_val=self.mv, filter_size=self.fz, k1=self.k1, k2=self.k2)
+    ssim = 1 - tf.image.ssim(y_true, y_pred, max_val=self.mv, filter_size=self.fz, k1=self.k1, k2=self.k2)
     return ssim
