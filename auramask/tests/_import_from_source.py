@@ -19,7 +19,9 @@ def _is_package(module_spec: ModuleSpec) -> bool:
     return module_spec.origin is not None and module_spec.origin.endswith("__init__.py")
 
 
-def _recurse_modules(module_name: str, ignore_tests: bool, packages_only: bool) -> Iterator[str]:
+def _recurse_modules(
+    module_name: str, ignore_tests: bool, packages_only: bool
+) -> Iterator[str]:
     if ignore_tests and _is_test_module(module_name):
         return
 
@@ -44,7 +46,9 @@ class _ImportFromSourceChecker(NodeVisitor):
     def __init__(self, module: str):
         module_spec = import_util.find_spec(module)
         is_pkg = (
-            module_spec is not None and module_spec.origin is not None and module_spec.origin.endswith("__init__.py")
+            module_spec is not None
+            and module_spec.origin is not None
+            and module_spec.origin.endswith("__init__.py")
         )
 
         self._module = module if is_pkg else ".".join(module.split(".")[:-1])
@@ -91,7 +95,9 @@ class _ImportFromSourceChecker(NodeVisitor):
 
             # Figure out where we should be importing this class from, and assert that the *actual* import we found
             # matches the place we *should* import from.
-            should_import_from = self._get_module_should_import(module_to_import=attribute_module)
+            should_import_from = self._get_module_should_import(
+                module_to_import=attribute_module
+            )
             assert module_to_import == should_import_from, (
                 f"Imported {alias.name} from {module_to_import}, which is not the public module where this object "
                 f"is defined. Please import from {should_import_from} instead."
@@ -108,7 +114,9 @@ class _ImportFromSourceChecker(NodeVisitor):
         result: List[str] = []
 
         for component in module_components:
-            if component.startswith("_") and not self._module.startswith(".".join(result)):
+            if component.startswith("_") and not self._module.startswith(
+                ".".join(result)
+            ):
                 break
             result.append(component)
 
