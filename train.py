@@ -202,7 +202,6 @@ def get_data_generator(ds, augment=True):
         y = loader(images["aug"])
         if augment:
             data = geom_aug({"images": x, "segmentation_masks": y})
-            print(data)
             data = augmenter(data)
             return data["images"], data["segmentation_masks"]
         else:
@@ -252,7 +251,7 @@ def initialize_model():
             n_dims=3,
             eps=hparams["epsilon"],
             depth=hparams["depth"],
-            colorspace=hparams["color_space"].value,
+            colorspace=hparams["color_space"].value if hparams["color_space"] else None,
         )
 
     hparams["model"] = model.model.name
