@@ -2,9 +2,7 @@ import argparse
 import enum
 import os
 from pathlib import Path
-from cv2 import batchDistance
-from tensorflow.data import AUTOTUNE
-from datasets import load_dataset, Dataset
+from datasets import load_dataset
 
 from random import choice
 from string import ascii_uppercase
@@ -20,7 +18,7 @@ from auramask.models.face_embeddings import FaceEmbedEnum
 from auramask.models.auramask import AuraMask
 import keras
 from keras.layers import CenterCrop
-from keras_cv.layers import Resizing, Rescaling, Augmenter, RandAugment
+from keras_cv.layers import Resizing, Rescaling, Augmenter, RandAugment, RandomFlip, RandomRotation, RandomTranslation, RandomAugmentationPipeline
 from keras.optimizers import Adam
 from keras.losses import MeanSquaredError
 
@@ -29,20 +27,14 @@ import tensorflow as tf
 from datetime import datetime
 
 from git import Repo
-branch = Repo('./').active_branch.name
 
-hparams: dict = {
-  "alpha": 2e-4,
-  "epsilon": 0.03,
-  "lambda": 0.,
-  "batch": 32,
-  "optimizer": "adam",
-  "epochs": 500,
-  "F": [FaceEmbedEnum.ARCFACE],
-  "lpips": "alex",
-  "input": (256,256)
-}
+from auramask.utils.colorspace import ColorSpaceEnum    
+branch = Repo('./').active_branch.name                    # Used for debugging runs
 
+# Global hparams object
+hparams: dict = {}
+
+# Path checking and creation if appropriate
 def dir_path(path):
   if path:
     path = Path(path)
@@ -57,34 +49,35 @@ def dir_path(path):
       raise argparse.ArgumentTypeError(f"The directory {path} exists as a file")
   return
 
+# Action for enumeration input
 class EnumAction(argparse.Action):
-    """
-    Argparse action for handling Enums
-    """
-    def __init__(self, **kwargs):
-        # Pop off the type value
-        enum_type = kwargs.pop("type", None)
+  """ Action for an enumeration input, maps enumeration type to choices
 
-        # Ensure an Enum subclass is provided
-        if enum_type is None:
-            raise ValueError("type must be assigned an Enum when using EnumAction")
-        if not issubclass(enum_type, enum.Enum):
-            raise TypeError("type must be an Enum when using EnumAction")
+  """
+  def __init__(self, **kwargs):
+    # Pop off the type value
+    enum_type = kwargs.pop("type", None)
 
-        # Generate choices from the Enum
-        kwargs.setdefault("choices", tuple(e.name.lower() for e in enum_type))
+    # Ensure an Enum subclass is provided
+    if enum_type is None:
+        raise ValueError("type must be assigned an Enum when using EnumAction")
+    if not issubclass(enum_type, enum.Enum):
+        raise TypeError("type must be an Enum when using EnumAction")
 
-        super(EnumAction, self).__init__(**kwargs)
+    # Generate choices from the Enum
+    kwargs.setdefault("choices", tuple(e.name.lower() for e in enum_type))
 
-        self._enum = enum_type
+    super(EnumAction, self).__init__(**kwargs)
 
-    def __call__(self, parser, namespace, values, option_string=None):
-        # Convert value back into an Enum
-        if isinstance(values, str):
-          value = self._enum[values.upper()]
-        elif isinstance(values, list):
-          value = [self._enum[x.upper()] for x in values]
-        setattr(namespace, self.dest, value)
+    self._enum = enum_type
+
+  def __call__(self, parser, namespace, values, option_string=None):
+    # Convert value back into an Enum
+    if isinstance(values, str):
+      value = self._enum[values.upper()]
+    elif isinstance(values, list):
+      value = [self._enum[x.upper()] for x in values]
+    setattr(namespace, self.dest, value)
 
 def parse_args():
   parser = argparse.ArgumentParser(
@@ -110,6 +103,7 @@ def parse_args():
   parser.add_argument('--eager', default=False, type=bool, action=argparse.BooleanOptionalAction)
   parser.add_argument('-v', '--verbose', default=1, type=int)
   parser.add_argument('--note', default=True, type=bool, action=argparse.BooleanOptionalAction)
+  parser.add_argument('-C', '--color-space', type=ColorSpaceEnum, action=EnumAction, required=False)
   
   return parser.parse_args()
 
@@ -127,7 +121,7 @@ def load_data():
     batch_size=hparams['batch']
   )
 
-  return get_data_generator(t_ds, False), get_data_generator(v_ds, False)
+  return get_data_generator(t_ds, True), get_data_generator(v_ds, False)
 
 def get_data_generator(ds, augment=True):
   loader = Augmenter(
@@ -138,6 +132,16 @@ def get_data_generator(ds, augment=True):
     ]
   )
 
+  geom_aug = Augmenter(
+    [
+      RandomAugmentationPipeline([
+        RandomRotation(factor=0.5),
+        RandomFlip(mode="horizontal_and_vertical"),
+        RandomTranslation(height_factor=0.2, width_factor=0.3, fill_mode="nearest"),
+      ], augmentations_per_image=1, rate=0.5),
+    ]
+  )
+
   augmenter = Augmenter(
     [
       RandAugment(
@@ -145,25 +149,24 @@ def get_data_generator(ds, augment=True):
         augmentations_per_image=3,
         magnitude=0.5,
         geometric=False,
-        seed=hparams['seed']
-        )
+      ),
     ]
   )
 
-  def load_img(images):
+  def load_img(images, augment=True):
     x = loader(images['orig'])
-    x = preprocess_data(x, augment)
     y = loader(images['aug'])
-    return x, y
-
-  def preprocess_data(images, augment=True):
     if augment:
-      x = augmenter(images)
+      data = geom_aug({'images': x, 'segmentation_masks': y})
+      print(data)
+      data = augmenter(data)
+      return data['images'], data['segmentation_masks']
     else:
-      x = images
-    return x
+      return x, y
 
-  t_ds = ds.map(lambda x: load_img(x), num_parallel_calls=AUTOTUNE)
+  t_ds = ds.map(lambda x: load_img(x, augment), num_parallel_calls=-1)
+
+  # print(t_ds)
 
   return t_ds
 
@@ -198,7 +201,7 @@ def initialize_loss():
   
 def initialize_model():
   with tf.device('gpu:0'):
-    model = AuraMask(n_filters=hparams['n_filters'], n_dims=3, eps=hparams['epsilon'], depth=hparams['depth'])
+    model = AuraMask(n_filters=hparams['n_filters'], n_dims=3, eps=hparams['epsilon'], depth=hparams['depth'], colorspace=hparams['color_space'].value)
 
   hparams['model'] = model.model.name
   
@@ -220,7 +223,6 @@ def set_seed():
   hparams['seed'] = seed
 
 def get_sample_data(ds):
-  out = None
   for x, y in ds.take(1):
     inp = tf.identity(x[:5])
     outp = tf.identity(y[:5])
@@ -244,8 +246,10 @@ def init_callbacks(sample, logdir, note='', summary=False):
   return [tensorboard_callback]
   
 def main():
-  args = parse_args()
-  hparams.update(args.__dict__)
+  # Constant Defaults
+  hparams['optimizer'] = "adam"
+  hparams["input"] = (256,256)
+  hparams.update(parse_args().__dict__)
   # print(hparams)
   log = hparams.pop('log')
   logdir = hparams.pop('log_dir')
@@ -253,8 +257,10 @@ def main():
   verbose = hparams.pop('verbose')
   set_seed()
 
+  # Load the training and validation data
   t_ds, v_ds = load_data()
 
+  # Initialize the model with the input hyperparameters
   model = initialize_model()
 
   if log:

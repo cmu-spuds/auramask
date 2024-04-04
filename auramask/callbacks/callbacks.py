@@ -61,8 +61,8 @@ class ImageCallback(TensorBoard):
     with self._train_writer.as_default():
       if self.hparams:
         tmp_hparams = self.hparams
-        if tmp_hparams['F']: tmp_hparams['F'] = ",".join(tmp_hparams['F'])
-        else: tmp_hparams['F'] = ''
+        tmp_hparams['F'] = ",".join(tmp_hparams['F']) if tmp_hparams['F'] else ''
+        tmp_hparams['color_space'] = tmp_hparams['color_space'].name if tmp_hparams['color_space'] else 'rgb'
         tmp_hparams['input'] = str(tmp_hparams['input'])
       if os.getenv('SLURM_JOB_NAME') and os.getenv('SLURM_ARRAY_TASK_ID'):
         hp.hparams(tmp_hparams, trial_id='%s-%s'%(os.environ['SLURM_JOB_NAME'], os.environ['SLURM_ARRAY_TASK_ID']))
