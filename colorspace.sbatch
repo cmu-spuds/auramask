@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=lfw-multiembed-unet          # Job name
+#SBATCH --job-name=colorspace-lfw-augs          # Job name
 #SBATCH --account=gts-sdas7                     # charge account
 #SBATCH --mail-type=ALL                         # Mail events (NONE, BEGIN, END, FAIL, ARRAY_TASKS, ALL)
 #SBATCH --mail-user=logasja@gatech.edu          # Where to send mail
@@ -9,7 +9,7 @@
 #SBATCH -q inferno                              # QOS
 #SBATCH --time=08:00:00                         # Time limit hrs:min:sec
 #SBATCH --output=../batchruns/Report_%A-%a.out  # Standard output and error log
-#SBATCH --array=6                               # Array range
+#SBATCH --array=1-6                               # Array range
 if [ -f /etc/bashrc ]; then
 . /etc/bashrc
 fi
