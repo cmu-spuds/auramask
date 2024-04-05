@@ -54,11 +54,11 @@ def dir_path(path):
                 raise FileNotFoundError()
             path.mkdir(parents=True, exist_ok=True)
             return str(path.absolute())
-        except FileNotFoundError as e:
+        except FileNotFoundError:
             raise argparse.ArgumentTypeError(
                 f"The directory {path} cannot have more than 2 missing parents."
             )
-        except FileExistsError as e:
+        except FileExistsError:
             raise argparse.ArgumentTypeError(f"The directory {path} exists as a file")
     return
 
