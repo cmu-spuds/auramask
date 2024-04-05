@@ -24,7 +24,6 @@ from keras_cv.layers import (
     Augmenter,
     RandAugment,
     RandomFlip,
-    RandomRotation,
     RandomTranslation,
     RandomAugmentationPipeline,
 )
@@ -38,6 +37,7 @@ from datetime import datetime
 from git import Repo
 
 from auramask.utils.colorspace import ColorSpaceEnum
+from auramask.utils.rotate import RandomRotatePairs
 
 branch = Repo("./").active_branch.name  # Used for debugging runs
 
@@ -174,14 +174,14 @@ def get_data_generator(ds, augment=True):
         [
             RandomAugmentationPipeline(
                 [
-                    RandomRotation(factor=0.5),
+                    RandomRotatePairs(factor=0.5),
                     RandomFlip(mode="horizontal_and_vertical"),
                     RandomTranslation(
                         height_factor=0.2, width_factor=0.3, fill_mode="nearest"
                     ),
                 ],
                 augmentations_per_image=1,
-                rate=1.,
+                rate=0.5,
             ),
         ]
     )
