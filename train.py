@@ -181,7 +181,7 @@ def get_data_generator(ds, augment=True):
                     ),
                 ],
                 augmentations_per_image=1,
-                rate=0.5,
+                rate=1.,
             ),
         ]
     )
@@ -201,12 +201,11 @@ def get_data_generator(ds, augment=True):
         x = loader(images["orig"])
         y = loader(images["aug"])
         if augment:
-            data = geom_aug({"images": x, "segmentation_masks": y})
-            data = augmenter(data)
-            return data["images"], data["segmentation_masks"]
-        else:
-            return x, y
-
+            data = geom_aug({"images": x, "segmentation_masks": y})         # Geometric augmentations
+            y = data["segmentation_masks"]                                  # Separate out target
+            x = augmenter(data["images"])                                   # Pixel-level modifications
+        return x, y
+        
     t_ds = ds.map(lambda x: load_img(x, augment), num_parallel_calls=-1)
 
     # print(t_ds)
