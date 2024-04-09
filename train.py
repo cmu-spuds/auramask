@@ -190,8 +190,8 @@ def get_data_generator(ds, augment=True):
         [
             RandAugment(
                 value_range=(0, 1),
-                augmentations_per_image=3,
-                magnitude=0.5,
+                augmentations_per_image=1,
+                magnitude=0.2,
                 geometric=False,
             ),
         ]

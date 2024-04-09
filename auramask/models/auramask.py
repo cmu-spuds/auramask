@@ -53,7 +53,7 @@ class AuraMask(Model):
         )
 
     def call(self, inputs, training=False):
-        if not training and self.colorspace:
+        if not training:
             inputs = self.colorspace[0](inputs)
         mask = self.inscale(inputs)  # Scale to -1 to 1
         mask = self.model(mask)
@@ -65,7 +65,7 @@ class AuraMask(Model):
         else:  # Regenerate the input image
             out = sigmoid(mask)
 
-        if not training and self.colorspace:
+        if not training:
             out = self.colorspace[1](out)
 
         return out, mask
@@ -131,8 +131,8 @@ class AuraMask(Model):
                 embed_loss = tf.constant(0, dtype=tf.float32)
                 for model, metric, e_w in self.F:
                     with tf.name_scope(model.name):
-                        embed_y = tf.stop_gradient(model(y, training=False))
-                        embed_pred = model(y_pred, training=False)
+                        embed_y = tf.stop_gradient(model(self.colorspace[1](y), training=False))
+                        embed_pred = model(tf.grad_pass_through(self.colorspace[1])(y_pred), training=False)
                         sim = tf.negative(
                             cosine_similarity(
                                 y_true=embed_y, y_pred=embed_pred, axis=-1
@@ -206,8 +206,8 @@ class AuraMask(Model):
 
         y_pred, _ = self(X, training=False)
 
-        if self.colorspace:
-            y = self.colorspace[0](y)
+        y = self.colorspace[0](y)
+        y_pred = self.colorspace[0](y_pred)
 
         # Updates stateful loss metrics.
         loss = self.compute_loss(y=y, y_pred=y_pred)
