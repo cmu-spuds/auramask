@@ -165,3 +165,5 @@ datasets/
 *.png
 
 logs/
+artifacts/
+models/

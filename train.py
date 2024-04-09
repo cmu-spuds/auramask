@@ -6,6 +6,9 @@ from datasets import load_dataset
 from random import choice
 from string import ascii_uppercase
 
+import wandb
+from wandb.keras import WandbMetricsLogger, WandbModelCheckpoint
+
 from auramask.callbacks.callbacks import ImageCallback
 
 from auramask.losses.perceptual import PerceptualLoss
@@ -276,27 +279,37 @@ def set_seed():
 
 def get_sample_data(ds):
     for x, y in ds.take(1):
-        inp = tf.identity(x[:5])
-        outp = tf.identity(y[:5])
+        inp = tf.identity(x)
+        outp = tf.identity(y)
     return tf.stack([inp, outp])
 
 
-def init_callbacks(sample, logdir, note="", summary=False):
-    # histogram_freq = hparams['epochs'] // 10
-    tensorboard_callback = ImageCallback(
-        sample=sample,
-        log_dir=logdir,
-        update_freq="epoch",
-        histogram_freq=10,
-        image_frequency=5,
-        mask_frequency=5,
-        model_checkpoint_frequency=0,
-        note=note,
-        model_summary=summary,
-        hparams=hparams,
+def init_callbacks(sample, logdir, note=""):
+    tmp_hparams = hparams
+    tmp_hparams["F"] = (
+        ",".join(tmp_hparams["F"]) if tmp_hparams["F"] else ""
     )
-    # early_stop = EarlyStopping(monitor='loss', patience=3)
-    return [tensorboard_callback]
+    tmp_hparams["color_space"] = (
+        tmp_hparams["color_space"].name
+        if tmp_hparams["color_space"]
+        else "rgb"
+    )
+    tmp_hparams["input"] = str(tmp_hparams["input"])
+
+    if os.getenv("SLURM_JOB_NAME") and os.getenv("SLURM_ARRAY_TASK_ID"):
+        name = "%s-%s"%(os.environ["SLURM_JOB_NAME"], os.environ["SLURM_ARRAY_TASK_ID"])
+    else:
+        name = None
+    wandb.init(project="auramask", dir=logdir, config=tmp_hparams, name=name, notes=note)
+
+    wandb_logger = WandbMetricsLogger(log_freq=10)
+    wandb_checkpoint = WandbModelCheckpoint("models", save_best_only=True)
+    image_callback = ImageCallback(
+        validation_data=sample,
+        data_table_columns=["idx", "orig", "aug"],
+        pred_table_columns=["epoch", "idx", "orig", "aug", "pred", "mask"]
+    )
+    return [wandb_logger, wandb_checkpoint, image_callback]
 
 
 def main():
@@ -336,10 +349,10 @@ def main():
                 datetime.now().strftime("%H.%M"),
             )
         v = get_sample_data(v_ds)
-        t = get_sample_data(t_ds)
+        # t = get_sample_data(t_ds)
         model(v[0])
         callbacks = init_callbacks(
-            {"validation": v, "train": t}, logdir, note, summary=False
+            v, logdir, note
         )
     else:
         callbacks = None
