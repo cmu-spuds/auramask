@@ -1,5 +1,6 @@
 import argparse
 import enum
+import hashlib
 import os
 from pathlib import Path
 from datasets import load_dataset
@@ -271,9 +272,8 @@ def initialize_model():
 
 
 def set_seed():
-    # seed = hparams["seed"]
-    # seed = hash(seed) % (2**32)
-    seed = 1443825
+    seed = hparams["seed"]
+    seed = int(hashlib.sha256(seed.encode('utf-8')).hexdigest(), 16) % 10**8
     keras.utils.set_random_seed(seed)
     hparams["seed"] = seed
 
@@ -307,7 +307,7 @@ def init_callbacks(sample, logdir, note=""):
     image_callback = ImageCallback(
         validation_data=sample,
         data_table_columns=["idx", "orig", "aug"],
-        pred_table_columns=["epoch", "idx", "orig", "aug", "pred", "mask"]
+        pred_table_columns=["epoch", "idx", "pred", "mask"]
     )
     return [wandb_logger, image_callback]
 
@@ -317,7 +317,6 @@ def main():
     hparams["optimizer"] = "adam"
     hparams["input"] = (256, 256)
     hparams.update(parse_args().__dict__)
-    # print(hparams)
     log = hparams.pop("log")
     logdir = hparams.pop("log_dir")
     note = hparams.pop("note")
@@ -336,18 +335,20 @@ def main():
         else:
             note = ""
         if not logdir:
-            logdir = os.path.join(
+            logdir = Path(os.path.join(
                 "logs",
                 branch,
                 datetime.now().strftime("%m-%d"),
                 datetime.now().strftime("%H.%M"),
-            )
+            ))
         else:
-            logdir = os.path.join(
+            logdir = Path(os.path.join(
                 logdir,
                 datetime.now().strftime("%m-%d"),
                 datetime.now().strftime("%H.%M"),
-            )
+            ))
+        logdir.mkdir(parents=True, exist_ok=True)
+        logdir = str(logdir)
         v = get_sample_data(v_ds)
         # t = get_sample_data(t_ds)
         model(v[0])

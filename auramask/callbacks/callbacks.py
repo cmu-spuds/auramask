@@ -1,11 +1,11 @@
 import io
 import os
-from typing import Dict
+from typing import Dict, List
 
 import wandb
-from keras import Model
 from wandb.keras import WandbEvalCallback
-
+import tensorflow as tf
+from keras.preprocessing.image import array_to_img
 
 def get_model_summary(model):
     stream = io.StringIO()
@@ -39,14 +39,18 @@ class ImageCallback(WandbEvalCallback):
         y, mask = self.model(self.x, training=False)
         table_idxs = self.data_table_ref.get_index()
 
+
+        wandb.log({
+            'image': [wandb.Image(array_to_img(y_i)) for y_i in y[:5]],
+            'mask': [wandb.Image(array_to_img(m_i)) for m_i in mask[:5]]
+        })
+
         for idx in table_idxs:
             pred = y[idx]
             m = mask[idx]
             self.pred_table.add_data(
                 epoch,
                 self.data_table_ref.data[idx][0],
-                self.data_table_ref.data[idx][1],
-                self.data_table_ref.data[idx][2],
                 wandb.Image(pred),
                 wandb.Image(m)
             )
