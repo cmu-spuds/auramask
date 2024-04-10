@@ -271,8 +271,9 @@ def initialize_model():
 
 
 def set_seed():
-    seed = hparams["seed"]
-    seed = hash(seed) % (2**32)
+    # seed = hparams["seed"]
+    # seed = hash(seed) % (2**32)
+    seed = 1443825
     keras.utils.set_random_seed(seed)
     hparams["seed"] = seed
 
@@ -302,14 +303,13 @@ def init_callbacks(sample, logdir, note=""):
         name = None
     wandb.init(project="auramask", dir=logdir, config=tmp_hparams, name=name, notes=note)
 
-    wandb_logger = WandbMetricsLogger(log_freq=10)
-    wandb_checkpoint = WandbModelCheckpoint("models", save_best_only=True)
+    wandb_logger = WandbMetricsLogger(log_freq='epoch')
     image_callback = ImageCallback(
         validation_data=sample,
         data_table_columns=["idx", "orig", "aug"],
         pred_table_columns=["epoch", "idx", "orig", "aug", "pred", "mask"]
     )
-    return [wandb_logger, wandb_checkpoint, image_callback]
+    return [wandb_logger, image_callback]
 
 
 def main():
