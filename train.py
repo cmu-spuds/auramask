@@ -1,10 +1,14 @@
 import argparse
 import enum
+import hashlib
 import os
 from pathlib import Path
 from datasets import load_dataset
 from random import choice
 from string import ascii_uppercase
+
+import wandb
+from wandb.keras import WandbMetricsLogger, WandbModelCheckpoint
 
 from auramask.callbacks.callbacks import ImageCallback
 
@@ -269,34 +273,43 @@ def initialize_model():
 
 def set_seed():
     seed = hparams["seed"]
-    seed = hash(seed) % (2**32)
+    seed = int(hashlib.sha256(seed.encode('utf-8')).hexdigest(), 16) % 10**8
     keras.utils.set_random_seed(seed)
     hparams["seed"] = seed
 
 
 def get_sample_data(ds):
     for x, y in ds.take(1):
-        inp = tf.identity(x[:5])
-        outp = tf.identity(y[:5])
+        inp = tf.identity(x)
+        outp = tf.identity(y)
     return tf.stack([inp, outp])
 
 
-def init_callbacks(sample, logdir, note="", summary=False):
-    # histogram_freq = hparams['epochs'] // 10
-    tensorboard_callback = ImageCallback(
-        sample=sample,
-        log_dir=logdir,
-        update_freq="epoch",
-        histogram_freq=10,
-        image_frequency=5,
-        mask_frequency=5,
-        model_checkpoint_frequency=0,
-        note=note,
-        model_summary=summary,
-        hparams=hparams,
+def init_callbacks(sample, logdir, note=""):
+    tmp_hparams = hparams
+    tmp_hparams["F"] = (
+        ",".join(tmp_hparams["F"]) if tmp_hparams["F"] else ""
     )
-    # early_stop = EarlyStopping(monitor='loss', patience=3)
-    return [tensorboard_callback]
+    tmp_hparams["color_space"] = (
+        tmp_hparams["color_space"].name
+        if tmp_hparams["color_space"]
+        else "rgb"
+    )
+    tmp_hparams["input"] = str(tmp_hparams["input"])
+
+    if os.getenv("SLURM_JOB_NAME") and os.getenv("SLURM_ARRAY_TASK_ID"):
+        name = "%s-%s"%(os.environ["SLURM_JOB_NAME"], os.environ["SLURM_ARRAY_TASK_ID"])
+    else:
+        name = None
+    wandb.init(project="auramask", dir=logdir, config=tmp_hparams, name=name, notes=note)
+
+    wandb_logger = WandbMetricsLogger(log_freq='epoch')
+    image_callback = ImageCallback(
+        validation_data=sample,
+        data_table_columns=["idx", "orig", "aug"],
+        pred_table_columns=["epoch", "idx", "pred", "mask"]
+    )
+    return [wandb_logger, image_callback]
 
 
 def main():
@@ -304,7 +317,6 @@ def main():
     hparams["optimizer"] = "adam"
     hparams["input"] = (256, 256)
     hparams.update(parse_args().__dict__)
-    # print(hparams)
     log = hparams.pop("log")
     logdir = hparams.pop("log_dir")
     note = hparams.pop("note")
@@ -323,23 +335,25 @@ def main():
         else:
             note = ""
         if not logdir:
-            logdir = os.path.join(
+            logdir = Path(os.path.join(
                 "logs",
                 branch,
                 datetime.now().strftime("%m-%d"),
                 datetime.now().strftime("%H.%M"),
-            )
+            ))
         else:
-            logdir = os.path.join(
+            logdir = Path(os.path.join(
                 logdir,
                 datetime.now().strftime("%m-%d"),
                 datetime.now().strftime("%H.%M"),
-            )
+            ))
+        logdir.mkdir(parents=True, exist_ok=True)
+        logdir = str(logdir)
         v = get_sample_data(v_ds)
-        t = get_sample_data(t_ds)
+        # t = get_sample_data(t_ds)
         model(v[0])
         callbacks = init_callbacks(
-            {"validation": v, "train": t}, logdir, note, summary=False
+            v, logdir, note
         )
     else:
         callbacks = None
