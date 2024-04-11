@@ -19,7 +19,7 @@ conda activate unet
 
 # export WANDB_API_KEY=uncommentandaddapikey
 export WANDB_CONSOLE=off
-export WANDB_RUN_GROUP=$SLURM_JOB_NAME
+# export WANDB_RUN_GROUP="${SLURM_JOB_NAME} <Unique>"
 
 DATASET=instagram
 EPOCH=500
