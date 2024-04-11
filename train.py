@@ -8,9 +8,9 @@ from random import choice
 from string import ascii_uppercase
 
 import wandb
-from wandb.keras import WandbMetricsLogger, WandbModelCheckpoint
+from wandb.keras import WandbMetricsLogger
 
-from auramask.callbacks.callbacks import ImageCallback
+from auramask.callbacks.callbacks import AuramaskCallback, AuramaskCheckpoint
 
 from auramask.losses.perceptual import PerceptualLoss
 from auramask.losses.embeddistance import EmbeddingDistanceLoss
@@ -303,13 +303,15 @@ def init_callbacks(sample, logdir, note=""):
         name = None
     wandb.init(project="auramask", dir=logdir, config=tmp_hparams, name=name, notes=note)
 
+    auramask_checkpoint = AuramaskCheckpoint(filepath=logdir,freq_mode='epoch', save_freq=100)
     wandb_logger = WandbMetricsLogger(log_freq='epoch')
-    image_callback = ImageCallback(
+    auramask_callback = AuramaskCallback(
         validation_data=sample,
         data_table_columns=["idx", "orig", "aug"],
-        pred_table_columns=["epoch", "idx", "pred", "mask"]
+        pred_table_columns=["epoch", "idx", "pred", "mask"],
+        log_freq=25
     )
-    return [wandb_logger, image_callback]
+    return [wandb_logger, auramask_callback, auramask_checkpoint]
 
 
 def main():

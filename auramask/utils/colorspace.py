@@ -1,9 +1,11 @@
 from enum import Enum
 import tensorflow as tf
 
+
 @tf.function
 def rgb(X):
     return X
+
 
 class ColorSpaceEnum(Enum):
     RGB = (rgb, rgb)
