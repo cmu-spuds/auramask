@@ -3,6 +3,7 @@ import enum
 import hashlib
 import os
 from pathlib import Path
+from typing import Tuple
 from datasets import load_dataset
 from random import choice
 from string import ascii_uppercase
@@ -41,6 +42,7 @@ from datetime import datetime
 from git import Repo
 
 from auramask.utils.colorspace import ColorSpaceEnum
+from auramask.utils.datasets import DatasetEnum
 from auramask.utils.rotate import RandomRotatePairs
 
 branch = Repo("./").active_branch.name  # Used for debugging runs
@@ -143,16 +145,24 @@ def parse_args():
         "--note", default=True, type=bool, action=argparse.BooleanOptionalAction
     )
     parser.add_argument(
-        "-C", "--color-space", type=ColorSpaceEnum, action=EnumAction, required=False
+        "-C", "--color-space", type=ColorSpaceEnum, action=EnumAction, required=True
+    )
+    parser.add_argument(
+        "--checkpoint", default=False, type=bool, action=argparse.BooleanOptionalAction
+    )
+    parser.add_argument(
+        "-D", "--dataset", default="lfw", type=DatasetEnum, action=EnumAction, required=True
     )
 
     return parser.parse_args()
 
 
 def load_data():
+    dataset, name, datakey = hparams['dataset'].value
+    hparams['dataset'] = dataset
     (t_ds, v_ds) = load_dataset(
-        "logasja/lfw",
-        "aug",
+        dataset,
+        name,
         split=[hparams["t_split"], hparams["v_split"]],
     )
 
@@ -160,10 +170,10 @@ def load_data():
 
     v_ds = v_ds.to_tf_dataset(batch_size=hparams["batch"])
 
-    return get_data_generator(t_ds, True), get_data_generator(v_ds, False)
+    return get_data_generator(t_ds, datakey, True), get_data_generator(v_ds, datakey, False)
 
 
-def get_data_generator(ds, augment=True):
+def get_data_generator(ds, keys: Tuple[str,str], augment: bool=True):
     loader = Augmenter(
         [
             Rescaling(scale=1.0 / 255, offset=0),
@@ -202,8 +212,8 @@ def get_data_generator(ds, augment=True):
     )
 
     def load_img(images, augment=True):
-        x = loader(images["orig"])
-        y = loader(images["aug"])
+        x = loader(images[keys[0]])
+        y = loader(images[keys[1]])
         if augment:
             data = geom_aug({"images": x, "segmentation_masks": y})         # Geometric augmentations
             y = data["segmentation_masks"]                                  # Separate out target
@@ -211,8 +221,6 @@ def get_data_generator(ds, augment=True):
         return x, y
         
     t_ds = ds.map(lambda x: load_img(x, augment), num_parallel_calls=-1)
-
-    # print(t_ds)
 
     return t_ds
 
@@ -286,6 +294,7 @@ def get_sample_data(ds):
 
 
 def init_callbacks(sample, logdir, note=""):
+    checkpoint = hparams.pop("checkpoint")
     tmp_hparams = hparams
     tmp_hparams["F"] = (
         ",".join(tmp_hparams["F"]) if tmp_hparams["F"] else ""
@@ -303,15 +312,17 @@ def init_callbacks(sample, logdir, note=""):
         name = None
     wandb.init(project="auramask", dir=logdir, config=tmp_hparams, name=name, notes=note)
 
-    auramask_checkpoint = AuramaskCheckpoint(filepath=logdir,freq_mode='epoch', save_freq=100)
-    wandb_logger = WandbMetricsLogger(log_freq='epoch')
-    auramask_callback = AuramaskCallback(
+    callbacks = []
+    if checkpoint:
+        callbacks.append(AuramaskCheckpoint(filepath=logdir,freq_mode='epoch', save_freq=100))
+    callbacks.append(WandbMetricsLogger(log_freq='epoch'))
+    callbacks.append(AuramaskCallback(
         validation_data=sample,
         data_table_columns=["idx", "orig", "aug"],
         pred_table_columns=["epoch", "idx", "pred", "mask"],
-        log_freq=25
-    )
-    return [wandb_logger, auramask_callback, auramask_checkpoint]
+        log_freq=50
+    ))
+    return callbacks
 
 
 def main():

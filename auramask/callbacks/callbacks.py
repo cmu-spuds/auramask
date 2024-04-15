@@ -1,6 +1,6 @@
 import io
 from os import PathLike
-from typing import Any, Dict, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 import wandb
 from wandb.integration.keras.callbacks.model_checkpoint import SaveStrategy
