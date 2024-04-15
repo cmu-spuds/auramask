@@ -87,24 +87,24 @@ class AuraMask(Model):
             weighted = isinstance(loss_weights, list)
             w = 1.0
             for _ in range(len(loss)):
-                l = loss.pop()
+                loss_i = loss.pop()
                 if weighted:
                     w = loss_weights.pop()
-                if isinstance(l, (PerceptualLoss, MeanSquaredError, SSIMLoss)):
+                if isinstance(loss_i, (PerceptualLoss, MeanSquaredError, SSIMLoss)):
                     if not self.Lpips and w > 0:
-                        self.Lpips = [(l, Mean(name=l.name), w)]
+                        self.Lpips = [(loss_i, Mean(name=loss_i.name), w)]
                     elif w > 0:
-                        self.Lpips.append((l, Mean(name=l.name), w))
+                        self.Lpips.append((loss_i, Mean(name=loss_i.name), w))
                     else:
-                        del l
-                elif isinstance(l, EmbeddingDistanceLoss):
+                        del loss_i
+                elif isinstance(loss_i, EmbeddingDistanceLoss):
                     self.F = []
-                    for model in l.F:
+                    for model in loss_i.F:
                         self.F.append((model, Mean(name=model.name), w))
-                elif isinstance(l, AestheticLoss):
-                    self.A = (l, Mean(name=l.name), w)
+                elif isinstance(loss_i, AestheticLoss):
+                    self.A = (loss_i, Mean(name=loss_i.name), w)
                 else:
-                    loss.append(l)
+                    loss.append(loss_i)
                     if weighted:
                         loss_weights.append(w)
 
@@ -125,14 +125,16 @@ class AuraMask(Model):
     def compute_loss(self, x=None, y=None, y_pred=None, sample_weight=None):
         del x
         del sample_weight
+        y_rgb = tf.stop_gradient(self.colorspace[1](y))
+        y_pred_rgb = tf.grad_pass_through(self.colorspace[1])(y_pred)
         tloss = tf.constant(0, dtype=tf.float32)
         with tf.name_scope("EmbeddingDistance"):
             if self.F:
                 embed_loss = tf.constant(0, dtype=tf.float32)
                 for model, metric, e_w in self.F:
                     with tf.name_scope(model.name):
-                        embed_y = tf.stop_gradient(model(self.colorspace[1](y), training=False))
-                        embed_pred = model(tf.grad_pass_through(self.colorspace[1])(y_pred), training=False)
+                        embed_y = tf.stop_gradient(model(y_rgb, training=False))
+                        embed_pred = model(y_pred_rgb, training=False)
                         sim = tf.negative(
                             cosine_similarity(
                                 y_true=embed_y, y_pred=embed_pred, axis=-1
@@ -154,7 +156,7 @@ class AuraMask(Model):
         with tf.name_scope("Aesthetic"):
             if self.A:
                 model, metric, a_w = self.A
-                a_loss = model(y, y_pred)
+                a_loss = model(y_rgb, y_pred_rgb)
                 metric.update_state(a_loss)
                 tloss = tf.add(tloss, tf.multiply(a_loss, a_w))
 
