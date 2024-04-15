@@ -10,10 +10,10 @@ class NIMA(Model):
 
     Args:
         kind (str): Choice of "aesthetic" or "technical"
-        backbone: Right now only "imagenet"
+        backbone: Right now only "mobilenet"
     """
 
-    def __init__(self, kind="aesthetic", backbone="imagenet", name="NIMA", **kwargs):
+    def __init__(self, kind="aesthetic", backbone="mobilenet", name="NIMA", **kwargs):
         super().__init__(name=name, **kwargs)
         self.backbone = backbone
         self.kind = kind
