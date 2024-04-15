@@ -107,6 +107,7 @@ def parse_args():
     parser.add_argument("-a", "--alpha", type=float, default=2e-4)
     parser.add_argument("-e", "--epsilon", type=float, default=0.03)
     parser.add_argument("-l", "--lambda", type=float, default=0.0)
+    parser.add_argument("-p", "--rho", type=float, default=1.0)
     parser.add_argument("-g", "--gamma", type=float, default=0.1)
     parser.add_argument("-B", "--batch-size", dest="batch", type=int, default=32)
     parser.add_argument("-E", "--epochs", type=int, default=5)
@@ -151,15 +152,20 @@ def parse_args():
         "--checkpoint", default=False, type=bool, action=argparse.BooleanOptionalAction
     )
     parser.add_argument(
-        "-D", "--dataset", default="lfw", type=DatasetEnum, action=EnumAction, required=True
+        "-D",
+        "--dataset",
+        default="lfw",
+        type=DatasetEnum,
+        action=EnumAction,
+        required=True,
     )
 
     return parser.parse_args()
 
 
 def load_data():
-    dataset, name, datakey = hparams['dataset'].value
-    hparams['dataset'] = dataset
+    dataset, name, datakey = hparams["dataset"].value
+    hparams["dataset"] = dataset
     (t_ds, v_ds) = load_dataset(
         dataset,
         name,
@@ -170,10 +176,12 @@ def load_data():
 
     v_ds = v_ds.to_tf_dataset(batch_size=hparams["batch"])
 
-    return get_data_generator(t_ds, datakey, True), get_data_generator(v_ds, datakey, False)
+    return get_data_generator(t_ds, datakey, True), get_data_generator(
+        v_ds, datakey, False
+    )
 
 
-def get_data_generator(ds, keys: Tuple[str,str], augment: bool=True):
+def get_data_generator(ds, keys: Tuple[str, str], augment: bool = True):
     loader = Augmenter(
         [
             Rescaling(scale=1.0 / 255, offset=0),
@@ -215,11 +223,13 @@ def get_data_generator(ds, keys: Tuple[str,str], augment: bool=True):
         x = loader(images[keys[0]])
         y = loader(images[keys[1]])
         if augment:
-            data = geom_aug({"images": x, "segmentation_masks": y})         # Geometric augmentations
-            y = data["segmentation_masks"]                                  # Separate out target
-            x = augmenter(data["images"])                                   # Pixel-level modifications
+            data = geom_aug(
+                {"images": x, "segmentation_masks": y}
+            )  # Geometric augmentations
+            y = data["segmentation_masks"]  # Separate out target
+            x = augmenter(data["images"])  # Pixel-level modifications
         return x, y
-        
+
     t_ds = ds.map(lambda x: load_img(x, augment), num_parallel_calls=-1)
 
     return t_ds
@@ -230,7 +240,7 @@ def initialize_loss():
     weights = []
     if hparams["F"]:
         losses.append(EmbeddingDistanceLoss(F=hparams["F"]))
-        weights.append(1.0)
+        weights.append(hparams["rho"])
     if hparams["aesthetic"]:
         losses.append(AestheticLoss(kind="nima"))
         weights.append(hparams["gamma"])
@@ -281,7 +291,7 @@ def initialize_model():
 
 def set_seed():
     seed = hparams["seed"]
-    seed = int(hashlib.sha256(seed.encode('utf-8')).hexdigest(), 16) % 10**8
+    seed = int(hashlib.sha256(seed.encode("utf-8")).hexdigest(), 16) % 10**8
     keras.utils.set_random_seed(seed)
     hparams["seed"] = seed
 
@@ -296,32 +306,37 @@ def get_sample_data(ds):
 def init_callbacks(sample, logdir, note=""):
     checkpoint = hparams.pop("checkpoint")
     tmp_hparams = hparams
-    tmp_hparams["F"] = (
-        ",".join(tmp_hparams["F"]) if tmp_hparams["F"] else ""
-    )
+    tmp_hparams["F"] = ",".join(tmp_hparams["F"]) if tmp_hparams["F"] else ""
     tmp_hparams["color_space"] = (
-        tmp_hparams["color_space"].name
-        if tmp_hparams["color_space"]
-        else "rgb"
+        tmp_hparams["color_space"].name if tmp_hparams["color_space"] else "rgb"
     )
     tmp_hparams["input"] = str(tmp_hparams["input"])
 
     if os.getenv("SLURM_JOB_NAME") and os.getenv("SLURM_ARRAY_TASK_ID"):
-        name = "%s-%s"%(os.environ["SLURM_JOB_NAME"], os.environ["SLURM_ARRAY_TASK_ID"])
+        name = "%s-%s" % (
+            os.environ["SLURM_JOB_NAME"],
+            os.environ["SLURM_ARRAY_TASK_ID"],
+        )
     else:
         name = None
-    wandb.init(project="auramask", dir=logdir, config=tmp_hparams, name=name, notes=note)
+    wandb.init(
+        project="auramask", dir=logdir, config=tmp_hparams, name=name, notes=note
+    )
 
     callbacks = []
     if checkpoint:
-        callbacks.append(AuramaskCheckpoint(filepath=logdir,freq_mode='epoch', save_freq=100))
-    callbacks.append(WandbMetricsLogger(log_freq='epoch'))
-    callbacks.append(AuramaskCallback(
-        validation_data=sample,
-        data_table_columns=["idx", "orig", "aug"],
-        pred_table_columns=["epoch", "idx", "pred", "mask"],
-        log_freq=50
-    ))
+        callbacks.append(
+            AuramaskCheckpoint(filepath=logdir, freq_mode="epoch", save_freq=int(os.getenv("AURAMASK_CHECKPOINT_FREQ", 100)))
+        )
+    callbacks.append(WandbMetricsLogger(log_freq="epoch"))
+    callbacks.append(
+        AuramaskCallback(
+            validation_data=sample,
+            data_table_columns=["idx", "orig", "aug"],
+            pred_table_columns=["epoch", "idx", "pred", "mask"],
+            log_freq=int(os.getenv("AURAMASK_LOG_FREQ", 5)),
+        )
+    )
     return callbacks
 
 
@@ -348,26 +363,28 @@ def main():
         else:
             note = ""
         if not logdir:
-            logdir = Path(os.path.join(
-                "logs",
-                branch,
-                datetime.now().strftime("%m-%d"),
-                datetime.now().strftime("%H.%M"),
-            ))
+            logdir = Path(
+                os.path.join(
+                    "logs",
+                    branch,
+                    datetime.now().strftime("%m-%d"),
+                    datetime.now().strftime("%H.%M"),
+                )
+            )
         else:
-            logdir = Path(os.path.join(
-                logdir,
-                datetime.now().strftime("%m-%d"),
-                datetime.now().strftime("%H.%M"),
-            ))
+            logdir = Path(
+                os.path.join(
+                    logdir,
+                    datetime.now().strftime("%m-%d"),
+                    datetime.now().strftime("%H.%M"),
+                )
+            )
         logdir.mkdir(parents=True, exist_ok=True)
         logdir = str(logdir)
         v = get_sample_data(v_ds)
         # t = get_sample_data(t_ds)
         model(v[0])
-        callbacks = init_callbacks(
-            v, logdir, note
-        )
+        callbacks = init_callbacks(v, logdir, note)
     else:
         callbacks = None
 
