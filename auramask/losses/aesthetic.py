@@ -20,7 +20,7 @@ def calc_mean_score(score_dist):
 class AestheticLoss(Loss):
     def __init__(
         self,
-        backbone: Literal["mobilenet"]="mobilenet",
+        backbone: Literal["mobilenet"] | Literal['nasnetmobile'] | Literal['inceptionresnetv2']="mobilenet",
         kind: Literal["nima-aes"] | Literal["nima-tech"] | Literal["vila"]="nima-aes",
         model: NIMA | VILA | None = None,
         name="AestheticLoss",

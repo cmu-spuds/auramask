@@ -14,7 +14,7 @@ class NIMA(Model):
         backbone: Right now only "mobilenet"
     """
 
-    def __init__(self, kind: Literal["aesthetic"] | Literal["technical"]="aesthetic", backbone: Literal["mobilenet"]="mobilenet", name="NIMA", **kwargs):
+    def __init__(self, kind: Literal["aesthetic"] | Literal["technical"]="aesthetic", backbone: Literal["mobilenet"] | Literal["nasnetmobile"] | Literal["inceptionresnetv2"]="mobilenet", name="NIMA", **kwargs):
         super().__init__(name=name, **kwargs)
         self.backbone = backbone
         self.kind = kind

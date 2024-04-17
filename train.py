@@ -252,7 +252,7 @@ def initialize_loss():
         cs_transforms.append(is_not_rgb)                      # Determine if it needs to be transformed to rgb space
     
     if hparams.pop("aesthetic"):
-        losses.append(AestheticLoss(name="NIMA-A", kind="nima-aes"))
+        losses.append(AestheticLoss(name="NIMA-A", kind="nima-aes", backbone='nasnetmobile'))
         weights.append(hparams.pop("gamma"))
         loss_config.append(losses[-1].get_config() | {"weight": weights[-1]})
         cs_transforms.append(is_not_rgb)
