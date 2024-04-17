@@ -57,7 +57,10 @@ class LPIPS(Model):
         self.net = load_model(mdl_path, custom_objects={"WeightLayer": WeightLayer})
 
     def get_config(self):
-        return super().get_config()
+        return {
+            "name": self.name,
+            "backbone": self.backbone,
+        }
 
     def call(self, x):
         y_true, y_pred = x

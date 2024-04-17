@@ -12,6 +12,15 @@ class SSIMLoss(Loss):
         self.k1 = tf.constant(k1, dtype=tf.float32)
         self.k2 = tf.constant(k2, dtype=tf.float32)
 
+    def get_config(self):
+        return {
+            "name": self.name,
+            "max value": self.mv.numpy(),
+            "filter size": self.fz.numpy(),
+            "k1": self.k1.numpy(),
+            "k2": self.k2.numpy(),
+        }
+
     def call(self, y_true, y_pred):
         ssim = 1 - tf.image.ssim(
             y_true, y_pred, max_val=self.mv, filter_size=self.fz, k1=self.k1, k2=self.k2

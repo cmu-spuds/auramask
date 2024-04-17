@@ -17,12 +17,12 @@ class EmbeddingDistanceLoss(Loss):
         super().__init__(name=name, **kwargs)
         self.F = FaceEmbedEnum.build_F(F)
         self.N = np.constant(len(F), dtype=np.float32)
+        self.f = F
 
-    def get_config(self):
+    def get_config(self) -> dict:
         return {
             "name": self.name,
-            "F": str(self.F),
-            "reduction": self.reduction,
+            "F": [x.value for x in self.f],
         }
 
     def call(
