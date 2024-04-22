@@ -126,8 +126,8 @@ class AuraMask(Model):
         del x
         del sample_weight
         tloss = tf.constant(0, dtype=tf.float32)                            # tracked total loss
-        y_rgb = tf.stop_gradient(self.colorspace[1](y))                     # computed rgb representation
-        y_pred_rgb = tf.grad_pass_through(self.colorspace[1])(y_pred)       # computed rgb representation (with gradient passthrough i.e., identity in backward pass)
+        y_rgb = self.colorspace[1](y)                                       # computed rgb representation
+        y_pred_rgb = self.colorspace[1](y_pred)                             # computed rgb representation (with gradient passthrough only for hsv_to_rgb
 
         changed_fn = lambda: (y_rgb, y_pred_rgb)
         unproc_fn = lambda: (y, y_pred)
@@ -179,7 +179,7 @@ class AuraMask(Model):
 
         with tf.GradientTape() as tape:
             X = self.colorspace[0](X)
-            y = tf.stop_gradient(self.colorspace[0](y))
+            y = self.colorspace[0](y)
             y_pred, _ = self(X, training=True)  # Forward pass
             loss = self.compute_loss(y=y, y_pred=y_pred)  # Compute loss
 

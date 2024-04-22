@@ -17,7 +17,7 @@ from auramask.callbacks.callbacks import AuramaskCallback, AuramaskCheckpoint
 from auramask.losses.perceptual import PerceptualLoss
 from auramask.losses.embeddistance import EmbeddingDistanceLoss
 from auramask.losses.aesthetic import AestheticLoss
-from auramask.losses.ssim import SSIMLoss
+from auramask.losses.ssim import SSIMLoss, YUVSSIMLoss
 
 from auramask.models.face_embeddings import FaceEmbedEnum
 from auramask.models.auramask import AuraMask
@@ -273,7 +273,7 @@ def initialize_loss():
                 tmp_loss = MeanSquaredError()
                 cs_transforms.append(False)
             elif loss_i == "ssim":
-                tmp_loss = SSIMLoss()
+                tmp_loss = SSIMLoss() if hparams["color_space"].name.casefold() != "yuv" else YUVSSIMLoss()
                 cs_transforms.append(False)
             elif loss_i == "nima":
                 tmp_loss = AestheticLoss(name="NIMA-T", kind="nima-tech")
@@ -286,7 +286,7 @@ def initialize_loss():
             weights.append(w_i)
             loss_config.append(losses[-1].get_config() | {"weight": weights[-1]})
 
-    if any(cs_transforms):
+    if not is_not_rgb:
         cs_transforms = None
 
     hparams['losses'] = loss_config
@@ -355,7 +355,7 @@ def init_callbacks(sample, logdir, note=""):
     callbacks = []
     if checkpoint:
         callbacks.append(
-            AuramaskCheckpoint(filepath=logdir, freq_mode="epoch", save_freq=int(os.getenv("AURAMASK_CHECKPOINT_FREQ", 100)))
+            AuramaskCheckpoint(filepath=logdir, freq_mode="epoch", save_weights_only=True, save_freq=int(os.getenv("AURAMASK_CHECKPOINT_FREQ", 100)))
         )
     callbacks.append(WandbMetricsLogger(log_freq="epoch"))
     callbacks.append(
