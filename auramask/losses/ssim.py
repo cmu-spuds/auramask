@@ -80,7 +80,7 @@ class SSIMLoss(Loss):
 class YUVSSIMLoss(SSIMLoss):
     def get_config(self):
         tmp = super().get_config()
-        tmp['channel_weights'] = (0.8,0.1,0.1)
+        tmp['color weights'] = (0.8,0.1,0.1)
         return tmp
 
     def call(self, y_true, y_pred):
@@ -95,3 +95,12 @@ class YUVSSIMLoss(SSIMLoss):
         )
 
         return loss
+    
+class HSVSSIMLoss(SSIMLoss):
+    def get_config(self):
+        tmp = super().get_config()
+        return tmp
+    
+    def call(self, y_true, y_pred):
+        y_true_gray = tf.image.rgb_to_grayscale
+        return super().call(y_true, y_pred)

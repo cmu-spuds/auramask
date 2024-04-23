@@ -126,7 +126,7 @@ class AuraMask(Model):
         del x
         del sample_weight
         tloss = tf.constant(0, dtype=tf.float32)                            # tracked total loss
-        y_rgb = self.colorspace[1](y)                                       # computed rgb representation
+        y_rgb = tf.stop_gradient(self.colorspace[1](y))                     # computed rgb representation
         y_pred_rgb = self.colorspace[1](y_pred)                             # computed rgb representation (with gradient passthrough only for hsv_to_rgb
 
         changed_fn = lambda: (y_rgb, y_pred_rgb)
