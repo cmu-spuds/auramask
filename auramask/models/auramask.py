@@ -1,11 +1,7 @@
-from types import NoneType
 from typing import Callable
 import tensorflow as tf
 from keras import Model
 from auramask.losses.embeddistance import EmbeddingDistanceLoss
-from auramask.losses.perceptual import PerceptualLoss
-from auramask.losses.aesthetic import AestheticLoss
-from auramask.losses.ssim import SSIMLoss
 from keras.activations import tanh, sigmoid
 from keras.layers import Rescaling
 from keras.metrics import Mean
@@ -32,8 +28,6 @@ class AuraMask(Model):
 
         self.colorspace = colorspace
 
-        self.masked = True
-
         self.inscale = Rescaling(2, offset=-1)
 
         filters = [n_filters * pow(2, i) for i in range(depth)]
@@ -51,18 +45,31 @@ class AuraMask(Model):
             unpool="nearest",
         )
 
+        # self.model = models.r2_unet_2d(
+        #     (None, None, 3), 
+        #     filters, 
+        #     n_labels=n_dims,
+        #     stack_num_down=2,
+        #     stack_num_up=1,
+        #     recur_num=2,
+        #     activation='ReLU',
+        #     output_activation=None, 
+        #     batch_norm=True,
+        #     pool='max',
+        #     unpool='nearest',
+        #     name='r2unet'
+        # )
+
     def call(self, inputs, training=False):
         if not training:
             inputs = self.colorspace[0](inputs)
+
         mask = self.inscale(inputs)  # Scale to -1 to 1
         mask = self.model(mask)
-        if self.masked:  # Generate a mask added to the input
-            mask = tanh(mask)
-            mask = tf.multiply(self.eps, mask)
-            out = tf.add(mask, inputs)
-            out = tf.clip_by_value(out, 0.0, 1.0)
-        else:  # Regenerate the input image
-            out = sigmoid(mask)
+        mask = tanh(mask)
+        mask = tf.multiply(self.eps, mask)
+        out = tf.add(mask, inputs)
+        out = tf.clip_by_value(out, 0.0, 1.0)
 
         if not training:
             out = self.colorspace[1](out)
@@ -93,7 +100,7 @@ class AuraMask(Model):
                 if weighted:
                     w = loss_weights.pop()
                 if conversion:
-                    c = tf.constant(loss_convert.pop(), dtype=tf.bool)
+                    c = loss_convert.pop()
                 if isinstance(loss_i, (EmbeddingDistanceLoss)):
                     self.F = []
                     for model in loss_i.F:
@@ -129,15 +136,10 @@ class AuraMask(Model):
         y_rgb = tf.stop_gradient(self.colorspace[1](y))                     # computed rgb representation
         y_pred_rgb = self.colorspace[1](y_pred)                             # computed rgb representation (with gradient passthrough only for hsv_to_rgb
 
-        changed_fn = lambda: (y_rgb, y_pred_rgb)
-        unproc_fn = lambda: (y, y_pred)
-
         if self.F:
             embed_loss = tf.constant(0, dtype=tf.float32)
             for model, metric, e_w, e_c in self.F:
-                tmp_y, tmp_pred = tf.cond(e_c,
-                                          changed_fn,
-                                          unproc_fn)
+                tmp_y, tmp_pred = (y_rgb, y_pred_rgb) if e_c is True else (y, y_pred)
                 embed_y = tf.stop_gradient(model(tmp_y, training=False))
                 embed_pred = model(tmp_pred, training=False)
                 sim = tf.negative(
@@ -152,9 +154,7 @@ class AuraMask(Model):
             tloss = tf.add(tloss, tf.multiply(embed_loss, e_w))
 
         for model, metric, c_w, c_c in self._custom_losses:
-            tmp_y, tmp_pred = tf.cond(c_c,
-                            changed_fn,
-                            unproc_fn)
+            tmp_y, tmp_pred = (y_rgb, y_pred_rgb) if c_c is True else (y, y_pred)
             sim_loss = model(tmp_y, tmp_pred)
             metric.update_state(sim_loss)
             tloss = tf.add(tloss, tf.multiply(sim_loss, c_w))

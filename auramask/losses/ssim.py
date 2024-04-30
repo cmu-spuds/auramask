@@ -42,65 +42,144 @@ def ssim(
         return_index_map,
     )
 
-    return tf.reduce_sum(ssim_per_channel * channel_weights, [-1]) / tf.reduce_sum(channel_weights)
+    return tf.reduce_sum(ssim_per_channel * channel_weights, [-1]) / tf.reduce_sum(
+        channel_weights
+    )
+
 
 class SSIMLoss(Loss):
     def __init__(
-        self, max_val=1.0, filter_size=11, k1=0.01, k2=0.03, name="SSIM", **kwargs
+        self,
+        max_val=1.0,
+        filter_size=11,
+        filter_sigma=1.5,
+        k1=0.01,
+        k2=0.03,
+        name="SSIM",
+        **kwargs,
     ):
         super().__init__(name=name, **kwargs)
         self.mv = tf.constant(max_val, dtype=tf.float32)
         self.fz = tf.constant(filter_size, dtype=tf.int32)
         self.k1 = tf.constant(k1, dtype=tf.float32)
         self.k2 = tf.constant(k2, dtype=tf.float32)
+        self.filter_sigma = tf.constant(filter_sigma, dtype=tf.float32)
 
     def get_config(self):
         return {
             "name": self.name,
             "max value": self.mv.numpy(),
             "filter size": self.fz.numpy(),
+            "filter sigma": self.filter_sigma.numpy(),
             "k1": self.k1.numpy(),
             "k2": self.k2.numpy(),
-            "color weights": (1., 1., 1.)
+            "color weights": (1.0, 1.0, 1.0),
         }
 
     def call(self, y_true, y_pred):
-        loss = 1 - ssim(
-            y_true, 
-            y_pred, 
-            max_val=self.mv, 
-            filter_size=self.fz, 
-            k1=self.k1, 
+        loss = ssim(
+            y_true,
+            y_pred,
+            max_val=self.mv,
+            filter_size=self.fz,
+            filter_sigma=self.filter_sigma,
+            k1=self.k1,
             k2=self.k2,
-            channel_weights=[1.,1.,1.]
+            channel_weights=[1.0, 1.0, 1.0],
         )
-        return loss
+        return tf.negative(loss)
+
+
+# Default values obtained by Wang et al.
+_MSSSIM_WEIGHTS = (0.0448, 0.2856, 0.3001, 0.2363, 0.1333)
+
+
+class MSSSIMLoss(SSIMLoss):
+    def __init__(self, name="MS-SSIM", power_factors=_MSSSIM_WEIGHTS, **kwargs):
+        super().__init__(name=name, **kwargs)
+        self.power_factors = power_factors
+
+    def call(self, y_true, y_pred):
+        loss = tf.image.ssim_multiscale(
+            y_true,
+            y_pred,
+            max_val=self.mv,
+            filter_size=self.fz,
+            filter_sigma=self.filter_sigma,
+            k1=self.k1,
+            k2=self.k2,
+        )
+        return 1 - loss
+
+
+class GRAYSSIM(SSIMLoss):
+    def __init__(
+        self,
+        max_val=1,
+        filter_size=11,
+        filter_sigma=1.5,
+        k1=0.01,
+        k2=0.03,
+        name="G-SSIM",
+        **kwargs,
+    ):
+        super().__init__(max_val, filter_size, filter_sigma, k1, k2, name, **kwargs)
+
+    def call(self, y_true, y_pred):
+        y_t_gs = tf.image.rgb_to_grayscale(y_true)
+        y_p_gs = tf.image.rgb_to_grayscale(y_pred)
+        return 1 - tf.image.ssim(
+            y_t_gs,
+            y_p_gs,
+            max_val=self.mv,
+            filter_size=self.fz,
+            filter_sigma=self.filter_sigma,
+            k1=self.k1,
+            k2=self.k2,
+        )
 
 
 class YUVSSIMLoss(SSIMLoss):
+    def __init__(
+        self,
+        max_val=1,
+        filter_size=11,
+        filter_sigma=1.5,
+        k1=0.01,
+        k2=0.03,
+        name="YUV-SSIM",
+        **kwargs,
+    ):
+        super().__init__(max_val, filter_size, filter_sigma, k1, k2, name, **kwargs)
+
     def get_config(self):
         tmp = super().get_config()
-        tmp['color weights'] = (0.8,0.1,0.1)
+        tmp["color weights"] = (0.8, 0.1, 0.1)
         return tmp
 
     def call(self, y_true, y_pred):
-        loss = 1 - ssim(
-            y_true, 
-            y_pred, 
-            max_val=self.mv, 
-            filter_size=self.fz, 
+        loss = ssim(
+            y_true,
+            y_pred,
+            max_val=self.mv,
+            filter_size=self.fz,
             k1=self.k1,
             k2=self.k2,
-            channel_weights=[0.8,0.1,0.1] # Weights as described in https://doi.org/10.48550/arXiv.2101.06354
+            channel_weights=[
+                0.8,
+                0.1,
+                0.1,
+            ],  # Weights as described in https://doi.org/10.48550/arXiv.2101.06354
         )
 
-        return loss
-    
+        return 1 - loss
+
+
 class HSVSSIMLoss(SSIMLoss):
     def get_config(self):
         tmp = super().get_config()
         return tmp
-    
+
     def call(self, y_true, y_pred):
         y_true_gray = tf.image.rgb_to_grayscale
         return super().call(y_true, y_pred)

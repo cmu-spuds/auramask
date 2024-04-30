@@ -8,19 +8,29 @@ from datasets import load_dataset
 from random import choice
 from string import ascii_uppercase
 
-from numpy import isin
 import wandb
 from wandb.keras import WandbMetricsLogger
 
 from auramask.callbacks.callbacks import AuramaskCallback, AuramaskCheckpoint
 
+from auramask.losses.ffl import FocalFrequencyLoss
 from auramask.losses.perceptual import PerceptualLoss
 from auramask.losses.embeddistance import EmbeddingDistanceLoss
 from auramask.losses.aesthetic import AestheticLoss
-from auramask.losses.ssim import SSIMLoss, YUVSSIMLoss
+from auramask.losses.ssim import GRAYSSIM, MSSSIMLoss, SSIMLoss, YUVSSIMLoss
+from auramask.losses.zero_dce import (
+    ColorConstancyLoss,
+    SpatialConsistencyLoss,
+    ExposureControlLoss,
+    IlluminationSmoothnessLoss,
+)
 
 from auramask.models.face_embeddings import FaceEmbedEnum
 from auramask.models.auramask import AuraMask
+
+from auramask.utils.colorspace import ColorSpaceEnum
+from auramask.utils.datasets import DatasetEnum
+from auramask.utils.rotate import RandomRotatePairs
 
 import keras
 from keras.layers import CenterCrop
@@ -41,10 +51,6 @@ import tensorflow as tf
 from datetime import datetime
 
 from git import Repo
-
-from auramask.utils.colorspace import ColorSpaceEnum
-from auramask.utils.datasets import DatasetEnum
-from auramask.utils.rotate import RandomRotatePairs
 
 branch = Repo("./").active_branch.name  # Used for debugging runs
 
@@ -118,8 +124,23 @@ def parse_args():
         "--lpips",
         type=str,
         default=["none"],
-        choices=["alex", "vgg", "squeeze", "mse", "ssim", "ssim+mse", "nima", "none"],
-        nargs="+"
+        choices=[
+            "alex",
+            "vgg",
+            "squeeze",
+            "mse",
+            "ssim",
+            "msssim",
+            "gsssim",
+            "nima",
+            "ffl",
+            "exposure",
+            "color",
+            "illumination",
+            "spatial",
+            "none",
+        ],
+        nargs="+",
     )
     parser.add_argument(
         "--aesthetic", default=False, type=bool, action=argparse.BooleanOptionalAction
@@ -249,10 +270,14 @@ def initialize_loss():
         losses.append(EmbeddingDistanceLoss(F=F))
         weights.append(hparams.pop("rho"))
         loss_config.append(losses[-1].get_config() | {"weight": weights[-1]})
-        cs_transforms.append(is_not_rgb)                      # Determine if it needs to be transformed to rgb space
-    
+        cs_transforms.append(
+            is_not_rgb
+        )  # Determine if it needs to be transformed to rgb space
+
     if hparams.pop("aesthetic"):
-        losses.append(AestheticLoss(name="NIMA-A", kind="nima-aes", backbone='nasnetmobile'))
+        losses.append(
+            AestheticLoss(name="NIMA-A", kind="nima-aes", backbone="nasnetmobile")
+        )
         weights.append(hparams.pop("gamma"))
         loss_config.append(losses[-1].get_config() | {"weight": weights[-1]})
         cs_transforms.append(is_not_rgb)
@@ -261,10 +286,12 @@ def initialize_loss():
         lam = hparams.pop("lambda")
         lpips = set(hparams.pop("lpips"))
         if len(lpips) != len(lam) and len(lam) > 1:
-            raise argparse.ArgumentError("The length of lambda values must equal that of lpips argument")
+            raise argparse.ArgumentError(
+                "The length of lambda values must equal that of lpips argument"
+            )
         elif len(lam) <= 1:
             w = lam[0] if len(lam) > 0 else 1.0
-            iters = zip(lpips, [w]*len(lpips))
+            iters = zip(lpips, [w] * len(lpips))
         else:
             iters = zip(lpips, lam)
 
@@ -273,10 +300,39 @@ def initialize_loss():
                 tmp_loss = MeanSquaredError()
                 cs_transforms.append(False)
             elif loss_i == "ssim":
-                tmp_loss = SSIMLoss() if hparams["color_space"].name.casefold() != "yuv" else YUVSSIMLoss()
+                tmp_loss = (
+                    SSIMLoss(
+                        max_val=1.0, filter_size=11, filter_sigma=1.5, k1=0.01, k2=0.03
+                    )
+                    if hparams["color_space"].name.casefold() != "yuv"
+                    else YUVSSIMLoss()
+                )
+                cs_transforms.append(False)
+            elif loss_i == "gsssim":
+                tmp_loss = GRAYSSIM(
+                    max_val=1.0, filter_size=11, filter_sigma=1.5, k1=0.01, k2=0.03
+                )
+                cs_transforms.append(is_not_rgb)
+            elif loss_i == "msssim":
+                tmp_loss = MSSSIMLoss()
+                cs_transforms.append(False)
+            elif loss_i == "ffl":
+                tmp_loss = FocalFrequencyLoss()
                 cs_transforms.append(False)
             elif loss_i == "nima":
                 tmp_loss = AestheticLoss(name="NIMA-T", kind="nima-tech")
+                cs_transforms.append(is_not_rgb)
+            elif loss_i == "exposure":
+                tmp_loss = ExposureControlLoss(mean_val=0.6)
+                cs_transforms.append(is_not_rgb)
+            elif loss_i == "color":
+                tmp_loss = ColorConstancyLoss()
+                cs_transforms.append(is_not_rgb)
+            elif loss_i == "illumination":
+                tmp_loss = IlluminationSmoothnessLoss()
+                cs_transforms.append(is_not_rgb)
+            elif loss_i == "spatial":
+                tmp_loss = SpatialConsistencyLoss()
                 cs_transforms.append(is_not_rgb)
             else:
                 tmp_loss = PerceptualLoss(backbone=hparams["lpips"])
@@ -284,12 +340,12 @@ def initialize_loss():
 
             losses.append(tmp_loss)
             weights.append(w_i)
-            loss_config.append(losses[-1].get_config() | {"weight": weights[-1]})
+            loss_config.append(tmp_loss.get_config() | {"weight": w_i})
 
     if not is_not_rgb:
         cs_transforms = None
 
-    hparams['losses'] = loss_config
+    hparams["losses"] = loss_config
 
     return losses, weights, cs_transforms
 
@@ -355,7 +411,12 @@ def init_callbacks(sample, logdir, note=""):
     callbacks = []
     if checkpoint:
         callbacks.append(
-            AuramaskCheckpoint(filepath=logdir, freq_mode="epoch", save_weights_only=True, save_freq=int(os.getenv("AURAMASK_CHECKPOINT_FREQ", 100)))
+            AuramaskCheckpoint(
+                filepath=logdir,
+                freq_mode="epoch",
+                save_weights_only=True,
+                save_freq=int(os.getenv("AURAMASK_CHECKPOINT_FREQ", 100)),
+            )
         )
     callbacks.append(WandbMetricsLogger(log_freq="epoch"))
     callbacks.append(
@@ -366,6 +427,7 @@ def init_callbacks(sample, logdir, note=""):
             log_freq=int(os.getenv("AURAMASK_LOG_FREQ", 5)),
         )
     )
+    # callbacks.append(LearningRateScheduler())
     return callbacks
 
 
@@ -379,7 +441,6 @@ def main():
     note = hparams.pop("note")
     verbose = hparams.pop("verbose")
     set_seed()
-
 
     # Load the training and validation data
     t_ds, v_ds = load_data()
