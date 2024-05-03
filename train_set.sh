@@ -1,10 +1,13 @@
 #!/bin/bash
-F=(arcface vggface)
 
-source /opt/miniconda/bin/activate unet
+source /opt/miniconda/bin/activate auramask
 export TF_CPP_MIN_LOG_LEVEL="2"
-python train.py --no-note -v 0 -E 500 --t-split train[0:2048] --v-split train[2049:2176] -F ${F[@]} -B 32 --n-filters 32 --depth 3 --seed TEST -L none || { echo 'Training failed' ; exit 1; }
-python train.py --no-note -v 0 -E 500 --t-split train[0:2048] --v-split train[2049:2176] -F ${F[@]} -B 32 --n-filters 64 --depth 3 --seed TEST -L none || { echo 'Training failed' ; exit 1; }
-python train.py --no-note -v 0 -E 500 --t-split train[0:2048] --v-split train[2049:2176] -F ${F[@]} -B 32 --n-filters 16 --depth 5 --seed TEST -L none || { echo 'Training failed' ; exit 1; }
-python train.py --no-note -v 0 -E 500 --t-split train[0:2048] --v-split train[2049:2176] -F ${F[@]} -B 32 --n-filters 32 --depth 5 --seed TEST -L none || { echo 'Training failed' ; exit 1; }
-python train.py --no-note -v 0 -E 500 --t-split train[0:2048] --v-split train[2049:2176] -F ${F[@]} -B 32 --n-filters 64 --depth 5 --seed TEST -L none || { echo 'Training failed' ; exit 1; }
+export AURAMASK_LOG_FREQ=10
+python train.py -v 0 -E 100 --t-split train[:25%] --v-split train[26%:27%] -B 32 --n-filters 32 --depth 5 -C rgb --aesthetic -g 1.0 --no-note -e 1.0 -D lfw -l 1.0 1.0 -L ssim mse -a 2e-4
+python train.py -v 0 -E 100 --t-split train[:25%] --v-split train[26%:27%] -B 32 --n-filters 32 --depth 5 -C rgb --aesthetic -g 1.0 --no-note -e 1.0 -D lfw -l 0.6 0.4 -L ssim mse -a 2e-4
+
+python train.py -v 0 -E 100 --t-split train[:25%] --v-split train[26%:27%] -B 32 --n-filters 32 --depth 5 -C yuv --aesthetic -g 1.0 --no-note -e 1.0 -D lfw -l 1.0 1.0 -L ssim mse -a 2e-4
+python train.py -v 0 -E 100 --t-split train[:25%] --v-split train[26%:27%] -B 32 --n-filters 32 --depth 5 -C yuv --aesthetic -g 1.0 --no-note -e 1.0 -D lfw -l 0.6 0.4 -L ssim mse -a 2e-4
+
+python train.py -v 0 -E 100 --t-split train[:25%] --v-split train[26%:27%] -B 32 --n-filters 32 --depth 5 -C hsv --aesthetic -g 1.0 --no-note -e 1.0 -D lfw -l 1.0 1.0 -L ssim mse -a 2e-4
+python train.py -v 0 -E 100 --t-split train[:25%] --v-split train[26%:27%] -B 32 --n-filters 32 --depth 5 -C hsv --aesthetic -g 1.0 --no-note -e 1.0 -D lfw -l 0.6 0.4 -L ssim mse -a 2e-4

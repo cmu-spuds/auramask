@@ -23,11 +23,7 @@ class PerceptualLoss(Loss):
             layer._name = "%s/%s" % (name, layer.name)
 
     def get_config(self):
-        return {
-            "name": self.name,
-            "model": self.model.get_config(),
-            "reduction": self.reduction,
-        }
+        return self.model.get_config()
 
     def call(
         self,
