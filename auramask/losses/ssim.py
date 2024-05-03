@@ -128,7 +128,7 @@ class GRAYSSIM(SSIMLoss):
     def call(self, y_true, y_pred):
         y_t_gs = tf.image.rgb_to_grayscale(y_true)
         y_p_gs = tf.image.rgb_to_grayscale(y_pred)
-        return 1 - tf.image.ssim(
+        return tf.negative(tf.image.ssim(
             y_t_gs,
             y_p_gs,
             max_val=self.mv,
@@ -136,7 +136,7 @@ class GRAYSSIM(SSIMLoss):
             filter_sigma=self.filter_sigma,
             k1=self.k1,
             k2=self.k2,
-        )
+        ))
 
 
 class YUVSSIMLoss(SSIMLoss):

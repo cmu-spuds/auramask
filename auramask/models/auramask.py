@@ -2,10 +2,10 @@ from typing import Callable
 import tensorflow as tf
 from keras import Model
 from auramask.losses.embeddistance import EmbeddingDistanceLoss
-from keras.activations import tanh, sigmoid
+from keras.activations import tanh
 from keras.layers import Rescaling
 from keras.metrics import Mean
-from keras.losses import cosine_similarity, Loss
+from keras.losses import Loss
 from keras_unet_collection import models
 # import keras.ops as np
 
@@ -136,22 +136,22 @@ class AuraMask(Model):
         y_rgb = tf.stop_gradient(self.colorspace[1](y))                     # computed rgb representation
         y_pred_rgb = self.colorspace[1](y_pred)                             # computed rgb representation (with gradient passthrough only for hsv_to_rgb
 
-        if self.F:
-            embed_loss = tf.constant(0, dtype=tf.float32)
-            for model, metric, e_w, e_c in self.F:
-                tmp_y, tmp_pred = (y_rgb, y_pred_rgb) if e_c is True else (y, y_pred)
-                embed_y = tf.stop_gradient(model(tmp_y, training=False))
-                embed_pred = model(tmp_pred, training=False)
-                sim = tf.negative(
-                    cosine_similarity(
-                        y_true=embed_y, y_pred=embed_pred, axis=-1
-                    )
-                )
-                sim = tf.reduce_mean(sim)
-                metric.update_state(sim)
-                embed_loss = tf.add(embed_loss, sim)
-            embed_loss = tf.divide(embed_loss, len(self.F))
-            tloss = tf.add(tloss, tf.multiply(embed_loss, e_w))
+        # if self.F:
+        #     embed_loss = tf.constant(0, dtype=tf.float32)
+        #     for model, metric, e_w, e_c in self.F:
+        #         tmp_y, tmp_pred = (y_rgb, y_pred_rgb) if e_c is True else (y, y_pred)
+        #         embed_y = tf.stop_gradient(model(tmp_y, training=False))
+        #         embed_pred = model(tmp_pred, training=False)
+        #         # Compute negative cosine distance:
+        #         # CD = 1-CS -> -CD = CS-1 where (-2: opposite vector, -1: orthogonal, 0: same)
+        #         sim = cosine_similarity(
+        #             y_true=embed_y, y_pred=embed_pred, axis=-1
+        #         )
+        #         sim = tf.reduce_mean(sim)
+        #         metric.update_state(sim)
+        #         embed_loss = tf.add(embed_loss, sim)
+        #     embed_loss = tf.divide(embed_loss, len(self.F))
+        #     tloss = tf.add(tloss, tf.multiply(embed_loss, e_w))
 
         for model, metric, c_w, c_c in self._custom_losses:
             tmp_y, tmp_pred = (y_rgb, y_pred_rgb) if c_c is True else (y, y_pred)

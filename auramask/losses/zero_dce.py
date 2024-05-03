@@ -30,7 +30,7 @@ class ColorConstancyLoss(Loss):
         x (tf.Tensor): image.
     """
     def __init__(self, name="ColorConstancyLoss", **kwargs):
-        super().__init__(name=name, reduction="none", **kwargs)
+        super().__init__(name=name, **kwargs)
 
     @tf.function
     def call(self, y_true, y_pred):
@@ -44,7 +44,7 @@ class ColorConstancyLoss(Loss):
             + tf.square(difference_red_blue)
             + tf.square(difference_green_blue)
         )
-        return tf.reduce_mean(sum_of_squares)
+        return sum_of_squares
 
 class ExposureControlLoss(Loss):
     """An implementation of the Exposure Constancy Loss.
@@ -68,7 +68,7 @@ class ExposureControlLoss(Loss):
         mean_val (int): The average intensity value of a local region to the well-exposedness level.
     """
     def __init__(self, mean_val=0.6, window_size=16, name="ExposureControlLoss", **kwargs):
-        super().__init__(name=name, reduction='none',**kwargs)
+        super().__init__(name=name,**kwargs)
         self.mean_val = tf.constant(mean_val, tf.float32)
         self.window_size = window_size
 
@@ -83,7 +83,7 @@ class ExposureControlLoss(Loss):
         """
         x = tf.reduce_mean(y_pred, axis=-1, keepdims=True)
         mean = tf.nn.avg_pool2d(x, ksize=self.window_size, strides=self.window_size, padding="VALID")
-        return tf.reduce_mean(tf.square(mean - self.mean_val))
+        return tf.square(mean - self.mean_val)
 
 
 class IlluminationSmoothnessLoss(Loss):
@@ -137,7 +137,7 @@ class SpatialConsistencyLoss(Loss):
     preserving the contrast between neighboring regions across the input image and its enhanced version.
     """
     def __init__(self, name="SpatialConsistencyLoss", **kwargs):
-        super().__init__(name=name, reduction="none", **kwargs)
+        super().__init__(name=name, **kwargs)
 
         self.left_kernel = tf.constant(
             [[[[0, 0, 0]], [[-1, 1, 0]], [[0, 0, 0]]]], dtype=tf.float32
@@ -211,5 +211,4 @@ class SpatialConsistencyLoss(Loss):
         d_right = tf.square(d_original_right - d_enhanced_right)
         d_up = tf.square(d_original_up - d_enhanced_up)
         d_down = tf.square(d_original_down - d_enhanced_down)
-        loss = tf.reduce_mean(d_left + d_right + d_up + d_down)
-        return loss
+        return d_left + d_right + d_up + d_down

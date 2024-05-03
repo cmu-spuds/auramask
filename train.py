@@ -15,7 +15,7 @@ from auramask.callbacks.callbacks import AuramaskCallback, AuramaskCheckpoint
 
 from auramask.losses.ffl import FocalFrequencyLoss
 from auramask.losses.perceptual import PerceptualLoss
-from auramask.losses.embeddistance import EmbeddingDistanceLoss
+from auramask.losses.embeddistance import EmbeddingDistanceLoss, FaceEmbeddingLoss
 from auramask.losses.aesthetic import AestheticLoss
 from auramask.losses.ssim import GRAYSSIM, MSSSIMLoss, SSIMLoss, YUVSSIMLoss
 from auramask.losses.zero_dce import (
@@ -266,13 +266,22 @@ def initialize_loss():
 
     is_not_rgb = hparams["color_space"].name.casefold() != "rgb"
     F = hparams.pop("F")
+    rho = hparams.pop("rho")
     if F:
-        losses.append(EmbeddingDistanceLoss(F=F))
-        weights.append(hparams.pop("rho"))
-        loss_config.append(losses[-1].get_config() | {"weight": weights[-1]})
-        cs_transforms.append(
-            is_not_rgb
-        )  # Determine if it needs to be transformed to rgb space
+        # losses.append(EmbeddingDistanceLoss(F=F))
+        # weights.append(hparams.pop("rho"))
+        # loss_config.append(losses[-1].get_config() | {"weight": weights[-1]})
+        # cs_transforms.append(
+        #     is_not_rgb
+        # )  # Determine if it needs to be transformed to rgb space
+
+        for f in F:
+            losses.append(FaceEmbeddingLoss(f=f))
+            weights.append(rho)
+            loss_config.append(losses[-1].get_config() | {"weight": weights[-1]})
+            cs_transforms.append(
+                is_not_rgb
+            )  # Determine if it needs to be transformed to rgb space
 
     if hparams.pop("aesthetic"):
         losses.append(

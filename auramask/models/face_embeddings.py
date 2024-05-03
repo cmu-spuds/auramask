@@ -1,5 +1,7 @@
 from enum import Enum
+from typing import Literal
 from deepface.DeepFace import build_model
+from deepface.modules.verification import find_threshold
 from keras import Sequential
 from keras_cv.layers import Resizing, Rescaling
 
@@ -31,6 +33,9 @@ class FaceEmbedEnum(str, Enum):
             layer._name = "%s/%s" % (model.name, layer.name)
         del d_model
         return model
+
+    def get_threshold(self, distance: Literal["cosine"] | Literal["euclidean"] | Literal["euclidean_l2"] = "cosine") -> float:
+        return find_threshold(model_name=self.value, distance_metric=distance)
 
     @classmethod
     def build_F(cls, targets: list):
