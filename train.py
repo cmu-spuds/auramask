@@ -15,7 +15,7 @@ from auramask.callbacks.callbacks import AuramaskCallback, AuramaskCheckpoint
 
 from auramask.losses.ffl import FocalFrequencyLoss
 from auramask.losses.perceptual import PerceptualLoss
-from auramask.losses.embeddistance import EmbeddingDistanceLoss, FaceEmbeddingLoss
+from auramask.losses.embeddistance import EmbeddingDistanceLoss, FaceEmbeddingLoss, FaceEmbeddingThresholdLoss
 from auramask.losses.aesthetic import AestheticLoss
 from auramask.losses.ssim import GRAYSSIM, MSSSIMLoss, SSIMLoss, YUVSSIMLoss
 from auramask.losses.zero_dce import (
@@ -24,6 +24,8 @@ from auramask.losses.zero_dce import (
     ExposureControlLoss,
     IlluminationSmoothnessLoss,
 )
+
+from auramask.metrics.embeddistance import FaceEmbeddingDistance
 
 from auramask.models.face_embeddings import FaceEmbedEnum
 from auramask.models.auramask import AuraMask
@@ -263,6 +265,7 @@ def initialize_loss():
     weights = []
     loss_config = []
     cs_transforms = []
+    metrics = []
 
     is_not_rgb = hparams["color_space"].name.casefold() != "rgb"
     F = hparams.pop("F")
@@ -276,8 +279,10 @@ def initialize_loss():
         # )  # Determine if it needs to be transformed to rgb space
 
         for f in F:
-            losses.append(FaceEmbeddingLoss(f=f))
+            # losses.append(FaceEmbeddingLoss(f=f))
+            losses.append(FaceEmbeddingThresholdLoss(f=f, threshold=f.get_threshold()))
             weights.append(rho)
+            metrics.append(FaceEmbeddingDistance(f=losses[-1].f))
             loss_config.append(losses[-1].get_config() | {"weight": weights[-1]})
             cs_transforms.append(
                 is_not_rgb
@@ -356,7 +361,7 @@ def initialize_loss():
 
     hparams["losses"] = loss_config
 
-    return losses, weights, cs_transforms
+    return losses, weights, cs_transforms, metrics
 
 
 def initialize_model():
@@ -372,7 +377,7 @@ def initialize_model():
     hparams["model"] = model.model.name
 
     with tf.device("gpu:0"):
-        losses, losses_w, losses_t = initialize_loss()
+        losses, losses_w, losses_t, metrics = initialize_loss()
     optimizer = Adam(learning_rate=hparams["alpha"])
     model.compile(
         optimizer=optimizer,
@@ -380,6 +385,7 @@ def initialize_model():
         loss_weights=losses_w,
         loss_convert=losses_t,
         run_eagerly=hparams["eager"],
+        metrics=metrics
     )
     return model
 

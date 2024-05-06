@@ -1,31 +1,10 @@
 # Imports
-from types import NoneType
 from typing import Callable
 from keras.src.utils.losses_utils import ReductionV2
 from auramask.models.face_embeddings import FaceEmbedEnum
+from auramask.utils.distance import cosine_distance, cosine_similarity
 from keras.losses import Loss
 import tensorflow as np
-
-@np.function
-def cosine_similarity(y_true, y_pred, axis=-1):
-    """Computes the cosine similarity between labels and predictions.
-
-    Args:
-      y_true: The ground truth values.
-      y_pred: The prediction values.
-      axis: (Optional) -1 is the dimension along which the cosine
-        similarity is computed. Defaults to `-1`.
-
-    Returns:
-      Cosine similarity value.
-    """
-    y_true = np.linalg.l2_normalize(y_true, axis=axis)
-    y_pred = np.linalg.l2_normalize(y_pred, axis=axis)
-    return np.reduce_sum(y_true * y_pred, axis=axis)
-
-@np.function
-def cosine_distance(y_true, y_pred, axis=-1):
-    return np.subtract(1., cosine_similarity(y_true, y_pred, axis))
 
 class FaceEmbeddingLoss(Loss):
     """Computes a loss for the given model (f) that returns a vector of embeddings with the distance metric (cosine distance by default).
@@ -39,11 +18,10 @@ class FaceEmbeddingLoss(Loss):
         d (Callable): A function with y_true and y_pred
         d_t (float): The target of the loss optimization (default None)
     """
-    def __init__(self, f: FaceEmbedEnum, d: Callable = cosine_distance, d_t: float | NoneType = None, name="FaceEmbeddingLoss_", reduction=ReductionV2.SUM_OVER_BATCH_SIZE, **kwargs):
+    def __init__(self, f: FaceEmbedEnum, d: Callable = cosine_distance, name="FaceEmbeddingLoss_", reduction=ReductionV2.SUM_OVER_BATCH_SIZE, **kwargs):
         super().__init__(name=name + f.value, reduction=reduction)
         self.f = f.get_model()
         self.d = d
-        self.d_t = d_t
 
     def get_config(self) -> dict:
         base_config = super().get_config()
@@ -51,7 +29,6 @@ class FaceEmbeddingLoss(Loss):
             "name": self.name,
             "f": self.f.name,
             "d": self.d.__name__,
-            "d_t": self.d_t
         }
         return {**base_config, **config}
     
@@ -64,6 +41,17 @@ class FaceEmbeddingLoss(Loss):
         emb_adv = self.f(y_pred, training=False)
         return np.negative(self.d(emb_t, emb_adv, -1))
 
+class FaceEmbeddingThresholdLoss(FaceEmbeddingLoss):
+    def __init__(self, f: FaceEmbedEnum, threshold:float, d: Callable = cosine_distance, name="FaceEmbeddingThresholdLoss", reduction=ReductionV2.SUM_OVER_BATCH_SIZE, **kwargs):
+        super().__init__(f=f, d=d, name=name, reduction=reduction, **kwargs)
+        self.threshold = np.constant(threshold, np.float32)
+        
+    def call(self, y_true: np.Tensor, y_pred: np.Tensor) -> np.Tensor:
+        emb_t = np.stop_gradient(self.f(y_true, training=False))
+        emb_adv = self.f(y_pred, training=False)
+        distance = self.d(emb_t, emb_adv, -1)
+        dist_thresh = np.subtract(distance, self.threshold)
+        return np.nn.leaky_relu(np.negative(dist_thresh))
 
 class EmbeddingDistanceLoss(Loss):
     """Computes the loss for Adversarial Transformation Network training as described by the ReFace paper.

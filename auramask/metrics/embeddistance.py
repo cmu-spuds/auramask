@@ -1,8 +1,44 @@
-from keras.metrics import Metric
-from keras.losses import CosineSimilarity
+from keras.metrics import Mean, Metric
+from keras import Model
+from typing import Callable
+from auramask.utils.distance import cosine_distance, cosine_similarity
 from auramask.models.face_embeddings import FaceEmbedEnum
 import tensorflow as tf
 
+
+class FaceEmbeddingDistance(Mean):
+    """Computes the distance for the given model (f) that returns a vector of embeddings with the distance metric (cosine distance by default).
+        
+    Args:
+        f (FaceEmbedEnum): An instance of the FaceEmbedEnum object
+        d (Callable): A function with y_true and y_pred
+    """
+    def __init__(self, f: FaceEmbedEnum | Model, d: Callable = cosine_distance, name="FaceEmbeddingDistance_", **kwargs):
+        if isinstance(f, FaceEmbedEnum):
+            super().__init__(name=name + f.value, **kwargs)
+            self.f = f.get_model()
+        else:
+            super().__init__(name=name + f.name, **kwargs)
+            self.f = f
+        self.d = d
+
+    def get_config(self) -> dict:
+        base_config = super().get_config()
+        config = {
+            "name": self.name,
+            "f": self.f.name,
+            "d": self.d.__name__,
+        }
+        return {**base_config, **config}
+    
+    def update_state(
+        self,
+        y_true: tf.Tensor,
+        y_pred: tf.Tensor,
+        sample_weight=None):
+        emb_t = self.f(y_true, training=False)
+        emb_adv = self.f(y_pred, training=False)
+        return super().update_state(self.d(emb_t, emb_adv, -1))
 
 class EmbeddingDistance(Metric):
     """Computes the loss for Adversarial Transformation Network training as described by the ReFace paper.
@@ -28,7 +64,6 @@ class EmbeddingDistance(Metric):
             self.F_set = F_set
         else:
             self.F_set = FaceEmbedEnum.build_F(F)
-        self.cossim = CosineSimilarity(axis=1)
 
         self.count = self.add_weight("count", initializer="zeros")
 
@@ -45,7 +80,7 @@ class EmbeddingDistance(Metric):
         return {
             "name": self.name,
             "Cosine Similarity": self.cossim,
-            "F": self.F,
+            "F": self.F
         }
 
     def f_cosine_similarity(self, x, x_adv, f):

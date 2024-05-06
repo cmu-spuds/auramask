@@ -90,6 +90,7 @@ class AuraMask(Model):
         pss_evaluation_shards=0,
         **kwargs,
     ):
+        self._metrics = metrics
         if isinstance(loss, list):
             weighted = isinstance(loss_weights, list)
             conversion = isinstance(loss_convert, list)
@@ -118,7 +119,7 @@ class AuraMask(Model):
         return super().compile(
             optimizer,
             loss,
-            metrics,
+            None,
             loss_weights,
             weighted_metrics,
             run_eagerly,
@@ -161,9 +162,17 @@ class AuraMask(Model):
 
         return tloss
 
+    def compute_metrics(self, x, y, y_pred, sample_weight):
+        for metric in self._metrics:
+            metric.update_state(y, y_pred)
+        return self.get_metrics_result()
+
     def get_metrics_result(self):
         all_metrics = {}
         for _, metric, _, _ in self._custom_losses:
+            all_metrics[metric.name] = metric.result()
+            metric.reset_state()
+        for metric in self._metrics:
             all_metrics[metric.name] = metric.result()
             metric.reset_state()
         if self.F:
@@ -192,7 +201,7 @@ class AuraMask(Model):
 
         # Update metrics (including the one that tracks loss)
         # Return a dict mapping metric names to current value
-        metrics = self.get_metrics_result()
+        metrics = self.compute_metrics(x=X, y=y, y_pred=y_pred, sample_weight=None)
         metrics["loss"] = loss
         return metrics
 
@@ -206,6 +215,6 @@ class AuraMask(Model):
 
         # Updates stateful loss metrics.
         loss = self.compute_loss(y=y, y_pred=y_pred)
-        metrics = self.get_metrics_result()
+        metrics = self.compute_metrics(x=X, y=y, y_pred=y_pred, sample_weight=None)
         metrics["loss"] = loss
         return metrics
