@@ -280,7 +280,7 @@ def initialize_loss():
 
         for f in F:
             # losses.append(FaceEmbeddingLoss(f=f))
-            losses.append(FaceEmbeddingThresholdLoss(f=f, threshold=0.4))
+            losses.append(FaceEmbeddingThresholdLoss(f=f, threshold=f.get_threshold()))
             weights.append(rho)
             metrics.append(FaceEmbeddingDistance(f=losses[-1].f))
             loss_config.append(losses[-1].get_config() | {"weight": weights[-1]})
