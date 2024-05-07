@@ -27,7 +27,7 @@ from auramask.losses.zero_dce import (
     IlluminationSmoothnessLoss,
 )
 
-from auramask.metrics.embeddistance import FaceEmbeddingDistance
+from auramask.metrics.embeddistance import PercentageOverThreshold
 
 from auramask.models.face_embeddings import FaceEmbedEnum
 from auramask.models.auramask import AuraMask
@@ -276,7 +276,10 @@ def initialize_loss():
         for f in F:
             losses.append(FaceEmbeddingThresholdLoss(f=f, threshold=f.get_threshold()))
             weights.append(rho)
-            metrics.append(FaceEmbeddingDistance(f=losses[-1].f))
+            # metrics.append(CosineDistance(f=losses[-1].f))
+            metrics.append(
+                PercentageOverThreshold(f=losses[-1].f, threshold=f.get_threshold())
+            )
             loss_config.append(losses[-1].get_config() | {"weight": weights[-1]})
             cs_transforms.append(
                 is_not_rgb

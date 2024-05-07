@@ -4,7 +4,7 @@ import tensorflow as tf
 from auramask.losses.embeddistance import cosine_distance
 
 
-class CosineDistance(unittest.TestCase):
+class TestCosineDistance(unittest.TestCase):
     def setUp(self) -> None:
         self._image_shape = (128,)
         self._batch_image_shape = (5, 128)
