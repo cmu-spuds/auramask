@@ -1,7 +1,7 @@
 from keras.metrics import Mean, Metric
 from keras import Model
 from typing import Callable
-from auramask.utils.distance import cosine_distance, cosine_similarity
+from auramask.utils.distance import cosine_distance
 from auramask.models.face_embeddings import FaceEmbedEnum
 import tensorflow as tf
 

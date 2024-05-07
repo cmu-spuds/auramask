@@ -2,7 +2,7 @@
 from typing import Callable
 from keras.src.utils.losses_utils import ReductionV2
 from auramask.models.face_embeddings import FaceEmbedEnum
-from auramask.utils.distance import cosine_distance, cosine_similarity
+from auramask.utils.distance import cosine_distance
 from keras.losses import Loss
 import tensorflow as np
 

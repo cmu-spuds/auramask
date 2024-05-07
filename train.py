@@ -16,8 +16,6 @@ from auramask.callbacks.callbacks import AuramaskCallback, AuramaskCheckpoint
 from auramask.losses.ffl import FocalFrequencyLoss
 from auramask.losses.perceptual import PerceptualLoss
 from auramask.losses.embeddistance import (
-    EmbeddingDistanceLoss,
-    FaceEmbeddingLoss,
     FaceEmbeddingThresholdLoss,
 )
 from auramask.losses.aesthetic import AestheticLoss

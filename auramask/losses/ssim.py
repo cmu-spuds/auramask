@@ -177,11 +177,11 @@ class YUVSSIMLoss(SSIMLoss):
         return 1 - loss
 
 
-class HSVSSIMLoss(SSIMLoss):
-    def get_config(self):
-        tmp = super().get_config()
-        return tmp
+# class HSVSSIMLoss(SSIMLoss):
+#     def get_config(self):
+#         tmp = super().get_config()
+#         return tmp
 
-    def call(self, y_true, y_pred):
-        y_true_gray = tf.image.rgb_to_grayscale
-        return super().call(y_true, y_pred)
+#     def call(self, y_true, y_pred):
+#         y_true_gray = tf.image.rgb_to_grayscale
+#         return super().call(y_true, y_pred)

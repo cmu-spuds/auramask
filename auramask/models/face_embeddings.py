@@ -34,7 +34,12 @@ class FaceEmbedEnum(str, Enum):
         del d_model
         return model
 
-    def get_threshold(self, distance: Literal["cosine"] | Literal["euclidean"] | Literal["euclidean_l2"] = "cosine") -> float:
+    def get_threshold(
+        self,
+        distance: Literal["cosine"]
+        | Literal["euclidean"]
+        | Literal["euclidean_l2"] = "cosine",
+    ) -> float:
         return find_threshold(model_name=self.value, distance_metric=distance)
 
     @classmethod

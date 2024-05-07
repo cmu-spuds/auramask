@@ -14,7 +14,15 @@ class NIMA(Model):
         backbone: Right now only "mobilenet"
     """
 
-    def __init__(self, kind: Literal["aesthetic"] | Literal["technical"]="aesthetic", backbone: Literal["mobilenet"] | Literal["nasnetmobile"] | Literal["inceptionresnetv2"]="mobilenet", name="NIMA", **kwargs):
+    def __init__(
+        self,
+        kind: Literal["aesthetic"] | Literal["technical"] = "aesthetic",
+        backbone: Literal["mobilenet"]
+        | Literal["nasnetmobile"]
+        | Literal["inceptionresnetv2"] = "mobilenet",
+        name="NIMA",
+        **kwargs,
+    ):
         super().__init__(name=name, **kwargs)
         self.backbone = backbone
         self.kind = kind
@@ -28,11 +36,7 @@ class NIMA(Model):
         # self.net = TFSMLayer(mdl_path, call_endpoint='serve')
 
     def get_config(self):
-        return {
-            "name": self.name,
-            "kind": self.kind,
-            "backbone": self.backbone
-        }
+        return {"name": self.name, "kind": self.kind, "backbone": self.backbone}
 
     def call(self, x):
         x = self.augmenter(x)
