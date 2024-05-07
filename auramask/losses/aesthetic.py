@@ -7,12 +7,12 @@ from keras.losses import Loss
 import tensorflow as np
 
 
-def _normalize_labels(labels):
+def _normalize_labels(labels: np.Tensor) -> np.Tensor:
     normed = labels / np.reduce_sum(labels)
     return normed
 
 
-def calc_mean_score(score_dist):
+def calc_mean_score(score_dist) -> np.Tensor:
     score_dist = _normalize_labels(score_dist)
     return np.reduce_sum((score_dist * np.range(1, 11, dtype=np.float32)))
 
@@ -20,8 +20,10 @@ def calc_mean_score(score_dist):
 class AestheticLoss(Loss):
     def __init__(
         self,
-        backbone: Literal["mobilenet"] | Literal['nasnetmobile'] | Literal['inceptionresnetv2']="mobilenet",
-        kind: Literal["nima-aes"] | Literal["nima-tech"] | Literal["vila"]="nima-aes",
+        backbone: Literal["mobilenet"]
+        | Literal["nasnetmobile"]
+        | Literal["inceptionresnetv2"] = "mobilenet",
+        kind: Literal["nima-aes"] | Literal["nima-tech"] | Literal["vila"] = "nima-aes",
         model: NIMA | VILA | None = None,
         name="AestheticLoss",
         **kwargs,
@@ -48,13 +50,10 @@ class AestheticLoss(Loss):
         self.model.trainable = False
 
     def get_config(self):
-        return {
-            "name": self.name,
-            "model": self.model.name,
-            "kind": self.model.kind
-        }
+        return {"name": self.name, "model": self.model.name, "kind": self.model.kind}
 
-    def call(self, y_true, y_pred):
+    def call(self, y_true: np.Tensor, y_pred: np.Tensor):
+        del y_true
         mean = self.model(y_pred)
         mean = np.map_fn(calc_mean_score, mean)
         mean = 1 - np.divide(mean, 10.0)  # Convert to [0, 1]

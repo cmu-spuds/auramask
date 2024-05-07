@@ -271,15 +271,7 @@ def initialize_loss():
     F = hparams.pop("F")
     rho = hparams.pop("rho")
     if F:
-        # losses.append(EmbeddingDistanceLoss(F=F))
-        # weights.append(hparams.pop("rho"))
-        # loss_config.append(losses[-1].get_config() | {"weight": weights[-1]})
-        # cs_transforms.append(
-        #     is_not_rgb
-        # )  # Determine if it needs to be transformed to rgb space
-
         for f in F:
-            # losses.append(FaceEmbeddingLoss(f=f))
             losses.append(FaceEmbeddingThresholdLoss(f=f, threshold=f.get_threshold()))
             weights.append(rho)
             metrics.append(FaceEmbeddingDistance(f=losses[-1].f))
@@ -349,7 +341,7 @@ def initialize_loss():
                 tmp_loss = SpatialConsistencyLoss()
                 cs_transforms.append(is_not_rgb)
             else:
-                tmp_loss = PerceptualLoss(backbone=hparams["lpips"])
+                tmp_loss = PerceptualLoss(backbone=loss_i)
                 cs_transforms.append(is_not_rgb)
 
             losses.append(tmp_loss)

@@ -1,7 +1,6 @@
 from typing import Callable
 import tensorflow as tf
 from keras import Model
-from auramask.losses.embeddistance import EmbeddingDistanceLoss
 from keras.activations import tanh
 from keras.layers import Rescaling
 from keras.metrics import Mean
@@ -46,14 +45,14 @@ class AuraMask(Model):
         )
 
         # self.model = models.r2_unet_2d(
-        #     (None, None, 3), 
-        #     filters, 
+        #     (None, None, 3),
+        #     filters,
         #     n_labels=n_dims,
         #     stack_num_down=2,
         #     stack_num_up=1,
         #     recur_num=2,
         #     activation='ReLU',
-        #     output_activation=None, 
+        #     output_activation=None,
         #     batch_norm=True,
         #     pool='max',
         #     unpool='nearest',
@@ -95,20 +94,18 @@ class AuraMask(Model):
             weighted = isinstance(loss_weights, list)
             conversion = isinstance(loss_convert, list)
             w = 1.0
-            c = tf.constant(False, dtype=tf.bool)
+            c = False
             for _ in range(len(loss)):
                 loss_i = loss.pop()
                 if weighted:
                     w = loss_weights.pop()
                 if conversion:
                     c = loss_convert.pop()
-                if isinstance(loss_i, (EmbeddingDistanceLoss)):
-                    self.F = []
-                    for model in loss_i.F:
-                        self.F.append((model, Mean(name=model.name), w, c))
-                elif isinstance(loss_i, Loss):
+                if isinstance(loss_i, Loss):
                     if w > 0:
-                        self._custom_losses.append((loss_i, Mean(name=loss_i.name), w, c))
+                        self._custom_losses.append(
+                            (loss_i, Mean(name=loss_i.name), w, c)
+                        )
                     else:
                         del loss_i
                 else:
@@ -133,26 +130,11 @@ class AuraMask(Model):
     def compute_loss(self, x=None, y=None, y_pred=None, sample_weight=None):
         del x
         del sample_weight
-        tloss = tf.constant(0, dtype=tf.float32)                            # tracked total loss
-        y_rgb = tf.stop_gradient(self.colorspace[1](y))                     # computed rgb representation
-        y_pred_rgb = self.colorspace[1](y_pred)                             # computed rgb representation (with gradient passthrough only for hsv_to_rgb
-
-        # if self.F:
-        #     embed_loss = tf.constant(0, dtype=tf.float32)
-        #     for model, metric, e_w, e_c in self.F:
-        #         tmp_y, tmp_pred = (y_rgb, y_pred_rgb) if e_c is True else (y, y_pred)
-        #         embed_y = tf.stop_gradient(model(tmp_y, training=False))
-        #         embed_pred = model(tmp_pred, training=False)
-        #         # Compute negative cosine distance:
-        #         # CD = 1-CS -> -CD = CS-1 where (-2: opposite vector, -1: orthogonal, 0: same)
-        #         sim = cosine_similarity(
-        #             y_true=embed_y, y_pred=embed_pred, axis=-1
-        #         )
-        #         sim = tf.reduce_mean(sim)
-        #         metric.update_state(sim)
-        #         embed_loss = tf.add(embed_loss, sim)
-        #     embed_loss = tf.divide(embed_loss, len(self.F))
-        #     tloss = tf.add(tloss, tf.multiply(embed_loss, e_w))
+        tloss = tf.constant(0, dtype=tf.float32)  # tracked total loss
+        y_rgb = tf.stop_gradient(self.colorspace[1](y))  # computed rgb representation
+        y_pred_rgb = self.colorspace[1](
+            y_pred
+        )  # computed rgb representation (with gradient passthrough only for hsv_to_rgb
 
         for model, metric, c_w, c_c in self._custom_losses:
             tmp_y, tmp_pred = (y_rgb, y_pred_rgb) if c_c is True else (y, y_pred)
@@ -163,8 +145,13 @@ class AuraMask(Model):
         return tloss
 
     def compute_metrics(self, x, y, y_pred, sample_weight):
+        del x
+        del sample_weight
+        y_rgb = self.colorspace[1](y)
+        y_pred_rgb = self.colorspace[1](y_pred)
+
         for metric in self._metrics:
-            metric.update_state(y, y_pred)
+            metric.update_state(y_rgb, y_pred_rgb)
         return self.get_metrics_result()
 
     def get_metrics_result(self):

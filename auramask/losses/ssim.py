@@ -68,11 +68,11 @@ class SSIMLoss(Loss):
     def get_config(self):
         return {
             "name": self.name,
-            "max value": self.mv.numpy(),
-            "filter size": self.fz.numpy(),
-            "filter sigma": self.filter_sigma.numpy(),
-            "k1": self.k1.numpy(),
-            "k2": self.k2.numpy(),
+            "max value": tf.as_string(self.mv, shortest=True).numpy(),
+            "filter size": tf.as_string(self.fz).numpy(),
+            "filter sigma": tf.as_string(self.filter_sigma, shortest=True).numpy(),
+            "k1": tf.as_string(self.k1, precision=3, scientific=True).numpy(),
+            "k2": tf.as_string(self.k2, precision=3, scientific=True).numpy(),
             "color weights": (1.0, 1.0, 1.0),
         }
 
@@ -128,15 +128,17 @@ class GRAYSSIM(SSIMLoss):
     def call(self, y_true, y_pred):
         y_t_gs = tf.image.rgb_to_grayscale(y_true)
         y_p_gs = tf.image.rgb_to_grayscale(y_pred)
-        return tf.negative(tf.image.ssim(
-            y_t_gs,
-            y_p_gs,
-            max_val=self.mv,
-            filter_size=self.fz,
-            filter_sigma=self.filter_sigma,
-            k1=self.k1,
-            k2=self.k2,
-        ))
+        return tf.negative(
+            tf.image.ssim(
+                y_t_gs,
+                y_p_gs,
+                max_val=self.mv,
+                filter_size=self.fz,
+                filter_sigma=self.filter_sigma,
+                k1=self.k1,
+                k2=self.k2,
+            )
+        )
 
 
 class YUVSSIMLoss(SSIMLoss):

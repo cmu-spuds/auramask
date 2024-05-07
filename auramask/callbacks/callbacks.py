@@ -1,12 +1,11 @@
 import io
 from os import PathLike
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, Literal
 
 import wandb
 from wandb.integration.keras.callbacks.model_checkpoint import SaveStrategy
 from wandb.keras import WandbEvalCallback, WandbModelCheckpoint
 from keras.preprocessing.image import array_to_img
-from keras.callbacks import Callback
 
 
 def get_model_summary(model):
