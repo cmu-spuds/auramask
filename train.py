@@ -15,7 +15,11 @@ from auramask.callbacks.callbacks import AuramaskCallback, AuramaskCheckpoint
 
 from auramask.losses.ffl import FocalFrequencyLoss
 from auramask.losses.perceptual import PerceptualLoss
-from auramask.losses.embeddistance import EmbeddingDistanceLoss, FaceEmbeddingLoss, FaceEmbeddingThresholdLoss
+from auramask.losses.embeddistance import (
+    EmbeddingDistanceLoss,
+    FaceEmbeddingLoss,
+    FaceEmbeddingThresholdLoss,
+)
 from auramask.losses.aesthetic import AestheticLoss
 from auramask.losses.ssim import GRAYSSIM, MSSSIMLoss, SSIMLoss, YUVSSIMLoss
 from auramask.losses.zero_dce import (
@@ -377,7 +381,7 @@ def initialize_model():
         loss_weights=losses_w,
         loss_convert=losses_t,
         run_eagerly=hparams["eager"],
-        metrics=metrics
+        metrics=metrics,
     )
     return model
 

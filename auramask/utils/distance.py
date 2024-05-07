@@ -1,5 +1,6 @@
 import tensorflow as np
 
+
 @np.function
 def cosine_similarity(y_true: np.Tensor, y_pred: np.Tensor, axis=-1) -> np.Tensor:
     """Computes the cosine similarity between labels and predictions.
@@ -24,7 +25,9 @@ def cosine_distance(y_true: np.Tensor, y_pred: np.Tensor, axis=-1) -> np.Tensor:
 
 
 @np.function
-def euclidean_distance(key_embeddings: np.Tensor, query_embeddings: np.Tensor) -> np.Tensor:
+def euclidean_distance(
+    key_embeddings: np.Tensor, query_embeddings: np.Tensor
+) -> np.Tensor:
     """Compute pairwise distances for a given batch of embeddings.
 
     Args:
@@ -57,7 +60,9 @@ def euclidean_distance(key_embeddings: np.Tensor, query_embeddings: np.Tensor) -
 
 
 @np.function
-def euclidean_l2_distance(key_embeddings: np.Tensor, query_embeddings: np.Tensor) -> np.Tensor:
+def euclidean_l2_distance(
+    key_embeddings: np.Tensor, query_embeddings: np.Tensor
+) -> np.Tensor:
     """Compute pairwise squared Euclidean distance.
 
     The [Squared Euclidean Distance](https://en.wikipedia.org/wiki/Euclidean_distance#Squared_Euclidean_distance) is

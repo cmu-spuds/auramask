@@ -1,10 +1,11 @@
 from typing import Literal
-from auramask.models.nima import NIMA
-from auramask.models.vila import VILA
-from keras.losses import Loss
 
 # import keras.ops as np
 import tensorflow as np
+from keras.losses import Loss
+
+from auramask.models.nima import NIMA
+from auramask.models.vila import VILA
 
 
 def _normalize_labels(labels: np.Tensor) -> np.Tensor:

@@ -1,6 +1,7 @@
 import tensorflow as tf
 from keras.losses import Loss
 
+
 @tf.function
 def tensor2freq(x, patch_factor):
     _, h, w, _ = x.shape
@@ -10,17 +11,25 @@ def tensor2freq(x, patch_factor):
     patch_w = w // patch_factor
     for i in range(patch_factor):
         for j in range(patch_factor):
-            patch_list.append(x[:, :, i * patch_h:(i + 1) * patch_h, j * patch_w:(j + 1) * patch_w])
+            patch_list.append(
+                x[
+                    :,
+                    :,
+                    i * patch_h : (i + 1) * patch_h,
+                    j * patch_w : (j + 1) * patch_w,
+                ]
+            )
 
     # stack to patch tensor
     y = tf.stack(patch_list, axis=1)
 
     # perform 2D DFT (real-to-complex, orthonormalization)
     freq = tf.signal.fft2d(y)
-    freq_real = tf.math.real(freq)/freq.shape[-1]
-    freq_imag = tf.math.imag(freq)/freq.shape[-1]
+    freq_real = tf.math.real(freq) / freq.shape[-1]
+    freq_imag = tf.math.imag(freq) / freq.shape[-1]
     freq = tf.stack([freq_real, freq_imag], axis=-1)
     return freq
+
 
 class FocalFrequencyLoss(Loss):
     """The keras.losses class that implements focal frequency loss - a
@@ -39,7 +48,14 @@ class FocalFrequencyLoss(Loss):
         batch_matrix (bool): whether to calculate the spectrum weight matrix using batch-based statistics. Default: False
     """
 
-    def __init__(self, alpha=1.0, patch_factor=1, ave_spectrum=False, log_matrix=False, batch_matrix=False):
+    def __init__(
+        self,
+        alpha=1.0,
+        patch_factor=1,
+        ave_spectrum=False,
+        log_matrix=False,
+        batch_matrix=False,
+    ):
         super(FocalFrequencyLoss, self).__init__()
         self.alpha = tf.constant(alpha, dtype=tf.float32)
         self.patch_factor = tf.constant(patch_factor, tf.int32)
@@ -55,7 +71,9 @@ class FocalFrequencyLoss(Loss):
         else:
             # if the matrix is calculated online: continuous, dynamic, based on current Euclidean distance
             matrix_tmp = (recon_freq - real_freq) ** 2
-            matrix_tmp = tf.math.sqrt(matrix_tmp[..., 0] + matrix_tmp[..., 1]) ** self.alpha
+            matrix_tmp = (
+                tf.math.sqrt(matrix_tmp[..., 0] + matrix_tmp[..., 1]) ** self.alpha
+            )
 
             # whether to adjust the spectrum weight matrix by logarithm
             if self.log_matrix:
@@ -65,10 +83,19 @@ class FocalFrequencyLoss(Loss):
             if self.batch_matrix:
                 matrix_tmp = matrix_tmp / tf.math.reduce_max(matrix_tmp)
             else:
-                matrix_tmp = matrix_tmp / tf.math.reduce_max(tf.reduce_max(matrix_tmp, axis=-1), axis=-1)[:, :, :, None, None]
+                matrix_tmp = (
+                    matrix_tmp
+                    / tf.math.reduce_max(tf.reduce_max(matrix_tmp, axis=-1), axis=-1)[
+                        :, :, :, None, None
+                    ]
+                )
 
-            matrix_tmp = tf.where(tf.math.is_nan(matrix_tmp), tf.zeros_like(matrix_tmp), matrix_tmp)
-            weight_matrix = tf.clip_by_value(matrix_tmp, clip_value_min=0.0, clip_value_max=1.0)
+            matrix_tmp = tf.where(
+                tf.math.is_nan(matrix_tmp), tf.zeros_like(matrix_tmp), matrix_tmp
+            )
+            weight_matrix = tf.clip_by_value(
+                matrix_tmp, clip_value_min=0.0, clip_value_max=1.0
+            )
 
         # frequency distance using (squared) Euclidean distance
         tmp = (recon_freq - real_freq) ** 2

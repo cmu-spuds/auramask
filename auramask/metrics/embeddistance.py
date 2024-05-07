@@ -8,12 +8,19 @@ import tensorflow as tf
 
 class FaceEmbeddingDistance(Mean):
     """Computes the distance for the given model (f) that returns a vector of embeddings with the distance metric (cosine distance by default).
-        
+
     Args:
         f (FaceEmbedEnum): An instance of the FaceEmbedEnum object
         d (Callable): A function with y_true and y_pred
     """
-    def __init__(self, f: FaceEmbedEnum | Model, d: Callable = cosine_distance, name="FaceEmbeddingDistance_", **kwargs):
+
+    def __init__(
+        self,
+        f: FaceEmbedEnum | Model,
+        d: Callable = cosine_distance,
+        name="FaceEmbeddingDistance_",
+        **kwargs,
+    ):
         if isinstance(f, FaceEmbedEnum):
             super().__init__(name=name + f.value, **kwargs)
             self.f = f.get_model()
@@ -30,15 +37,12 @@ class FaceEmbeddingDistance(Mean):
             "d": self.d.__name__,
         }
         return {**base_config, **config}
-    
-    def update_state(
-        self,
-        y_true: tf.Tensor,
-        y_pred: tf.Tensor,
-        sample_weight=None):
+
+    def update_state(self, y_true: tf.Tensor, y_pred: tf.Tensor, sample_weight=None):
         emb_t = self.f(y_true, training=False)
         emb_adv = self.f(y_pred, training=False)
         return super().update_state(self.d(emb_t, emb_adv, -1))
+
 
 class EmbeddingDistance(Metric):
     """Computes the loss for Adversarial Transformation Network training as described by the ReFace paper.
@@ -77,11 +81,7 @@ class EmbeddingDistance(Metric):
                 )
 
     def get_config(self):
-        return {
-            "name": self.name,
-            "Cosine Similarity": self.cossim,
-            "F": self.F
-        }
+        return {"name": self.name, "Cosine Similarity": self.cossim, "F": self.F}
 
     def f_cosine_similarity(self, x, x_adv, f):
         """Compute the cosine distance between the embeddings of the original image and perturbed image.

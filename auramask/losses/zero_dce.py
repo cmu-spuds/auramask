@@ -10,6 +10,7 @@ To enable zero-reference learning in DCE-Net, we use a set of differentiable
 zero-reference losses that allow us to evaluate the quality of enhanced images.
 """
 
+
 class ColorConstancyLoss(Loss):
     """An implementation of the Color Constancy Loss.
 
@@ -29,6 +30,7 @@ class ColorConstancyLoss(Loss):
     Args:
         x (tf.Tensor): image.
     """
+
     def __init__(self, name="ColorConstancyLoss", **kwargs):
         super().__init__(name=name, **kwargs)
 
@@ -45,6 +47,7 @@ class ColorConstancyLoss(Loss):
             + tf.square(difference_green_blue)
         )
         return sum_of_squares
+
 
 class ExposureControlLoss(Loss):
     """An implementation of the Exposure Constancy Loss.
@@ -67,8 +70,11 @@ class ExposureControlLoss(Loss):
         window_size (int): The size of the window for each dimension of the input tensor for average pooling.
         mean_val (int): The average intensity value of a local region to the well-exposedness level.
     """
-    def __init__(self, mean_val=0.6, window_size=16, name="ExposureControlLoss", **kwargs):
-        super().__init__(name=name,**kwargs)
+
+    def __init__(
+        self, mean_val=0.6, window_size=16, name="ExposureControlLoss", **kwargs
+    ):
+        super().__init__(name=name, **kwargs)
         self.mean_val = tf.constant(mean_val, tf.float32)
         self.window_size = window_size
 
@@ -82,7 +88,9 @@ class ExposureControlLoss(Loss):
         and a preset well-exposedness level (set to `0.6`).
         """
         x = tf.reduce_mean(y_pred, axis=-1, keepdims=True)
-        mean = tf.nn.avg_pool2d(x, ksize=self.window_size, strides=self.window_size, padding="VALID")
+        mean = tf.nn.avg_pool2d(
+            x, ksize=self.window_size, strides=self.window_size, padding="VALID"
+        )
         return tf.square(mean - self.mean_val)
 
 
@@ -103,8 +111,9 @@ class IlluminationSmoothnessLoss(Loss):
     Args:
         x (tf.Tensor): image.
     """
+
     def __init__(self, name="IlluminationSmoothnessLoss", **kwargs):
-        super().__init__(name=name, reduction='none', **kwargs)
+        super().__init__(name=name, reduction="none", **kwargs)
 
     @tf.function
     def call(self, y_true, y_pred):
@@ -136,6 +145,7 @@ class SpatialConsistencyLoss(Loss):
     The *spatial consistency loss* encourages spatial coherence of the enhanced image by
     preserving the contrast between neighboring regions across the input image and its enhanced version.
     """
+
     def __init__(self, name="SpatialConsistencyLoss", **kwargs):
         super().__init__(name=name, **kwargs)
 
@@ -149,7 +159,7 @@ class SpatialConsistencyLoss(Loss):
             [[[[0, -1, 0]], [[0, 1, 0]], [[0, 0, 0]]]], dtype=tf.float32
         )
         self.down_kernel = tf.constant(
-            [[[[0, 0, 0]], [[0, 1 , 0]], [[0, -1, 0]]]], dtype=tf.float32
+            [[[[0, 0, 0]], [[0, 1, 0]], [[0, -1, 0]]]], dtype=tf.float32
         )
 
     @tf.function
