@@ -40,8 +40,10 @@ class PercentageOverThreshold(Mean):
     def __init__(self, f: FaceEmbedEnum | Model, name="PoT_", threshold=0.5, **kwargs):
         if isinstance(f, FaceEmbedEnum):
             super().__init__(name=name + f.value, **kwargs)
+            self.f = f.get_model()
         else:
             super().__init__(name=name + f.name, **kwargs)
+            self.f = f
 
         self.threshold = threshold
 

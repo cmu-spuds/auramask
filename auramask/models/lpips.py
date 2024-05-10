@@ -1,3 +1,4 @@
+from typing import Literal
 from keras.models import Model, load_model
 from keras.layers import Layer
 from keras_cv.layers import Resizing
@@ -44,7 +45,11 @@ class LPIPS(Model):
     """
 
     def __init__(
-        self, backbone="alex", spatial=False, name="PerceptualSimilarity", **kwargs
+        self,
+        backbone: Literal["alex"] | Literal["vgg"] | Literal["squeeze"] = "alex",
+        spatial=False,
+        name="PerceptualSimilarity",
+        **kwargs,
     ):
         super().__init__(name=name, **kwargs)
         self.backbone = backbone

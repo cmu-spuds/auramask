@@ -48,7 +48,7 @@ from keras_cv.layers import (
     RandomAugmentationPipeline,
 )
 from keras.optimizers import Adam
-from keras.losses import MeanSquaredError
+from keras.losses import MeanSquaredError, MeanAbsoluteError
 
 import tensorflow as tf
 
@@ -133,6 +133,7 @@ def parse_args():
             "vgg",
             "squeeze",
             "mse",
+            "mae",
             "ssim",
             "msssim",
             "gsssim",
@@ -310,6 +311,9 @@ def initialize_loss():
             if loss_i == "mse":
                 tmp_loss = MeanSquaredError()
                 cs_transforms.append(False)
+            elif loss_i == "mae":
+                tmp_loss = MeanAbsoluteError()
+                cs_transforms.append(False)
             elif loss_i == "ssim":
                 tmp_loss = (
                     SSIMLoss(
@@ -416,29 +420,31 @@ def init_callbacks(sample, logdir, note=""):
         )
     else:
         name = None
-    wandb.init(
-        project="auramask", dir=logdir, config=tmp_hparams, name=name, notes=note
-    )
 
     callbacks = []
-    if checkpoint:
+    if os.getenv("WANDB_MODE") != "offline":
+        wandb.init(
+            project="auramask", dir=logdir, config=tmp_hparams, name=name, notes=note
+        )
+
+        if checkpoint:
+            callbacks.append(
+                AuramaskCheckpoint(
+                    filepath=logdir,
+                    freq_mode="epoch",
+                    save_weights_only=False,
+                    save_freq=int(os.getenv("AURAMASK_CHECKPOINT_FREQ", 100)),
+                )
+            )
+        callbacks.append(WandbMetricsLogger(log_freq="epoch"))
         callbacks.append(
-            AuramaskCheckpoint(
-                filepath=logdir,
-                freq_mode="epoch",
-                save_weights_only=True,
-                save_freq=int(os.getenv("AURAMASK_CHECKPOINT_FREQ", 100)),
+            AuramaskCallback(
+                validation_data=sample,
+                data_table_columns=["idx", "orig", "aug"],
+                pred_table_columns=["epoch", "idx", "pred", "mask"],
+                log_freq=int(os.getenv("AURAMASK_LOG_FREQ", 5)),
             )
         )
-    callbacks.append(WandbMetricsLogger(log_freq="epoch"))
-    callbacks.append(
-        AuramaskCallback(
-            validation_data=sample,
-            data_table_columns=["idx", "orig", "aug"],
-            pred_table_columns=["epoch", "idx", "pred", "mask"],
-            log_freq=int(os.getenv("AURAMASK_LOG_FREQ", 5)),
-        )
-    )
     # callbacks.append(LearningRateScheduler())
     return callbacks
 

@@ -8,11 +8,13 @@ from auramask.models.nima import NIMA
 from auramask.models.vila import VILA
 
 
+@np.function
 def _normalize_labels(labels: np.Tensor) -> np.Tensor:
     normed = labels / np.reduce_sum(labels)
     return normed
 
 
+@np.function
 def calc_mean_score(score_dist) -> np.Tensor:
     score_dist = _normalize_labels(score_dist)
     return np.reduce_sum((score_dist * np.range(1, 11, dtype=np.float32)))

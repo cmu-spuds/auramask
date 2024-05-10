@@ -31,33 +31,33 @@ class AuraMask(Model):
 
         filters = [n_filters * pow(2, i) for i in range(depth)]
 
-        self.model = models.unet_2d(
+        # self.model: Model = models.unet_2d(
+        #     (None, None, 3),
+        #     filters,
+        #     n_labels=n_dims,
+        #     stack_num_down=2,
+        #     stack_num_up=2,
+        #     activation="ReLU",
+        #     output_activation=None,
+        #     batch_norm=True,
+        #     pool="max",
+        #     unpool="nearest",
+        # )
+
+        self.model = models.r2_unet_2d(
             (None, None, 3),
             filters,
             n_labels=n_dims,
             stack_num_down=2,
             stack_num_up=2,
-            activation="ReLU",
+            recur_num=2,
+            activation="GELU",
             output_activation=None,
             batch_norm=True,
             pool="max",
             unpool="nearest",
+            name="r2unet",
         )
-
-        # self.model = models.r2_unet_2d(
-        #     (None, None, 3),
-        #     filters,
-        #     n_labels=n_dims,
-        #     stack_num_down=2,
-        #     stack_num_up=1,
-        #     recur_num=2,
-        #     activation='ReLU',
-        #     output_activation=None,
-        #     batch_norm=True,
-        #     pool='max',
-        #     unpool='nearest',
-        #     name='r2unet'
-        # )
 
     def call(self, inputs, training=False):
         if not training:
@@ -143,6 +143,9 @@ class AuraMask(Model):
             tloss = tf.add(tloss, tf.multiply(sim_loss, c_w))
 
         return tloss
+
+    def save(self, filepath, overwrite=True, save_format=None, **kwargs):
+        return self.model.save(filepath, overwrite, save_format, **kwargs)
 
     def compute_metrics(self, x, y, y_pred, sample_weight):
         del x

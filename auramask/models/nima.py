@@ -1,8 +1,9 @@
+import importlib
 from typing import Literal
 from keras.models import Model, load_model
 
 # from keras.layers import TFSMLayer
-from keras_cv.layers import Resizing
+import tensorflow as tf
 from os import path
 
 
@@ -26,7 +27,20 @@ class NIMA(Model):
         super().__init__(name=name, **kwargs)
         self.backbone = backbone
         self.kind = kind
-        self.augmenter = Resizing(224, 224)
+
+        if backbone == "inceptionresnetv2":
+            base_module = importlib.import_module(
+                "keras.applications.inception_resnet_v2"
+            )
+        elif backbone == "mobilenet":
+            base_module = importlib.import_module("keras.applications.mobilenet")
+        elif backbone == "nasnetmobile":
+            base_module = importlib.import_module("keras.applications.nasnet")
+        else:
+            raise ValueError("Provided invalid backbone option %s", backbone)
+
+        self.pp = getattr(base_module, "preprocess_input")
+        assert callable(self.pp)
 
         mdl_path = path.join(
             path.expanduser("~/compiled"), "nima_%s_%s.keras" % (kind, backbone)
@@ -39,5 +53,8 @@ class NIMA(Model):
         return {"name": self.name, "kind": self.kind, "backbone": self.backbone}
 
     def call(self, x):
-        x = self.augmenter(x)
+        x = tf.multiply(x, 255.0)
+        # tf.print("\nConverted: ", x.shape, x.dtype, tf.reduce_min(x), tf.reduce_max(x))
+        x = self.pp(x)
+        # tf.print("\nPreprocessed: ", x.shape, x.dtype, tf.reduce_min(x), tf.reduce_max(x))
         return self.net(x)
