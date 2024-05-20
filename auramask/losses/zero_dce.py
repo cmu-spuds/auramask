@@ -38,9 +38,9 @@ class ColorConstancyLoss(Loss):
     def call(self, y_true, y_pred):
         mean_rgb = tf.reduce_mean(y_pred, axis=(1, 2), keepdims=True)
         mean_red, mean_green, mean_blue = tf.split(mean_rgb, 3, axis=3)
-        difference_red_green = tf.square(mean_red - mean_green)
-        difference_red_blue = tf.square(mean_red - mean_blue)
-        difference_green_blue = tf.square(mean_blue - mean_green)
+        difference_red_green = tf.subtract(mean_red, mean_green)
+        difference_red_blue = tf.subtract(mean_red, mean_blue)
+        difference_green_blue = tf.subtract(mean_blue, mean_green)
         sum_of_squares = tf.sqrt(
             tf.square(difference_red_green)
             + tf.square(difference_red_blue)
@@ -123,15 +123,13 @@ class IlluminationSmoothnessLoss(Loss):
         To preserve the monotonicity relations between neighboring pixels, the
         *illumination smoothness loss* is added to each curve parameter map.
         """
-        x = tf.identity(y_pred)
-        batch_size = tf.shape(x)[0]
-        h_x = tf.shape(x)[1]
-        w_x = tf.shape(x)[2]
-        n_c = tf.shape(x)[3]
-        count_h = (w_x - 1) * n_c
-        count_w = w_x * (n_c - 1)
-        h_tv = tf.reduce_sum(tf.square((x[:, 1:, :, :] - x[:, : h_x - 1, :, :])))
-        w_tv = tf.reduce_sum(tf.square((x[:, :, 1:, :] - x[:, :, : w_x - 1, :])))
+        del y_true
+        batch_size, h, w, _ = y_pred.shape
+        count_h = (h - 1) * w
+        count_w = h * (w - 1)
+        dy, dx = tf.image.image_gradients(y_pred)
+        h_tv = tf.abs((y_pred[:, 1:, :, :] - y_pred[:, : h - 1, :, :]))
+        w_tv = tf.abs((y_pred[:, :, 1:, :] - y_pred[:, :, : w - 1, :]))
         batch_size = tf.cast(batch_size, dtype=tf.float32)
         count_h = tf.cast(count_h, dtype=tf.float32)
         count_w = tf.cast(count_w, dtype=tf.float32)
