@@ -9,7 +9,7 @@ from random import choice
 from string import ascii_uppercase
 
 import wandb
-from wandb.keras import WandbMetricsLogger
+from wandb.integration.keras import WandbMetricsLogger
 
 from auramask.callbacks.callbacks import AuramaskCallback, AuramaskCheckpoint
 
