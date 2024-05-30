@@ -3,8 +3,6 @@ import enum
 import hashlib
 import os
 from pathlib import Path
-from typing import Tuple
-from datasets import load_dataset
 from random import choice
 from string import ascii_uppercase
 
@@ -34,19 +32,8 @@ from auramask.models.auramask import AuraMask
 
 from auramask.utils.colorspace import ColorSpaceEnum
 from auramask.utils.datasets import DatasetEnum
-from auramask.utils.rotate import RandomRotatePairs
 
 import keras
-from keras.layers import CenterCrop
-from keras_cv.layers import (
-    Resizing,
-    Rescaling,
-    Augmenter,
-    RandAugment,
-    RandomFlip,
-    RandomTranslation,
-    RandomAugmentationPipeline,
-)
 from keras.optimizers import Adam
 from keras.losses import MeanSquaredError, MeanAbsoluteError
 
@@ -163,8 +150,8 @@ def parse_args():
         "--log", default=True, type=bool, action=argparse.BooleanOptionalAction
     )
     parser.add_argument("--log-dir", default=None, type=dir_path)
-    parser.add_argument("--t-split", type=str, default="train")
-    parser.add_argument("--v-split", type=str, default="test")
+    parser.add_argument("--t-split", type=str, required=True)
+    parser.add_argument("--v-split", type=str, required=True)
     parser.add_argument("--n-filters", type=int, default=64)
     parser.add_argument(
         "--eager", default=False, type=bool, action=argparse.BooleanOptionalAction
@@ -188,79 +175,28 @@ def parse_args():
         required=True,
     )
 
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    return args
 
 
 def load_data():
-    dataset, name, datakey = hparams["dataset"].value
-    hparams["dataset"] = dataset
-    (t_ds, v_ds) = load_dataset(
-        dataset,
-        name,
-        split=[hparams["t_split"], hparams["v_split"]],
-    )
+    ds: DatasetEnum = hparams["dataset"]
+    t_ds, v_ds = ds.fetch_dataset(hparams["t_split"], hparams["v_split"])
 
-    t_ds = t_ds.to_tf_dataset(batch_size=hparams["batch"], shuffle=True)
+    w, h = hparams["input"]
 
-    v_ds = v_ds.to_tf_dataset(batch_size=hparams["batch"])
+    # Create loader functions for use in tfds map
+    t_img_loader = ds.get_data_loader(w, h, augment=True)
+    v_img_loader = ds.get_data_loader(w, h, augment=False)
 
-    return get_data_generator(t_ds, datakey, True), get_data_generator(
-        v_ds, datakey, False
-    )
+    t_ds.set_transform(t_img_loader)
+    v_ds.set_transform(v_img_loader)
 
+    t_ds = t_ds.to_tf_dataset(batch_size=hparams["batch"], shuffle=True, prefetch=True)
+    v_ds = v_ds.to_tf_dataset(batch_size=hparams["batch"], prefetch=True)
 
-def get_data_generator(ds, keys: Tuple[str, str], augment: bool = True):
-    loader = Augmenter(
-        [
-            Rescaling(scale=1.0 / 255, offset=0),
-            Resizing(
-                hparams["input"][0], hparams["input"][1], crop_to_aspect_ratio=True
-            ),
-            CenterCrop(224, 224),
-        ]
-    )
-
-    geom_aug = Augmenter(
-        [
-            RandomAugmentationPipeline(
-                [
-                    RandomRotatePairs(factor=0.5),
-                    RandomFlip(mode="horizontal_and_vertical"),
-                    RandomTranslation(
-                        height_factor=0.2, width_factor=0.3, fill_mode="nearest"
-                    ),
-                ],
-                augmentations_per_image=1,
-                rate=0.5,
-            ),
-        ]
-    )
-
-    augmenter = Augmenter(
-        [
-            RandAugment(
-                value_range=(0, 1),
-                augmentations_per_image=1,
-                magnitude=0.2,
-                geometric=False,
-            ),
-        ]
-    )
-
-    def load_img(images, augment=True):
-        x = loader(images[keys[0]])
-        y = loader(images[keys[1]])
-        if augment:
-            data = geom_aug(
-                {"images": x, "segmentation_masks": y}
-            )  # Geometric augmentations
-            y = data["segmentation_masks"]  # Separate out target
-            x = augmenter(data["images"])  # Pixel-level modifications
-        return x, y
-
-    t_ds = ds.map(lambda x: load_img(x, augment), num_parallel_calls=-1)
-
-    return t_ds
+    return t_ds, v_ds
 
 
 def initialize_loss():

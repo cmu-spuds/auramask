@@ -4,7 +4,7 @@ from typing import Any, Dict, Literal
 
 import wandb
 from wandb.integration.keras.callbacks.model_checkpoint import SaveStrategy
-from wandb.keras import WandbEvalCallback, WandbModelCheckpoint
+from wandb.integration.keras import WandbEvalCallback, WandbModelCheckpoint
 from keras.preprocessing.image import array_to_img
 
 

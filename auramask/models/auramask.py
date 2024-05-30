@@ -174,6 +174,7 @@ class AuraMask(Model):
 
     @tf.function
     def train_step(self, data):
+        tf.print(data)
         X, y = data
 
         with tf.GradientTape() as tape:
