@@ -193,9 +193,16 @@ def load_data():
     t_ds.set_transform(t_img_loader)
     v_ds.set_transform(v_img_loader)
 
-    t_ds = t_ds.to_tf_dataset(batch_size=hparams["batch"], shuffle=True, prefetch=True)
-    v_ds = v_ds.to_tf_dataset(batch_size=hparams["batch"], prefetch=True)
-
+    t_ds = t_ds.to_tf_dataset(
+        batch_size=hparams["batch"],
+        shuffle=True,
+        columns=["x"],
+        label_cols=["y"],
+        prefetch=True,
+    )
+    v_ds = v_ds.to_tf_dataset(
+        batch_size=hparams["batch"], columns=["x"], label_cols=["y"], prefetch=True
+    )
     return t_ds, v_ds
 
 
@@ -434,7 +441,7 @@ def main():
         callbacks = None
 
     training_history = model.fit(
-        x=t_ds,
+        t_ds,
         callbacks=callbacks,
         epochs=hparams["epochs"],
         verbose=verbose,
