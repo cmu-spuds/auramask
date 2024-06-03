@@ -1,10 +1,14 @@
 import io
-from os import PathLike
+from os import PathLike, getenv, environ
 from typing import Any, Dict, Literal
 
 import wandb
+from wandb.integration.keras import (
+    WandbMetricsLogger,
+    WandbEvalCallback,
+    WandbModelCheckpoint,
+)
 from wandb.integration.keras.callbacks.model_checkpoint import SaveStrategy
-from wandb.integration.keras import WandbEvalCallback, WandbModelCheckpoint
 from keras.preprocessing.image import array_to_img
 
 
@@ -130,3 +134,47 @@ class AuramaskCheckpoint(WandbModelCheckpoint):
 
     def on_train_end(self, logs: Dict[SaveStrategy, float] | None = None) -> None:
         super().on_epoch_end(self.__cur_epoch, logs)
+
+
+def init_callbacks(hparams: dict, sample, logdir, note: str = ""):
+    checkpoint = hparams.pop("checkpoint")
+    tmp_hparams = hparams
+    tmp_hparams["color_space"] = (
+        tmp_hparams["color_space"].name if tmp_hparams["color_space"] else "rgb"
+    )
+    tmp_hparams["input"] = str(tmp_hparams["input"])
+
+    if getenv("SLURM_JOB_NAME") and getenv("SLURM_ARRAY_TASK_ID"):
+        name = "%s-%s" % (
+            environ["SLURM_JOB_NAME"],
+            environ["SLURM_ARRAY_TASK_ID"],
+        )
+    else:
+        name = None
+
+    callbacks = []
+    if getenv("WANDB_MODE") != "offline":
+        wandb.init(
+            project="auramask", dir=logdir, config=tmp_hparams, name=name, notes=note
+        )
+
+        if checkpoint:
+            callbacks.append(
+                AuramaskCheckpoint(
+                    filepath=logdir,
+                    freq_mode="epoch",
+                    save_weights_only=False,
+                    save_freq=int(getenv("AURAMASK_CHECKPOINT_FREQ", 100)),
+                )
+            )
+        callbacks.append(WandbMetricsLogger(log_freq="epoch"))
+        callbacks.append(
+            AuramaskCallback(
+                validation_data=sample,
+                data_table_columns=["idx", "orig", "aug"],
+                pred_table_columns=["epoch", "idx", "pred", "mask"],
+                log_freq=int(getenv("AURAMASK_LOG_FREQ", 5)),
+            )
+        )
+    # callbacks.append(LearningRateScheduler())
+    return callbacks

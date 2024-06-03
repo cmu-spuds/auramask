@@ -1,6 +1,7 @@
 from keras_cv.layers import (
     RandomRotation,
     Augmenter,
+    Equalization,
     Rescaling,
     Resizing,
     RandomAugmentationPipeline,
@@ -25,7 +26,7 @@ def gen_image_loading_layers(w: int, h: int, crop: bool = True) -> Augmenter:
     """
     return Augmenter(
         [
-            # Equalization(),
+            Equalization((0, 255)),
             Resizing(w, h, crop_to_aspect_ratio=True),
             Rescaling(scale=1.0 / 255, offset=0),
             CenterCrop(224, 224),

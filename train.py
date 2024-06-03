@@ -6,10 +6,7 @@ from pathlib import Path
 from random import choice
 from string import ascii_uppercase
 
-import wandb
-from wandb.integration.keras import WandbMetricsLogger
-
-from auramask.callbacks.callbacks import AuramaskCallback, AuramaskCheckpoint
+from auramask.callbacks.callbacks import init_callbacks
 
 from auramask.losses.ffl import FocalFrequencyLoss
 from auramask.losses.perceptual import PerceptualLoss
@@ -33,11 +30,10 @@ from auramask.models.auramask import AuraMask
 from auramask.utils.colorspace import ColorSpaceEnum
 from auramask.utils.datasets import DatasetEnum
 
-import keras
+import tensorflow as tf
+
 from keras.optimizers import Adam
 from keras.losses import MeanSquaredError, MeanAbsoluteError
-
-import tensorflow as tf
 
 from datetime import datetime
 
@@ -186,23 +182,41 @@ def load_data():
 
     w, h = hparams["input"]
 
-    # Create loader functions for use in tfds map
-    t_img_loader = ds.get_data_loader(w, h, augment=True)
-    v_img_loader = ds.get_data_loader(w, h, augment=False)
+    augmenters = DatasetEnum.get_augmenters(
+        {"w": w, "h": h, "crop": True},
+        {"augs_per_image": 1, "rate": 0.5},
+        {"augs_per_image": 1, "rate": 0.2, "magnitude": 0.5},
+    )
 
-    t_ds.set_transform(t_img_loader)
-    v_ds.set_transform(v_img_loader)
+    t_ds = (
+        t_ds.to_tf_dataset(
+            columns=ds.value[2],
+            batch_size=hparams["batch"],
+            collate_fn=DatasetEnum.data_collater,
+            collate_fn_args={"loader": augmenters["loader"]},
+            prefetch=True,
+        )
+        .map(
+            lambda x: DatasetEnum.data_augmenter(
+                x, augmenters["geom"], augmenters["aug"]
+            ),
+            num_parallel_calls=tf.data.AUTOTUNE,
+        )
+        .prefetch(tf.data.AUTOTUNE)
+    )
 
-    t_ds = t_ds.to_tf_dataset(
+    v_ds = v_ds.to_tf_dataset(
+        columns=ds.value[2],
         batch_size=hparams["batch"],
-        shuffle=True,
-        columns=["x"],
-        label_cols=["y"],
+        collate_fn=DatasetEnum.data_collater,
+        collate_fn_args={"loader": augmenters["loader"]},
         prefetch=True,
     )
-    v_ds = v_ds.to_tf_dataset(
-        batch_size=hparams["batch"], columns=["x"], label_cols=["y"], prefetch=True
-    )
+
+    # tfds.benchmark(v_ds)
+
+    # tfds.benchmark(t_ds)
+
     return t_ds, v_ds
 
 
@@ -309,19 +323,17 @@ def initialize_loss():
 
 
 def initialize_model():
-    with tf.device("gpu:0"):
-        model = AuraMask(
-            n_filters=hparams["n_filters"],
-            n_dims=3,
-            eps=hparams["epsilon"],
-            depth=hparams["depth"],
-            colorspace=hparams["color_space"].value,
-        )
+    model = AuraMask(
+        n_filters=hparams["n_filters"],
+        n_dims=3,
+        eps=hparams["epsilon"],
+        depth=hparams["depth"],
+        colorspace=hparams["color_space"].value,
+    )
 
     hparams["model"] = model.model.name
 
-    with tf.device("gpu:0"):
-        losses, losses_w, losses_t, metrics = initialize_loss()
+    losses, losses_w, losses_t, metrics = initialize_loss()
     optimizer = Adam(learning_rate=hparams["alpha"])
     model.compile(
         optimizer=optimizer,
@@ -335,9 +347,11 @@ def initialize_model():
 
 
 def set_seed():
+    from keras.utils import set_random_seed
+
     seed = hparams["seed"]
     seed = int(hashlib.sha256(seed.encode("utf-8")).hexdigest(), 16) % 10**8
-    keras.utils.set_random_seed(seed)
+    set_random_seed(seed)
     hparams["seed"] = seed
 
 
@@ -346,50 +360,6 @@ def get_sample_data(ds):
         inp = tf.identity(x)
         outp = tf.identity(y)
     return tf.stack([inp, outp])
-
-
-def init_callbacks(sample, logdir, note=""):
-    checkpoint = hparams.pop("checkpoint")
-    tmp_hparams = hparams
-    tmp_hparams["color_space"] = (
-        tmp_hparams["color_space"].name if tmp_hparams["color_space"] else "rgb"
-    )
-    tmp_hparams["input"] = str(tmp_hparams["input"])
-
-    if os.getenv("SLURM_JOB_NAME") and os.getenv("SLURM_ARRAY_TASK_ID"):
-        name = "%s-%s" % (
-            os.environ["SLURM_JOB_NAME"],
-            os.environ["SLURM_ARRAY_TASK_ID"],
-        )
-    else:
-        name = None
-
-    callbacks = []
-    if os.getenv("WANDB_MODE") != "offline":
-        wandb.init(
-            project="auramask", dir=logdir, config=tmp_hparams, name=name, notes=note
-        )
-
-        if checkpoint:
-            callbacks.append(
-                AuramaskCheckpoint(
-                    filepath=logdir,
-                    freq_mode="epoch",
-                    save_weights_only=False,
-                    save_freq=int(os.getenv("AURAMASK_CHECKPOINT_FREQ", 100)),
-                )
-            )
-        callbacks.append(WandbMetricsLogger(log_freq="epoch"))
-        callbacks.append(
-            AuramaskCallback(
-                validation_data=sample,
-                data_table_columns=["idx", "orig", "aug"],
-                pred_table_columns=["epoch", "idx", "pred", "mask"],
-                log_freq=int(os.getenv("AURAMASK_LOG_FREQ", 5)),
-            )
-        )
-    # callbacks.append(LearningRateScheduler())
-    return callbacks
 
 
 def main():
@@ -401,7 +371,6 @@ def main():
     logdir = hparams.pop("log_dir")
     note = hparams.pop("note")
     verbose = hparams.pop("verbose")
-    set_seed()
 
     # Load the training and validation data
     t_ds, v_ds = load_data()
@@ -436,9 +405,11 @@ def main():
         v = get_sample_data(v_ds)
         # t = get_sample_data(t_ds)
         model(v[0])
-        callbacks = init_callbacks(v, logdir, note)
+        callbacks = init_callbacks(hparams, v, logdir, note)
     else:
         callbacks = None
+
+    set_seed()
 
     training_history = model.fit(
         t_ds,
