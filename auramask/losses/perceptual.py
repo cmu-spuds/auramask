@@ -1,4 +1,4 @@
-from keras.losses import Loss
+from keras import Loss
 from auramask.models.lpips import LPIPS
 
 

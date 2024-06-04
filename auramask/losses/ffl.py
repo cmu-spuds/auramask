@@ -1,8 +1,6 @@
-import tensorflow as tf
-from keras.losses import Loss
+from keras import Loss, ops
 
 
-@tf.function
 def tensor2freq(x, patch_factor):
     _, h, w, _ = x.shape
 
@@ -21,13 +19,13 @@ def tensor2freq(x, patch_factor):
             )
 
     # stack to patch tensor
-    y = tf.stack(patch_list, axis=1)
+    y = ops.stack(patch_list, axis=1)
 
     # perform 2D DFT (real-to-complex, orthonormalization)
-    freq = tf.signal.fft2d(y)
-    freq_real = tf.math.real(freq) / freq.shape[-1]
-    freq_imag = tf.math.imag(freq) / freq.shape[-1]
-    freq = tf.stack([freq_real, freq_imag], axis=-1)
+    freq = ops.fft2(y)
+    freq_real = ops.real(freq) / freq.shape[-1]
+    freq_imag = ops.imag(freq) / freq.shape[-1]
+    freq = ops.stack([freq_real, freq_imag], axis=-1)
     return freq
 
 
@@ -57,8 +55,8 @@ class FocalFrequencyLoss(Loss):
         batch_matrix=False,
     ):
         super(FocalFrequencyLoss, self).__init__()
-        self.alpha = tf.constant(alpha, dtype=tf.float32)
-        self.patch_factor = tf.constant(patch_factor, tf.int32)
+        self.alpha = alpha
+        self.patch_factor = patch_factor
         self.ave_spectrum = ave_spectrum
         self.log_matrix = log_matrix
         self.batch_matrix = batch_matrix
@@ -71,31 +69,27 @@ class FocalFrequencyLoss(Loss):
         else:
             # if the matrix is calculated online: continuous, dynamic, based on current Euclidean distance
             matrix_tmp = (recon_freq - real_freq) ** 2
-            matrix_tmp = (
-                tf.math.sqrt(matrix_tmp[..., 0] + matrix_tmp[..., 1]) ** self.alpha
-            )
+            matrix_tmp = ops.sqrt(matrix_tmp[..., 0] + matrix_tmp[..., 1]) ** self.alpha
 
             # whether to adjust the spectrum weight matrix by logarithm
             if self.log_matrix:
-                matrix_tmp = tf.math.log(matrix_tmp + 1.0)
+                matrix_tmp = ops.log(matrix_tmp + 1.0)
 
             # whether to calculate the spectrum weight matrix using batch-based statistics
             if self.batch_matrix:
-                matrix_tmp = matrix_tmp / tf.math.reduce_max(matrix_tmp)
+                matrix_tmp = matrix_tmp / ops.amax(matrix_tmp)
             else:
                 matrix_tmp = (
                     matrix_tmp
-                    / tf.math.reduce_max(tf.reduce_max(matrix_tmp, axis=-1), axis=-1)[
+                    / ops.amax(ops.amax(matrix_tmp, axis=-1), axis=-1)[
                         :, :, :, None, None
                     ]
                 )
 
-            matrix_tmp = tf.where(
-                tf.math.is_nan(matrix_tmp), tf.zeros_like(matrix_tmp), matrix_tmp
+            matrix_tmp = ops.where(
+                ops.isnan(matrix_tmp), ops.zeros_like(matrix_tmp), matrix_tmp
             )
-            weight_matrix = tf.clip_by_value(
-                matrix_tmp, clip_value_min=0.0, clip_value_max=1.0
-            )
+            weight_matrix = ops.clip(matrix_tmp, clip_value_min=0.0, clip_value_max=1.0)
 
         # frequency distance using (squared) Euclidean distance
         tmp = (recon_freq - real_freq) ** 2
@@ -103,15 +97,15 @@ class FocalFrequencyLoss(Loss):
 
         # dynamic spectrum weighting (Hadamard product)
         loss = weight_matrix * freq_distance
-        return tf.math.reduce_mean(loss)
+        return ops.mean(loss)
 
     def call(self, pred, target, matrix=None, **kwargs):
         """Forward function to calculate focal frequency loss.
 
         Args:
-            pred (tf.Tensor): of shape (N, H, W, C). Predicted tensor.
-            target (tf.Tensor): of shape (N, H, W, C). Target tensor.
-            matrix (tf.Tensor, optional): Element-wise spectrum weight matrix.
+            pred (Tensor): of shape (N, H, W, C). Predicted tensor.
+            target (Tensor): of shape (N, H, W, C). Target tensor.
+            matrix (Tensor, optional): Element-wise spectrum weight matrix.
                 Default: None (If set to None: calculated online, dynamic).
         """
         pred_freq = tensor2freq(pred, self.patch_factor)
@@ -119,8 +113,8 @@ class FocalFrequencyLoss(Loss):
 
         # whether to use minibatch average spectrum
         if self.ave_spectrum:
-            pred_freq = tf.math.reduce_mean(pred_freq, axis=0, keepdim=True)
-            target_freq = tf.math.reduce_mean(target_freq, axis=0, keepdim=True)
+            pred_freq = ops.mean(pred_freq, axis=0, keepdim=True)
+            target_freq = ops.mean(target_freq, axis=0, keepdim=True)
 
         # calculate focal frequency loss
         return self.loss_formulation(pred_freq, target_freq, matrix)

@@ -32,8 +32,7 @@ from auramask.utils.datasets import DatasetEnum
 
 import tensorflow as tf
 
-from keras.optimizers import Adam
-from keras.losses import MeanSquaredError, MeanAbsoluteError
+from keras import optimizers as opts, losses as ls
 
 from datetime import datetime
 
@@ -267,10 +266,10 @@ def initialize_loss():
 
         for loss_i, w_i in iters:
             if loss_i == "mse":
-                tmp_loss = MeanSquaredError()
+                tmp_loss = ls.MeanSquaredError()
                 cs_transforms.append(False)
             elif loss_i == "mae":
-                tmp_loss = MeanAbsoluteError()
+                tmp_loss = ls.MeanAbsoluteError()
                 cs_transforms.append(False)
             elif loss_i == "ssim":
                 tmp_loss = (
@@ -335,7 +334,7 @@ def initialize_model():
     hparams["model"] = model.model.name
 
     losses, losses_w, losses_t, metrics = initialize_loss()
-    optimizer = Adam(learning_rate=hparams["alpha"])
+    optimizer = opts.Adam(learning_rate=hparams["alpha"])
     model.compile(
         optimizer=optimizer,
         loss=losses,

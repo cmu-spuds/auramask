@@ -1,12 +1,6 @@
 from typing import Callable
-import tensorflow as tf
-from keras import Model
-from keras.activations import tanh
-from keras.layers import Rescaling
-from keras.metrics import Mean
-from keras.losses import Loss
+from keras import ops, backend, layers, Model, Loss, metrics as m
 from keras_unet_collection import models
-# import keras.ops as np
 
 
 class AuraMask(Model):
@@ -27,7 +21,7 @@ class AuraMask(Model):
 
         self.colorspace = colorspace
 
-        self.inscale = Rescaling(2, offset=-1)
+        self.inscale = layers.Rescaling(2, offset=-1)
 
         filters = [n_filters * pow(2, i) for i in range(depth)]
 
@@ -65,10 +59,10 @@ class AuraMask(Model):
 
         mask = self.inscale(inputs)  # Scale to -1 to 1
         mask = self.model(mask)
-        mask = tanh(mask)
-        mask = tf.multiply(self.eps, mask)
-        out = tf.add(mask, inputs)
-        out = tf.clip_by_value(out, 0.0, 1.0)
+        mask = ops.tanh(mask)
+        mask = ops.multiply(self.eps, mask)
+        out = ops.add(mask, inputs)
+        out = ops.clip(out, 0.0, 1.0)
 
         if not training:
             out = self.colorspace[1](out)
@@ -104,7 +98,7 @@ class AuraMask(Model):
                 if isinstance(loss_i, Loss):
                     if w > 0:
                         self._custom_losses.append(
-                            (loss_i, Mean(name=loss_i.name), w, c)
+                            (loss_i, m.Mean(name=loss_i.name), w, c)
                         )
                     else:
                         del loss_i
@@ -126,12 +120,11 @@ class AuraMask(Model):
             **kwargs,
         )
 
-    @tf.function
     def compute_loss(self, x=None, y=None, y_pred=None, sample_weight=None):
         del x
         del sample_weight
-        tloss = tf.constant(0, dtype=tf.float32)  # tracked total loss
-        y_rgb = tf.stop_gradient(self.colorspace[1](y))  # computed rgb representation
+        tloss = 0  # tracked total loss
+        y_rgb = ops.stop_gradient(self.colorspace[1](y))  # computed rgb representation
         y_pred_rgb = self.colorspace[1](
             y_pred
         )  # computed rgb representation (with gradient passthrough only for hsv_to_rgb
@@ -140,7 +133,7 @@ class AuraMask(Model):
             tmp_y, tmp_pred = (y_rgb, y_pred_rgb) if c_c is True else (y, y_pred)
             sim_loss = model(tmp_y, tmp_pred)
             metric.update_state(sim_loss)
-            tloss = tf.add(tloss, tf.multiply(sim_loss, c_w))
+            tloss = ops.add(tloss, ops.multiply(sim_loss, c_w))
 
         return tloss
 
@@ -172,11 +165,20 @@ class AuraMask(Model):
 
         return all_metrics
 
-    @tf.function
-    def train_step(self, data):
+    def train_step(self, *args, **kwargs):
+        if backend.backend() == "jax":
+            return self._jax_train_step(*args, **kwargs)
+        elif backend.backend() == "tensorflow":
+            return self._tensorflow_train_step(*args, **kwargs)
+        elif backend.backend() == "torch":
+            return self._torch_train_step(*args, **kwargs)
+
+    def _tensorflow_train_step(self, data):
+        from tensorflow import GradientTape
+
         X, y = data
 
-        with tf.GradientTape() as tape:
+        with GradientTape() as tape:
             X = self.colorspace[0](X)
             y = self.colorspace[0](y)
             y_pred, _ = self(X, training=True)  # Forward pass

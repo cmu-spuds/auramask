@@ -1,23 +1,19 @@
 from typing import Literal
 
-# import keras.ops as np
-import tensorflow as np
-from keras.losses import Loss
+from keras import ops, KerasTensor, Loss
 
 from auramask.models.nima import NIMA
 from auramask.models.vila import VILA
 
 
-@np.function
-def _normalize_labels(labels: np.Tensor) -> np.Tensor:
-    normed = labels / np.reduce_sum(labels)
+def _normalize_labels(labels: KerasTensor) -> KerasTensor:
+    normed = labels / ops.reduce_sum(labels)
     return normed
 
 
-@np.function
-def calc_mean_score(score_dist) -> np.Tensor:
+def calc_mean_score(score_dist) -> KerasTensor:
     score_dist = _normalize_labels(score_dist)
-    return np.reduce_sum((score_dist * np.range(1, 11, dtype=np.float32)))
+    return ops.sum((score_dist * ops.arange(1, 11, dtype="float32")))
 
 
 class AestheticLoss(Loss):
@@ -55,9 +51,9 @@ class AestheticLoss(Loss):
     def get_config(self):
         return {"name": self.name, "model": self.model.name, "kind": self.model.kind}
 
-    def call(self, y_true: np.Tensor, y_pred: np.Tensor):
+    def call(self, y_true: KerasTensor, y_pred: KerasTensor):
         del y_true
         mean = self.model(y_pred)
-        mean = np.map_fn(calc_mean_score, mean)
-        mean = 1 - np.divide(mean, 10.0)  # Convert to [0, 1]
+        mean = ops.vectorized_map(calc_mean_score, mean)
+        mean = 1 - ops.divide(mean, 10.0)  # Convert to [0, 1]
         return mean

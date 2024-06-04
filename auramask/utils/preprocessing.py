@@ -1,19 +1,10 @@
-from keras_cv.layers import (
-    RandomRotation,
-    Augmenter,
-    Equalization,
-    Rescaling,
-    Resizing,
-    RandomAugmentationPipeline,
-    RandomFlip,
-    RandomTranslation,
-    RandAugment,
-)
-from keras.layers import CenterCrop
+from keras_cv import layers as clayers
+
+from keras import layers
 
 
 # TODO: the w and h refer to the resampled and not center-cropped. Could be misleading to some users.
-def gen_image_loading_layers(w: int, h: int, crop: bool = True) -> Augmenter:
+def gen_image_loading_layers(w: int, h: int, crop: bool = True) -> clayers.Augmenter:
     """Generate an image processing augmentation pipeline that converts the image to a [0,1] scale, resizes to w, h and center crops to 224, 224
 
     Args:
@@ -24,17 +15,19 @@ def gen_image_loading_layers(w: int, h: int, crop: bool = True) -> Augmenter:
     Returns:
         Augmenter: keras_cv.layers.Augmenter
     """
-    return Augmenter(
+    return clayers.Augmenter(
         [
-            Equalization((0, 255)),
-            Resizing(w, h, crop_to_aspect_ratio=True),
-            Rescaling(scale=1.0 / 255, offset=0),
-            CenterCrop(224, 224),
+            clayers.Equalization((0, 255)),
+            clayers.Resizing(w, h, crop_to_aspect_ratio=True),
+            clayers.Rescaling(scale=1.0 / 255, offset=0),
+            layers.CenterCrop(224, 224),
         ]
     )
 
 
-def gen_geometric_aug_layers(augs_per_image: int, rate: float = 10 / 11) -> Augmenter:
+def gen_geometric_aug_layers(
+    augs_per_image: int, rate: float = 10 / 11
+) -> clayers.Augmenter:
     """Generate an image processing augmentation pipeline that applies geometric modifications
     to the input images.
 
@@ -45,13 +38,13 @@ def gen_geometric_aug_layers(augs_per_image: int, rate: float = 10 / 11) -> Augm
     Returns:
         Augmenter: keras_cv.layers.Augmenter
     """
-    return Augmenter(
+    return clayers.Augmenter(
         [
-            RandomAugmentationPipeline(
+            clayers.RandomAugmentationPipeline(
                 [
                     RandomRotatePairs(factor=0.5),
-                    RandomFlip(mode="horizontal_and_vertical"),
-                    RandomTranslation(
+                    clayers.RandomFlip(mode="horizontal_and_vertical"),
+                    clayers.RandomTranslation(
                         height_factor=0.2, width_factor=0.3, fill_mode="nearest"
                     ),
                 ],
@@ -64,7 +57,7 @@ def gen_geometric_aug_layers(augs_per_image: int, rate: float = 10 / 11) -> Augm
 
 def gen_non_geometric_aug_layers(
     augs_per_image: int, rate: float = 10 / 11, magnitude: float = 0.2
-) -> Augmenter:
+) -> clayers.Augmenter:
     """Generate an image processing augmentation pipeline that applies non-geometric modifications
     to the input images.
 
@@ -76,9 +69,9 @@ def gen_non_geometric_aug_layers(
     Returns:
         Augmenter: keras_cv.layers.Augmenter
     """
-    return Augmenter(
+    return clayers.Augmenter(
         [
-            RandAugment(
+            clayers.RandAugment(
                 value_range=(0, 1),
                 augmentations_per_image=augs_per_image,
                 magnitude=magnitude,
@@ -89,7 +82,7 @@ def gen_non_geometric_aug_layers(
     )
 
 
-class RandomRotatePairs(RandomRotation):
+class RandomRotatePairs(clayers.RandomRotation):
     """Custom random rotation class to rotate both the X data and its paired Y data.
 
     Args:

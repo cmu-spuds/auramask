@@ -1,5 +1,5 @@
 import tensorflow_hub as hub
-from keras.models import Model
+from keras import Model
 
 
 class VILA(Model):

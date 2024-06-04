@@ -1,4 +1,4 @@
-from keras.losses import Loss
+from keras import Loss
 import tensorflow as tf
 from tensorflow.python.ops.image_ops_impl import (
     _ssim_per_channel,

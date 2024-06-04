@@ -9,7 +9,7 @@ from wandb.integration.keras import (
     WandbModelCheckpoint,
 )
 from wandb.integration.keras.callbacks.model_checkpoint import SaveStrategy
-from keras.preprocessing.image import array_to_img
+from keras import preprocessing
 
 
 def get_model_summary(model):
@@ -60,8 +60,13 @@ class AuramaskCallback(WandbEvalCallback):
 
         wandb.log(
             {
-                "image": [wandb.Image(array_to_img(y_i)) for y_i in y[:5]],
-                "mask": [wandb.Image(array_to_img(m_i)) for m_i in mask[:5]],
+                "image": [
+                    wandb.Image(preprocessing.image.array_to_img(y_i)) for y_i in y[:5]
+                ],
+                "mask": [
+                    wandb.Image(preprocessing.image.array_to_img(m_i))
+                    for m_i in mask[:5]
+                ],
             },
             step=epoch + 1,
         )

@@ -1,9 +1,6 @@
 import importlib
 from typing import Literal
-from keras.models import Model, load_model
-
-# from keras.layers import TFSMLayer
-import tensorflow as tf
+from keras import Model, ops, saving
 from os import path
 
 
@@ -46,14 +43,14 @@ class NIMA(Model):
             path.expanduser("~/compiled"), "nima_%s_%s.keras" % (kind, backbone)
         )
 
-        self.net = load_model(mdl_path)
+        self.net = saving.load_model(mdl_path)
         # self.net = TFSMLayer(mdl_path, call_endpoint='serve')
 
     def get_config(self):
         return {"name": self.name, "kind": self.kind, "backbone": self.backbone}
 
     def call(self, x):
-        x = tf.multiply(x, 255.0)
+        x = ops.multiply(x, 255.0)
         # tf.print("\nConverted: ", x.shape, x.dtype, tf.reduce_min(x), tf.reduce_max(x))
         x = self.pp(x)
         # tf.print("\nPreprocessed: ", x.shape, x.dtype, tf.reduce_min(x), tf.reduce_max(x))

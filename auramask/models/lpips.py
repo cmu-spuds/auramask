@@ -1,11 +1,6 @@
 from typing import Literal
-from keras.models import Model, load_model
-from keras.layers import Layer
-from keras_cv.layers import Resizing
-from keras.initializers import Zeros
-
-# import keras.ops as np
-from tensorflow import squeeze
+from keras import Model, Layer, ops, saving
+from keras_cv import layers
 from os import path
 
 
@@ -19,7 +14,7 @@ class WeightLayer(Layer):
             shape=weight_shape,
             dtype=weight_dtype,
             trainable=trainable,
-            initializer=Zeros(),
+            initializer="zeros",
         )
 
     def get_config(self):
@@ -58,8 +53,10 @@ class LPIPS(Model):
             path.expanduser("~/compiled"),
             "lpips_%s%s.keras" % (backbone, "spatial" if spatial else ""),
         )
-        self.augmenter = Resizing(64, 64)
-        self.net = load_model(mdl_path, custom_objects={"WeightLayer": WeightLayer})
+        self.augmenter = layers.Resizing(64, 64)
+        self.net = saving.load_model(
+            mdl_path, custom_objects={"WeightLayer": WeightLayer}
+        )
 
     def get_config(self):
         return {
@@ -69,4 +66,4 @@ class LPIPS(Model):
 
     def call(self, x):
         y_true, y_pred = x
-        return squeeze(self.net([self.augmenter(y_true), self.augmenter(y_pred)]))
+        return ops.squeeze(self.net([self.augmenter(y_true), self.augmenter(y_pred)]))

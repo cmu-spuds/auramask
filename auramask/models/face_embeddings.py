@@ -3,7 +3,7 @@ from typing import Literal
 from deepface.DeepFace import build_model
 from deepface.modules.verification import find_threshold
 from keras import Sequential
-from keras_cv.layers import Resizing, Rescaling
+from keras_cv import layers as cvl
 
 
 # TODO: Concrete function execution (https://medium.com/tinyclues-vision/optimizing-tensorflow-models-for-inference-d3636cf34034)
@@ -19,11 +19,11 @@ class FaceEmbedEnum(str, Enum):
     def get_model(self):
         d_model = build_model(model_name=self.value)
         shape = d_model.input_shape[::-1]
-        layers = [Resizing(shape[0], shape[1])]
+        layers = [cvl.Resizing(shape[0], shape[1])]
         if self == FaceEmbedEnum.ARCFACE or self == FaceEmbedEnum.FACENET:
-            layers.append(Rescaling(2, offset=-1))  # convert to [-1,1]
+            layers.append(cvl.Rescaling(2, offset=-1))  # convert to [-1,1]
         elif self == FaceEmbedEnum.VGGFACE:
-            layers.append(Rescaling(255, offset=0))  # convert to [0, 256)
+            layers.append(cvl.Rescaling(255, offset=0))  # convert to [0, 256)
         # print(d_model.model)
         layers.append(d_model.model)
         model = Sequential(layers=layers, name=self.name)
