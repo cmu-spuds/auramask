@@ -17,7 +17,7 @@ def gen_image_loading_layers(w: int, h: int, crop: bool = True) -> clayers.Augme
     """
     return clayers.Augmenter(
         [
-            clayers.Equalization((0, 255)),
+            # clayers.Equalization((0, 255)),
             clayers.Resizing(w, h, crop_to_aspect_ratio=True),
             clayers.Rescaling(scale=1.0 / 255, offset=0),
             layers.CenterCrop(224, 224),

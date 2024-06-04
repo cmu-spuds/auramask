@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Any, Callable
 from keras import ops, backend, layers, Model, Loss, metrics as m
 from keras_unet_collection import models
 
@@ -71,17 +71,16 @@ class AuraMask(Model):
 
     def compile(
         self,
-        optimizer="rmsprop",
-        loss=None,
-        metrics=None,
-        loss_weights=None,
+        optimizer: str = "rmsprop",
+        loss: Any | None = None,
+        loss_weights: Any | None = None,
         loss_convert=None,
-        weighted_metrics=None,
-        run_eagerly=None,
-        steps_per_execution=None,
-        jit_compile=None,
-        pss_evaluation_shards=0,
-        **kwargs,
+        metrics: Any | None = None,
+        weighted_metrics: Any | None = None,
+        run_eagerly: bool = False,
+        steps_per_execution: int = 1,
+        jit_compile: str = "auto",
+        auto_scale_loss: bool = True,
     ):
         self._metrics = metrics
         if isinstance(loss, list):
@@ -108,16 +107,15 @@ class AuraMask(Model):
                         loss_weights.append(w)
 
         return super().compile(
-            optimizer,
-            loss,
-            None,
-            loss_weights,
-            weighted_metrics,
-            run_eagerly,
-            steps_per_execution,
-            jit_compile,
-            pss_evaluation_shards,
-            **kwargs,
+            optimizer=optimizer,
+            loss=loss,
+            loss_weights=loss_weights,
+            metrics=metrics,
+            weighted_metrics=weighted_metrics,
+            run_eagerly=run_eagerly,
+            steps_per_execution=steps_per_execution,
+            jit_compile=jit_compile,
+            auto_scale_loss=auto_scale_loss,
         )
 
     def compute_loss(self, x=None, y=None, y_pred=None, sample_weight=None):

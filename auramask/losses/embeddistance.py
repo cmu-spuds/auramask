@@ -60,13 +60,11 @@ class FaceEmbeddingThresholdLoss(FaceEmbeddingLoss):
         **kwargs,
     ):
         super().__init__(f=f, d=d, name=name, reduction=reduction, **kwargs)
-        self.threshold = ops.constant(threshold, "float32")
+        self.threshold = threshold
 
     def get_config(self) -> dict:
         base_config = super().get_config()
-        config = {
-            "threshold": ops.strings.as_string(self.threshold, precision=2).numpy()
-        }
+        config = {"threshold": self.threshold}
         return {**base_config, **config}
 
     def call(self, y_true: KerasTensor, y_pred: KerasTensor) -> KerasTensor:
@@ -89,7 +87,7 @@ class EmbeddingDistanceLoss(Loss):
     def __init__(self, F, name="EmbeddingsLoss", **kwargs):
         super().__init__(name=name, **kwargs)
         self.F = FaceEmbedEnum.build_F(F)
-        self.N = ops.constant(len(F), dtype="float32")
+        self.N = len(F)
         self.f = F
 
     def get_config(self) -> dict:
