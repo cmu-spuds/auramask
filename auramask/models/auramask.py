@@ -31,33 +31,33 @@ class AuraMask(Model):
 
         filters = [n_filters * pow(2, i) for i in range(depth)]
 
-        # self.model: Model = models.unet_2d(
-        #     (None, None, 3),
-        #     filters,
-        #     n_labels=n_dims,
-        #     stack_num_down=2,
-        #     stack_num_up=2,
-        #     activation="ReLU",
-        #     output_activation=None,
-        #     batch_norm=True,
-        #     pool="max",
-        #     unpool="nearest",
-        # )
-
-        self.model = models.r2_unet_2d(
+        self.model: Model = models.unet_2d(
             (None, None, 3),
             filters,
             n_labels=n_dims,
             stack_num_down=2,
             stack_num_up=2,
-            recur_num=2,
-            activation="GELU",
+            activation="ReLU",
             output_activation=None,
             batch_norm=True,
             pool="max",
             unpool="nearest",
-            name="r2unet",
         )
+
+        # self.model = models.r2_unet_2d(
+        #     (None, None, 3),
+        #     filters,
+        #     n_labels=n_dims,
+        #     stack_num_down=2,
+        #     stack_num_up=2,
+        #     recur_num=2,
+        #     activation="GELU",
+        #     output_activation=None,
+        #     batch_norm=True,
+        #     pool="max",
+        #     unpool="nearest",
+        #     name="r2unet",
+        # )
 
     def call(self, inputs, training=False):
         if not training:
@@ -196,11 +196,11 @@ class AuraMask(Model):
         return metrics
 
     def test_step(self, data):
-        X, y = data
+        X = data
 
         y_pred, _ = self(X, training=False)
 
-        y = self.colorspace[0](y)
+        y = self.colorspace[0](X)
         y_pred = self.colorspace[0](y_pred)
 
         # Updates stateful loss metrics.

@@ -3,15 +3,10 @@ import enum
 import hashlib
 import os
 from pathlib import Path
-from typing import Tuple
-from datasets import load_dataset
 from random import choice
 from string import ascii_uppercase
 
-import wandb
-from wandb.integration.keras import WandbMetricsLogger
-
-from auramask.callbacks.callbacks import AuramaskCallback, AuramaskCheckpoint
+from auramask.callbacks.callbacks import init_callbacks
 
 from auramask.losses.ffl import FocalFrequencyLoss
 from auramask.losses.perceptual import PerceptualLoss
@@ -34,23 +29,11 @@ from auramask.models.auramask import AuraMask
 
 from auramask.utils.colorspace import ColorSpaceEnum
 from auramask.utils.datasets import DatasetEnum
-from auramask.utils.rotate import RandomRotatePairs
-
-import keras
-from keras.layers import CenterCrop
-from keras_cv.layers import (
-    Resizing,
-    Rescaling,
-    Augmenter,
-    RandAugment,
-    RandomFlip,
-    RandomTranslation,
-    RandomAugmentationPipeline,
-)
-from keras.optimizers import Adam
-from keras.losses import MeanSquaredError, MeanAbsoluteError
 
 import tensorflow as tf
+
+from keras.optimizers import Adam
+from keras.losses import MeanSquaredError, MeanAbsoluteError
 
 from datetime import datetime
 
@@ -163,15 +146,15 @@ def parse_args():
         "--log", default=True, type=bool, action=argparse.BooleanOptionalAction
     )
     parser.add_argument("--log-dir", default=None, type=dir_path)
-    parser.add_argument("--t-split", type=str, default="train")
-    parser.add_argument("--v-split", type=str, default="test")
+    parser.add_argument("--t-split", type=str, required=True)
+    parser.add_argument("--v-split", type=str, required=True)
     parser.add_argument("--n-filters", type=int, default=64)
     parser.add_argument(
         "--eager", default=False, type=bool, action=argparse.BooleanOptionalAction
     )
     parser.add_argument("-v", "--verbose", default=1, type=int)
     parser.add_argument(
-        "--note", default=True, type=bool, action=argparse.BooleanOptionalAction
+        "--note", default=False, type=bool, action=argparse.BooleanOptionalAction
     )
     parser.add_argument(
         "-C", "--color-space", type=ColorSpaceEnum, action=EnumAction, required=True
@@ -188,79 +171,54 @@ def parse_args():
         required=True,
     )
 
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    return args
 
 
 def load_data():
-    dataset, name, datakey = hparams["dataset"].value
-    hparams["dataset"] = dataset
-    (t_ds, v_ds) = load_dataset(
-        dataset,
-        name,
-        split=[hparams["t_split"], hparams["v_split"]],
+    ds: DatasetEnum = hparams["dataset"]
+    t_ds, v_ds = ds.fetch_dataset(hparams["t_split"], hparams["v_split"])
+
+    w, h = hparams["input"]
+
+    augmenters = DatasetEnum.get_augmenters(
+        {"w": w, "h": h, "crop": True},
+        {"augs_per_image": 1, "rate": 0.5},
+        {"augs_per_image": 1, "rate": 0.2, "magnitude": 0.5},
     )
 
-    t_ds = t_ds.to_tf_dataset(batch_size=hparams["batch"], shuffle=True)
-
-    v_ds = v_ds.to_tf_dataset(batch_size=hparams["batch"])
-
-    return get_data_generator(t_ds, datakey, True), get_data_generator(
-        v_ds, datakey, False
-    )
-
-
-def get_data_generator(ds, keys: Tuple[str, str], augment: bool = True):
-    loader = Augmenter(
-        [
-            Rescaling(scale=1.0 / 255, offset=0),
-            Resizing(
-                hparams["input"][0], hparams["input"][1], crop_to_aspect_ratio=True
+    t_ds = (
+        t_ds.to_tf_dataset(
+            columns=ds.value[2],
+            batch_size=hparams["batch"],
+            collate_fn=DatasetEnum.data_collater,
+            collate_fn_args={"loader": augmenters["loader"]},
+            prefetch=True,
+            shuffle=True,
+        )
+        .map(
+            lambda x: DatasetEnum.data_augmenter(
+                x, augmenters["geom"], augmenters["aug"]
             ),
-            CenterCrop(224, 224),
-        ]
+            num_parallel_calls=tf.data.AUTOTUNE,
+        )
+        .prefetch(tf.data.AUTOTUNE)
     )
 
-    geom_aug = Augmenter(
-        [
-            RandomAugmentationPipeline(
-                [
-                    RandomRotatePairs(factor=0.5),
-                    RandomFlip(mode="horizontal_and_vertical"),
-                    RandomTranslation(
-                        height_factor=0.2, width_factor=0.3, fill_mode="nearest"
-                    ),
-                ],
-                augmentations_per_image=1,
-                rate=0.5,
-            ),
-        ]
+    v_ds = v_ds.to_tf_dataset(
+        columns=ds.value[2],
+        batch_size=hparams["batch"],
+        collate_fn=DatasetEnum.data_collater,
+        collate_fn_args={"loader": augmenters["loader"]},
+        prefetch=True,
     )
 
-    augmenter = Augmenter(
-        [
-            RandAugment(
-                value_range=(0, 1),
-                augmentations_per_image=1,
-                magnitude=0.2,
-                geometric=False,
-            ),
-        ]
-    )
+    # tfds.benchmark(v_ds)
 
-    def load_img(images, augment=True):
-        x = loader(images[keys[0]])
-        y = loader(images[keys[1]])
-        if augment:
-            data = geom_aug(
-                {"images": x, "segmentation_masks": y}
-            )  # Geometric augmentations
-            y = data["segmentation_masks"]  # Separate out target
-            x = augmenter(data["images"])  # Pixel-level modifications
-        return x, y
+    # tfds.benchmark(t_ds)
 
-    t_ds = ds.map(lambda x: load_img(x, augment), num_parallel_calls=-1)
-
-    return t_ds
+    return t_ds, v_ds
 
 
 def initialize_loss():
@@ -366,19 +324,17 @@ def initialize_loss():
 
 
 def initialize_model():
-    with tf.device("gpu:0"):
-        model = AuraMask(
-            n_filters=hparams["n_filters"],
-            n_dims=3,
-            eps=hparams["epsilon"],
-            depth=hparams["depth"],
-            colorspace=hparams["color_space"].value,
-        )
+    model = AuraMask(
+        n_filters=hparams["n_filters"],
+        n_dims=3,
+        eps=hparams["epsilon"],
+        depth=hparams["depth"],
+        colorspace=hparams["color_space"].value,
+    )
 
     hparams["model"] = model.model.name
 
-    with tf.device("gpu:0"):
-        losses, losses_w, losses_t, metrics = initialize_loss()
+    losses, losses_w, losses_t, metrics = initialize_loss()
     optimizer = Adam(learning_rate=hparams["alpha"])
     model.compile(
         optimizer=optimizer,
@@ -392,61 +348,18 @@ def initialize_model():
 
 
 def set_seed():
+    from keras.utils import set_random_seed
+
     seed = hparams["seed"]
     seed = int(hashlib.sha256(seed.encode("utf-8")).hexdigest(), 16) % 10**8
-    keras.utils.set_random_seed(seed)
+    set_random_seed(seed)
     hparams["seed"] = seed
 
 
 def get_sample_data(ds):
-    for x, y in ds.take(1):
-        inp = tf.identity(x)
-        outp = tf.identity(y)
-    return tf.stack([inp, outp])
-
-
-def init_callbacks(sample, logdir, note=""):
-    checkpoint = hparams.pop("checkpoint")
-    tmp_hparams = hparams
-    tmp_hparams["color_space"] = (
-        tmp_hparams["color_space"].name if tmp_hparams["color_space"] else "rgb"
-    )
-    tmp_hparams["input"] = str(tmp_hparams["input"])
-
-    if os.getenv("SLURM_JOB_NAME") and os.getenv("SLURM_ARRAY_TASK_ID"):
-        name = "%s-%s" % (
-            os.environ["SLURM_JOB_NAME"],
-            os.environ["SLURM_ARRAY_TASK_ID"],
-        )
-    else:
-        name = None
-
-    callbacks = []
-    if os.getenv("WANDB_MODE") != "offline":
-        wandb.init(
-            project="auramask", dir=logdir, config=tmp_hparams, name=name, notes=note
-        )
-
-        if checkpoint:
-            callbacks.append(
-                AuramaskCheckpoint(
-                    filepath=logdir,
-                    freq_mode="epoch",
-                    save_weights_only=False,
-                    save_freq=int(os.getenv("AURAMASK_CHECKPOINT_FREQ", 100)),
-                )
-            )
-        callbacks.append(WandbMetricsLogger(log_freq="epoch"))
-        callbacks.append(
-            AuramaskCallback(
-                validation_data=sample,
-                data_table_columns=["idx", "orig", "aug"],
-                pred_table_columns=["epoch", "idx", "pred", "mask"],
-                log_freq=int(os.getenv("AURAMASK_LOG_FREQ", 5)),
-            )
-        )
-    # callbacks.append(LearningRateScheduler())
-    return callbacks
+    for x in ds.take(1):
+        inp = x[:8]
+    return inp
 
 
 def main():
@@ -458,7 +371,6 @@ def main():
     logdir = hparams.pop("log_dir")
     note = hparams.pop("note")
     verbose = hparams.pop("verbose")
-    set_seed()
 
     # Load the training and validation data
     t_ds, v_ds = load_data()
@@ -492,13 +404,15 @@ def main():
         logdir = str(logdir)
         v = get_sample_data(v_ds)
         # t = get_sample_data(t_ds)
-        model(v[0])
-        callbacks = init_callbacks(v, logdir, note)
+        # model(v[0])
+        callbacks = init_callbacks(hparams, v, logdir, note)
     else:
         callbacks = None
 
+    set_seed()
+
     training_history = model.fit(
-        x=t_ds,
+        t_ds,
         callbacks=callbacks,
         epochs=hparams["epochs"],
         verbose=verbose,
