@@ -154,7 +154,7 @@ def parse_args():
     )
     parser.add_argument("-v", "--verbose", default=1, type=int)
     parser.add_argument(
-        "--note", default=True, type=bool, action=argparse.BooleanOptionalAction
+        "--note", default=False, type=bool, action=argparse.BooleanOptionalAction
     )
     parser.add_argument(
         "-C", "--color-space", type=ColorSpaceEnum, action=EnumAction, required=True
@@ -195,6 +195,7 @@ def load_data():
             collate_fn=DatasetEnum.data_collater,
             collate_fn_args={"loader": augmenters["loader"]},
             prefetch=True,
+            shuffle=True,
         )
         .map(
             lambda x: DatasetEnum.data_augmenter(
@@ -356,10 +357,9 @@ def set_seed():
 
 
 def get_sample_data(ds):
-    for x, y in ds.take(1):
-        inp = tf.identity(x)
-        outp = tf.identity(y)
-    return tf.stack([inp, outp])
+    for x in ds.take(1):
+        inp = x[:8]
+    return inp
 
 
 def main():
@@ -404,7 +404,7 @@ def main():
         logdir = str(logdir)
         v = get_sample_data(v_ds)
         # t = get_sample_data(t_ds)
-        model(v[0])
+        # model(v[0])
         callbacks = init_callbacks(hparams, v, logdir, note)
     else:
         callbacks = None

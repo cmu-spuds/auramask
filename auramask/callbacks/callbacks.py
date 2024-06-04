@@ -36,7 +36,8 @@ class AuramaskCallback(WandbEvalCallback):
         super().__init__(
             data_table_columns=data_table_columns, pred_table_columns=pred_table_columns
         )
-        self.x, self.y = validation_data
+        self.x = validation_data
+        self.y = validation_data
         self.log_freq = log_freq
         self.__cur_epoch = 0
 
