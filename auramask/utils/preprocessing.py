@@ -9,7 +9,7 @@ from keras_cv.layers import (
     RandomTranslation,
     RandAugment,
 )
-from keras.layers import CenterCrop, Lambda, Normalization
+from keras.layers import CenterCrop, Lambda
 
 
 # TODO: the w and h refer to the resampled and not center-cropped. Could be misleading to some users.
@@ -30,7 +30,6 @@ def gen_image_loading_layers(w: int, h: int, crop: bool = True):
             Resizing(w, h, crop_to_aspect_ratio=crop),
             CenterCrop(224, 224),
             Lambda(preprocess_input, arguments={"data_format": format, "mode": "tf"}),
-            Normalization(mean=0.0, variance=1.0),
         ]
     )
 

@@ -5,6 +5,7 @@ from typing import Literal
 # from deepface.modules.verification import find_threshold
 from keras import layers
 
+from auramask.models.arcface import ArcFace
 from auramask.models.facenet import FaceNet
 from auramask.models.vggface import VggFace
 
@@ -20,7 +21,13 @@ class FaceEmbedEnum(str, Enum):
     ARCFACE = "ArcFace"
 
     def get_model(self):
-        input = layers.Input((None, None, 3))
+        input = layers.Input(
+            (
+                None,
+                None,
+                3,
+            )
+        )
         x = layers.Rescaling(255, offset=0)(input)  # convert to [0, 255]
         if self == FaceEmbedEnum.VGGFACE:
             x = layers.Resizing(224, 224)(input)
@@ -28,10 +35,14 @@ class FaceEmbedEnum(str, Enum):
         elif self == FaceEmbedEnum.FACENET:
             x = layers.Resizing(160, 160)(input)
             model = FaceNet(input_tensor=x)
-        # elif self == FaceEmbedEnum.ARCFACE or self == FaceEmbedEnum.FACENET:
+        elif self == FaceEmbedEnum.FACENET512:
+            x = layers.Resizing(160, 160)(input)
+            model = FaceNet(input_tensor=x, classes=512)
+        elif self == FaceEmbedEnum.ARCFACE:
+            x = layers.Resizing(112, 112)(input)
+            model = ArcFace(input_tensor=x)
 
         model.trainable = False
-        # print(model.summary())
         return model
 
         # elif self == FaceEmbedEnum.VGGFACE:
