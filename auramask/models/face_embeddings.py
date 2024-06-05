@@ -4,7 +4,6 @@ from typing import Literal
 # from deepface.DeepFace import build_model
 # from deepface.modules.verification import find_threshold
 from keras import layers
-from keras_cv.layers import Resizing, Rescaling
 
 from auramask.models.facenet import FaceNet
 from auramask.models.vggface import VggFace
@@ -22,16 +21,17 @@ class FaceEmbedEnum(str, Enum):
 
     def get_model(self):
         input = layers.Input((None, None, 3))
+        x = layers.Rescaling(255, offset=0)(input)  # convert to [0, 255]
         if self == FaceEmbedEnum.VGGFACE:
-            x = Resizing(224, 224)(input)
-            x = Rescaling(255, offset=0)(x)  # convert to [0, 256)
+            x = layers.Resizing(224, 224)(input)
             model = VggFace(include_top=False, input_tensor=x)
-        if self == FaceEmbedEnum.ARCFACE or self == FaceEmbedEnum.FACENET:
-            x = Resizing(160, 160)(input)
-            x = Rescaling(2, offset=-1)(x)  # convert to [-1,1]
+        elif self == FaceEmbedEnum.FACENET:
+            x = layers.Resizing(160, 160)(input)
             model = FaceNet(input_tensor=x)
+        # elif self == FaceEmbedEnum.ARCFACE or self == FaceEmbedEnum.FACENET:
+
         model.trainable = False
-        print(model.summary())
+        # print(model.summary())
         return model
 
         # elif self == FaceEmbedEnum.VGGFACE:

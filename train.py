@@ -39,6 +39,8 @@ from datetime import datetime
 
 from git import Repo
 
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"
+
 branch = Repo("./").active_branch.name  # Used for debugging runs
 
 # Global hparams object
@@ -214,9 +216,17 @@ def load_data():
         prefetch=True,
     )
 
-    # tfds.benchmark(v_ds)
+    # import tensorflow_datasets as tfds
 
+    # for example in v_ds.take(1):
+    #     print(example)
+    #     print(tf.reduce_mean(example, axis=[-1,-2,-3]), tf.math.reduce_std(example, axis=[-1,-2,-3]))
+    #     print(tf.reduce_max(example, axis=[-1,-2,-3]), tf.reduce_min(example, axis=[-1,-2,-3]))
+
+    # tfds.benchmark(v_ds)
     # tfds.benchmark(t_ds)
+
+    # exit()
 
     return t_ds, v_ds
 

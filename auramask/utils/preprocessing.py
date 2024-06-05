@@ -1,19 +1,19 @@
+from keras import backend
+from keras.applications.imagenet_utils import preprocess_input
 from keras_cv.layers import (
     RandomRotation,
     Augmenter,
-    # Equalization,
-    Rescaling,
     Resizing,
     RandomAugmentationPipeline,
     RandomFlip,
     RandomTranslation,
     RandAugment,
 )
-from keras.layers import CenterCrop
+from keras.layers import CenterCrop, Lambda, Normalization
 
 
 # TODO: the w and h refer to the resampled and not center-cropped. Could be misleading to some users.
-def gen_image_loading_layers(w: int, h: int, crop: bool = True) -> Augmenter:
+def gen_image_loading_layers(w: int, h: int, crop: bool = True):
     """Generate an image processing augmentation pipeline that converts the image to a [0,1] scale, resizes to w, h and center crops to 224, 224
 
     Args:
@@ -24,12 +24,13 @@ def gen_image_loading_layers(w: int, h: int, crop: bool = True) -> Augmenter:
     Returns:
         Augmenter: keras_cv.layers.Augmenter
     """
+    format = backend.image_data_format()
     return Augmenter(
         [
-            # Equalization((0, 255)),
-            Resizing(w, h, crop_to_aspect_ratio=True),
-            Rescaling(scale=1.0 / 255, offset=0),
+            Resizing(w, h, crop_to_aspect_ratio=crop),
             CenterCrop(224, 224),
+            Lambda(preprocess_input, arguments={"data_format": format, "mode": "tf"}),
+            Normalization(mean=0.0, variance=1.0),
         ]
     )
 
@@ -79,7 +80,7 @@ def gen_non_geometric_aug_layers(
     return Augmenter(
         [
             RandAugment(
-                value_range=(0, 1),
+                value_range=(-1, 1),
                 augmentations_per_image=augs_per_image,
                 magnitude=magnitude,
                 geometric=False,
