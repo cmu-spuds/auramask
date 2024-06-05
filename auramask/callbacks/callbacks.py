@@ -41,6 +41,15 @@ class AuramaskCallback(WandbEvalCallback):
         self.log_freq = log_freq
         self.__cur_epoch = 0
 
+    def on_train_begin(self, logs: Dict[SaveStrategy, float] | None = None) -> None:
+        wandb.log(
+            {
+                "image": [wandb.Image(array_to_img(y_i)) for y_i in self.y[:5]],
+            },
+            step=0,
+        )
+        return super().on_train_begin(logs)
+
     def on_epoch_end(
         self, epoch: int, logs: Dict[SaveStrategy, float] | None = None
     ) -> None:

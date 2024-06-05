@@ -126,7 +126,6 @@ class AuraMask(Model):
             **kwargs,
         )
 
-    @tf.function
     def compute_loss(self, x=None, y=None, y_pred=None, sample_weight=None):
         del x
         del sample_weight
@@ -172,7 +171,6 @@ class AuraMask(Model):
 
         return all_metrics
 
-    @tf.function
     def train_step(self, data):
         X, y = data
 

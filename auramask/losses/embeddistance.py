@@ -116,8 +116,8 @@ class EmbeddingDistanceLoss(Loss):
         """
         loss = 0.0
         for f in self.F:
-            emb_t = np.stop_gradient(f(y_true))
-            emb_adv = f(y_pred)
+            emb_t = np.stop_gradient(f(y_true, training=False))
+            emb_adv = f(y_pred, training=False)
             sim = np.negative(cosine_distance(emb_t, emb_adv, -1))
             loss = np.add(loss, sim)
         return np.divide(loss, self.N)
