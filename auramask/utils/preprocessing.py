@@ -41,7 +41,7 @@ def gen_image_loading_layers(w: int, h: int, crop: bool = True):
     return Augmenter(
         [
             Resizing(w, h, crop_to_aspect_ratio=crop),
-            Rescaling(scale=1.0 / 127.5, offset=-1),
+            Rescaling(scale=1.0 / 255, offset=0),
             CenterCrop(224, 224),
             # Lambda(preprocess_input, arguments={"data_format": format, "mode": "tf"}),
         ]
@@ -93,7 +93,7 @@ def gen_non_geometric_aug_layers(
     return Augmenter(
         [
             RandAugment(
-                value_range=(-1, 1),
+                value_range=(0, 1),
                 augmentations_per_image=augs_per_image,
                 magnitude=magnitude,
                 geometric=False,

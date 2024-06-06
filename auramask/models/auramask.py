@@ -1,6 +1,6 @@
 from typing import Callable
 import tensorflow as tf
-from keras import Model
+from keras import Model, layers
 from keras.activations import tanh
 from keras.metrics import Mean
 from keras.losses import Loss
@@ -23,6 +23,8 @@ class AuraMask(Model):
         self.eps = eps
         self.F = None
         self._custom_losses = []
+
+        self.scaling = layers.Rescaling(scale=2, offset=-1)
 
         self.colorspace = colorspace
 
@@ -60,7 +62,8 @@ class AuraMask(Model):
         if not training:
             inputs = self.colorspace[0](inputs)
 
-        mask = self.model(inputs)
+        mask = self.scaling(inputs)
+        mask = self.model(mask)
         mask = tanh(mask)
         mask = tf.multiply(self.eps, mask)
         out = tf.add(mask, inputs)
