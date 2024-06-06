@@ -185,7 +185,6 @@ def load_data():
     w, h = hparams["input"]
 
     augmenters = DatasetEnum.get_augmenters(
-        {"w": w, "h": h, "crop": True},
         {"augs_per_image": 1, "rate": 0.5},
         {"augs_per_image": 1, "rate": 0.2, "magnitude": 0.5},
     )
@@ -195,10 +194,11 @@ def load_data():
             columns=ds.value[2],
             batch_size=hparams["batch"],
             collate_fn=DatasetEnum.data_collater,
-            collate_fn_args={"loader": augmenters["loader"]},
+            collate_fn_args={"args": {"w": w, "h": h, "crop": True}},
             prefetch=True,
             shuffle=True,
         )
+        .cache()
         .map(
             lambda x: DatasetEnum.data_augmenter(
                 x, augmenters["geom"], augmenters["aug"]
@@ -212,9 +212,9 @@ def load_data():
         columns=ds.value[2],
         batch_size=hparams["batch"],
         collate_fn=DatasetEnum.data_collater,
-        collate_fn_args={"loader": augmenters["loader"]},
+        collate_fn_args={"args": {"w": w, "h": h, "crop": True}},
         prefetch=True,
-    )
+    ).cache()
 
     # import tensorflow_datasets as tfds
 

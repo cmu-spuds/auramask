@@ -1,7 +1,8 @@
-from keras import Model, utils, layers, applications, backend
+from keras import Model, utils, layers, backend
 from keras.src.applications.imagenet_utils import obtain_input_shape
 import os
 from functools import partial
+import tensorflow as tf
 
 WEIGHTS_PATH_128 = (
     "https://github.com/serengil/deepface_models/releases/download/"
@@ -14,6 +15,16 @@ WEIGHTS_PATH_512 = (
 )
 
 
+def preprocess_input(x):
+    mean, std = (
+        tf.reduce_mean(x, axis=[-3, -2, -1], keepdims=True),
+        tf.math.reduce_std(x, axis=[-3, -2, -1], keepdims=True),
+    )
+    x = tf.subtract(x, mean)
+    x = tf.divide(x, tf.maximum(std, backend.epsilon()))
+    return x
+
+
 def FaceNet(
     include_top=True,
     weights="deepface",
@@ -21,6 +32,7 @@ def FaceNet(
     input_shape=None,
     classes=128,
     classifier_activation="softmax",
+    preprocess=False,
 ):
     if not (weights in {"deepface", None} or os.path.exists(weights)):
         raise ValueError(
@@ -41,7 +53,7 @@ def FaceNet(
     # Determine proper input shape
     input_shape = obtain_input_shape(
         input_shape,
-        default_size=299,
+        default_size=160,
         min_size=75,
         data_format=backend.image_data_format(),
         require_flatten=include_top,
@@ -56,9 +68,10 @@ def FaceNet(
         else:
             img_input = input_tensor
 
-    x = applications.imagenet_utils.preprocess_input(
-        img_input, data_format=backend.image_data_format(), mode="tf"
-    )
+    if preprocess:
+        x = preprocess_input(img_input)
+    else:
+        x = img_input
 
     x = InceptionResNetV1(x, classes=classes)
 

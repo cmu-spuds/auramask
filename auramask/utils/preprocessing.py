@@ -1,15 +1,28 @@
 from keras import backend
-from keras.applications.imagenet_utils import preprocess_input
 from keras_cv.layers import (
     RandomRotation,
     Augmenter,
     Resizing,
+    Rescaling,
     RandomAugmentationPipeline,
     RandomFlip,
     RandomTranslation,
     RandAugment,
 )
-from keras.layers import CenterCrop, Lambda
+from keras.layers import CenterCrop
+
+
+def rgb_to_bgr(x):
+    if backend.image_data_format() == "channels_first":
+        # 'RGB'->'BGR'
+        if backend.ndim(x) == 3:
+            x = x[::-1, ...]
+        else:
+            x = x[:, ::-1, ...]
+    else:
+        # 'RGB'->'BGR'
+        x = x[..., ::-1]
+    return x
 
 
 # TODO: the w and h refer to the resampled and not center-cropped. Could be misleading to some users.
@@ -24,12 +37,13 @@ def gen_image_loading_layers(w: int, h: int, crop: bool = True):
     Returns:
         Augmenter: keras_cv.layers.Augmenter
     """
-    format = backend.image_data_format()
+    # format = backend.image_data_format()
     return Augmenter(
         [
             Resizing(w, h, crop_to_aspect_ratio=crop),
+            Rescaling(scale=1.0 / 127.5, offset=-1),
             CenterCrop(224, 224),
-            Lambda(preprocess_input, arguments={"data_format": format, "mode": "tf"}),
+            # Lambda(preprocess_input, arguments={"data_format": format, "mode": "tf"}),
         ]
     )
 

@@ -87,7 +87,7 @@ class SSIMLoss(Loss):
             k2=self.k2,
             channel_weights=[1.0, 1.0, 1.0],
         )
-        return tf.negative(loss)
+        return tf.nn.relu(tf.negative(loss))
 
 
 # Default values obtained by Wang et al.

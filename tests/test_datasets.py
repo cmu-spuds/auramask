@@ -1,10 +1,12 @@
 import unittest
 import tensorflow as tf
 from keras.layers import CenterCrop
+from keras.preprocessing.image import img_to_array
 from unittest.mock import patch, MagicMock
 from datasets import Dataset
 from auramask.utils.datasets import DatasetEnum
 from numpy.random import rand
+import numpy as np
 from PIL import Image
 
 
@@ -16,6 +18,7 @@ class testCenterCrop(CenterCrop):
 def create_PIL_Image(dims: tuple) -> Image:
     imarray = rand(dims[0], dims[1], dims[2]) * 255
     im = Image.fromarray(imarray.astype("uint8")).convert("RGB")
+    im = img_to_array(im)
     return im
 
 
@@ -27,21 +30,17 @@ class TestDatasetEnum(unittest.TestCase):
         return super().tearDownClass()
 
     def test_enum_values(self):
+        self.assertEqual(DatasetEnum.LFW.value, ("logasja/lfw", "default", ["image"]))
         self.assertEqual(
-            DatasetEnum.LFW.value, ("logasja/lfw", "default", ("image", "image"))
+            DatasetEnum.INSTAGRAM.value, ("logasja/lfw", "aug", ["orig", "aug"])
         )
         self.assertEqual(
-            DatasetEnum.INSTAGRAM.value, ("logasja/lfw", "aug", ("orig", "aug"))
+            DatasetEnum.FDF256.value, ("logasja/FDF", "default", ["image"])
         )
-        self.assertEqual(
-            DatasetEnum.FDF256.value, ("logasja/FDF", "default", ("image", "image"))
-        )
-        self.assertEqual(
-            DatasetEnum.FDF.value, ("logasja/FDF", "fdf", ("image", "image"))
-        )
+        self.assertEqual(DatasetEnum.FDF.value, ("logasja/FDF", "fdf", ["image"]))
         self.assertEqual(
             DatasetEnum.VGGFACE2.value,
-            ("logasja/VGGFace2", "default", ("image", "image")),
+            ("logasja/VGGFace2", "256", ["image"]),
         )
 
     @patch("auramask.utils.datasets.load_dataset")
@@ -80,19 +79,22 @@ class TestDatasetEnum(unittest.TestCase):
         train_ds, val_ds = DatasetEnum.VGGFACE2.fetch_dataset(t_split, v_split)
 
         mock_load_dataset.assert_any_call(
-            "logasja/VGGFace2", "default", split=t_split, num_proc=4
+            "logasja/VGGFace2", "256", split=t_split, num_proc=4
         )
         mock_load_dataset.assert_any_call(
-            "logasja/VGGFace2", "default", split=v_split, num_proc=4
+            "logasja/VGGFace2", "256", split=v_split, num_proc=4
         )
         self.assertEqual(train_ds, mock_train_ds)
         self.assertEqual(val_ds, mock_val_ds)
 
     @patch("auramask.utils.datasets.preprocessing")
     @patch("auramask.utils.datasets.img_to_array")
-    def test_get_data_loader(self, mock_img_to_array, mock_preprocessing):
+    def test_data_collater(self, mock_img_to_array, mock_preprocessing):
         w, h = 256, 256
-        example_data = {"image": ["fake_image1", "fake_image2"]}
+        example_data = {
+            "image": ["fake_image1", "fake_image2"],
+            "label": ["fake_label", "fake_label"],
+        }
 
         # Mock the preprocessing functions
         mock_loader = MagicMock()
@@ -102,33 +104,33 @@ class TestDatasetEnum(unittest.TestCase):
         mock_preprocessing.gen_geometric_aug_layers.return_value = mock_geom_aug
         mock_preprocessing.gen_non_geometric_aug_layers.return_value = mock_augmenter
 
-        # Without augmentation
-        data_loader = DatasetEnum.LFW.get_data_loader(w, h, augment=False)
-        transformed_example = data_loader(example_data)
-        self.assertIn("x", transformed_example)
-        self.assertIn("y", transformed_example)
+        loader_args = {"w": w, "h": h, "crop": True}
 
-        # With augmentation
-        data_loader = DatasetEnum.LFW.get_data_loader(w, h, augment=True)
-        transformed_example = data_loader(example_data)
-        self.assertIn("x", transformed_example)
-        self.assertIn("y", transformed_example)
+        # Without augmentation
+        transformed_example = DatasetEnum.data_collater(example_data, loader_args)
+        self.assertIn("image", transformed_example)
+        self.assertIn("label", transformed_example)
 
     @patch("auramask.utils.preprocessing.CenterCrop", testCenterCrop)
     def test_data_resizing_smaller(self):
         w, h = 256, 256
         example_data = {
-            "image": [create_PIL_Image((64, 64, 3)), create_PIL_Image((64, 64, 3))]
+            "image": np.stack(
+                [create_PIL_Image((64, 64, 3)), create_PIL_Image((64, 64, 3))]
+            ),
+            "label": ["fake_label", "fake_label"],
         }
 
-        data_loader = DatasetEnum.LFW.get_data_loader(w, h, augment=False)
-        transformed_example = data_loader(example_data)
-        self.assertIn("x", transformed_example)
-        tf.debugging.assert_rank(transformed_example["x"], 4)
-        tf.debugging.assert_equal((2, 256, 256, 3), transformed_example["x"].shape)
-        self.assertIn("y", transformed_example)
-        tf.debugging.assert_rank(transformed_example["y"], 4)
-        tf.debugging.assert_equal((2, 256, 256, 3), transformed_example["y"].shape)
+        loader_args = {"w": w, "h": h, "crop": True}
+
+        transformed_example = DatasetEnum.data_collater(example_data, loader_args)
+        print(transformed_example)
+        self.assertIn("image", transformed_example)
+        tf.debugging.assert_rank(transformed_example["image"], 4)
+        tf.debugging.assert_equal((2, 256, 256, 3), transformed_example["image"].shape)
+        self.assertIn("labels", transformed_example)
+        tf.debugging.assert_rank(transformed_example["labels"], 2)
+        tf.debugging.assert_equal((2, 2), transformed_example["image"].shape)
 
     @patch("auramask.utils.preprocessing.CenterCrop", testCenterCrop)
     def test_data_resizing_larger(self):
@@ -136,9 +138,9 @@ class TestDatasetEnum(unittest.TestCase):
         example_data = {
             "image": [create_PIL_Image((512, 512, 3)), create_PIL_Image((512, 512, 3))]
         }
+        loader_args = {"w": w, "h": h, "crop": True}
 
-        data_loader = DatasetEnum.LFW.get_data_loader(w, h, augment=False)
-        transformed_example = data_loader(example_data)
+        transformed_example = DatasetEnum.data_collater(example_data, loader_args)
         self.assertIn("x", transformed_example)
         tf.debugging.assert_rank(transformed_example["x"], 4)
         tf.debugging.assert_equal((2, 256, 256, 3), transformed_example["x"].shape)

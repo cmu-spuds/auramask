@@ -1,14 +1,20 @@
-from keras import Model, utils, layers, applications, backend
+from keras import Model, utils, layers, backend
 from keras.src.applications.imagenet_utils import (
     obtain_input_shape,
     validate_activation,
 )
 import os
+import tensorflow as tf
 
 WEIGHTS_PATH = (
     "https://github.com/serengil/deepface_models/releases/download/"
     "v1.0/vgg_face_weights.h5"
 )
+
+
+def preprocess_input(x):
+    x = tf.subtract(x, [93.540, 104.7624, 129.1863])
+    return x
 
 
 def VggFace(
@@ -19,6 +25,7 @@ def VggFace(
     pooling="l2_norm",
     classes=2622,
     classifier_activation="softmax",
+    preprocess=False,
 ):
     if not (weights in {"deepface", None} or os.path.exists(weights)):
         raise ValueError(
@@ -54,9 +61,10 @@ def VggFace(
         else:
             img_input = input_tensor
 
-    x = applications.vgg16.preprocess_input(
-        img_input, data_format=backend.image_data_format()
-    )
+    if preprocess:
+        x = preprocess_input(img_input)
+    else:
+        x = img_input
 
     x = layers.ZeroPadding2D((1, 1))(x)
     x = layers.Convolution2D(64, (3, 3), activation="relu")(x)

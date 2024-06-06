@@ -1,4 +1,4 @@
-from keras import Model, utils, layers, applications, backend
+from keras import Model, utils, layers, backend
 from keras.src.applications.imagenet_utils import obtain_input_shape
 import os
 
@@ -6,6 +6,14 @@ WEIGHTS_PATH = (
     "https://github.com/serengil/deepface_models/releases/download/"
     "v1.0/arcface_weights.h5"
 )
+
+
+def preprocess_input(x):
+    import tensorflow as tf
+
+    x = tf.subtract(x, 127.5)
+    x = tf.divide(x, 128)
+    return x
 
 
 def ResNet(
@@ -93,6 +101,7 @@ def ArcFace(
     input_shape=None,
     classes=512,
     classifier_activation="softmax",
+    preprocess=False,
 ):
     if not (weights in {"deepface", None} or os.path.exists(weights)):
         raise ValueError(
@@ -128,9 +137,10 @@ def ArcFace(
         else:
             img_input = input_tensor
 
-    x = applications.imagenet_utils.preprocess_input(
-        img_input, data_format=backend.image_data_format(), mode="tf"
-    )
+    if preprocess:
+        x = preprocess_input(img_input)
+    else:
+        x = img_input
 
     x = ResNet34(input_tensor=x)
 
