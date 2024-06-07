@@ -102,6 +102,7 @@ def ArcFace(
     classes=512,
     classifier_activation="softmax",
     preprocess=False,
+    name="ArcFace",
 ):
     if not (weights in {"deepface", None} or os.path.exists(weights)):
         raise ValueError(
@@ -161,7 +162,7 @@ def ArcFace(
     else:
         inputs = img_input
 
-    model = Model(inputs, x, name="arcface")
+    model = Model(inputs, x, name=name)
 
     if weights == "deepface":
         weights_path = utils.get_file(

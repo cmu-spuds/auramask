@@ -21,46 +21,38 @@ class FaceEmbedEnum(str, Enum):
     ARCFACE = "ArcFace"
 
     def get_model(self):
-        input = layers.Input((None, None, 3))
-        x = layers.Rescaling(255, offset=0)(input)  # convert to [0, 255]
-        x = layers.Lambda(rgb_to_bgr)(x)
+        global model_obj
 
-        if self == FaceEmbedEnum.VGGFACE:
-            x = layers.Resizing(224, 224, name="vggface-resize")(x)
-            # x = applications.vgg16.preprocess_input(
-            #     x
-            # )
-            # x = build_model(self.value).model(x)
-            # model = Model(inputs=input, outputs=x, name="vggface")
-            model = VggFace(include_top=False, input_tensor=x, preprocess=True)
-        elif self == FaceEmbedEnum.FACENET:
-            x = layers.Resizing(160, 160, name="facenet-resize")(x)
-            # x = applications.imagenet_utils.preprocess_input(
-            #     x, mode="tf"
-            # )
-            # x = build_model(self.value).model(x)
-            # model = Model(inputs=input, outputs=x, name="facenet")
-            model = FaceNet(input_tensor=x, preprocess=True)
-        elif self == FaceEmbedEnum.FACENET512:
-            x = layers.Resizing(160, 160, name="facenet-resize")(x)
-            # x = applications.imagenet_utils.preprocess_input(
-            #     x, mode="tf"
-            # )
-            # x = build_model(self.value).model(x)
-            # model = Model(inputs=input, outputs=x, name="facenet512")
-            model = FaceNet(input_tensor=x, classes=512, preprocess=True)
-        elif self == FaceEmbedEnum.ARCFACE:
-            x = layers.Resizing(112, 112, name="arcface-resize")(x)
-            # x = applications.imagenet_utils.preprocess_input(
-            #     x, mode="tf"
-            # )
-            # x = build_model(self.value).model(x)
-            # model = Model(inputs=input, outputs=x, name="arcface")
+        if "model_obj" not in globals():
+            print("New Global Context")
+            model_obj = {}
 
-            model = ArcFace(input_tensor=x, preprocess=True)
+        if self.name not in model_obj.keys():
+            input = layers.Input((None, None, 3))
+            x = layers.Rescaling(255, offset=0)(input)  # convert to [0, 255]
+            x = layers.Lambda(rgb_to_bgr)(x)
 
-        model.trainable = False
-        return model
+            if self == FaceEmbedEnum.VGGFACE:
+                x = layers.Resizing(224, 224, name="vggface-resize")(x)
+                model = VggFace(
+                    include_top=False, input_tensor=x, preprocess=True, name=self.name
+                )
+            elif self == FaceEmbedEnum.FACENET:
+                x = layers.Resizing(160, 160, name="facenet-resize")(x)
+                model = FaceNet(input_tensor=x, preprocess=True, name=self.name)
+            elif self == FaceEmbedEnum.FACENET512:
+                x = layers.Resizing(160, 160, name="facenet-resize")(x)
+                model = FaceNet(
+                    input_tensor=x, classes=512, preprocess=True, name=self.name
+                )
+            elif self == FaceEmbedEnum.ARCFACE:
+                x = layers.Resizing(112, 112, name="arcface-resize")(x)
+                model = ArcFace(input_tensor=x, preprocess=True, name=self.name)
+
+            model.trainable = False
+            model_obj[self.name] = model
+
+        return model_obj[self.name]
 
     def get_threshold(
         self,

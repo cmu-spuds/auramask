@@ -33,6 +33,7 @@ def FaceNet(
     classes=128,
     classifier_activation="softmax",
     preprocess=False,
+    name="FaceNet",
 ):
     if not (weights in {"deepface", None} or os.path.exists(weights)):
         raise ValueError(
@@ -82,7 +83,7 @@ def FaceNet(
     else:
         inputs = img_input
 
-    model = Model(inputs, x, name="facenet")
+    model = Model(inputs, x, name=name)
 
     if weights == "deepface" and classes == 128:
         weights_path = utils.get_file(

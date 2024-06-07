@@ -198,30 +198,51 @@ def load_data():
             prefetch=True,
             shuffle=True,
         )
-        .cache()
         .map(
             lambda x: DatasetEnum.data_augmenter(
                 x, augmenters["geom"], augmenters["aug"]
             ),
             num_parallel_calls=tf.data.AUTOTUNE,
         )
+        .map(
+            lambda x, y: (
+                x,
+                DatasetEnum.compute_embeddings(y, hparams["F"]),
+            ),
+            num_parallel_calls=tf.data.AUTOTUNE,
+        )
         .prefetch(tf.data.AUTOTUNE)
     )
 
-    v_ds = v_ds.to_tf_dataset(
-        columns=ds.value[2],
-        batch_size=hparams["batch"],
-        collate_fn=DatasetEnum.data_collater,
-        collate_fn_args={"args": {"w": w, "h": h, "crop": True}},
-        prefetch=True,
-    ).cache()
+    v_ds = (
+        v_ds.to_tf_dataset(
+            columns=ds.value[2],
+            batch_size=hparams["batch"],
+            collate_fn=DatasetEnum.data_collater,
+            collate_fn_args={"args": {"w": w, "h": h, "crop": True}},
+            prefetch=True,
+        )
+        .map(
+            lambda x: (
+                x,
+                DatasetEnum.compute_embeddings(x, hparams["F"]),
+            ),
+            num_parallel_calls=tf.data.AUTOTUNE,
+        )
+        .prefetch(tf.data.AUTOTUNE)
+    )
 
     # import tensorflow_datasets as tfds
 
     # for example in v_ds.take(1):
-    #     print(example)
-    #     print(tf.reduce_mean(example, axis=[-1,-2,-3]), tf.math.reduce_std(example, axis=[-1,-2,-3]))
-    #     print(tf.reduce_max(example, axis=[-1,-2,-3]), tf.reduce_min(example, axis=[-1,-2,-3]))
+    #     print(example[1][0])
+    #     print(example[1][1])
+    #     # print(tf.reduce_mean(example, axis=[-1,-2,-3]), tf.math.reduce_std(example, axis=[-1,-2,-3]))
+    #     # print(tf.reduce_max(example, axis=[-1,-2,-3]), tf.reduce_min(example, axis=[-1,-2,-3]))
+
+    # for example in t_ds.take(1):
+    #     print(example[1][0])
+    #     print(example[1][1])
 
     # tfds.benchmark(v_ds)
     # tfds.benchmark(t_ds)

@@ -26,6 +26,7 @@ def VggFace(
     classes=2622,
     classifier_activation="softmax",
     preprocess=False,
+    name="VggFace",
 ):
     if not (weights in {"deepface", None} or os.path.exists(weights)):
         raise ValueError(
@@ -123,7 +124,7 @@ def VggFace(
     else:
         inputs = img_input
 
-    model = Model(inputs, x, name="vggface")
+    model = Model(inputs, x, name=name)
 
     if weights == "deepface":
         weights_path = utils.get_file(
@@ -144,6 +145,6 @@ def VggFace(
         elif pooling == "l2_norm":
             output = layers.UnitNormalization()(output)
 
-        model = Model(inputs, output, name="vggface")
+        model = Model(inputs, output, name=name)
 
     return model

@@ -1,9 +1,9 @@
 from enum import Enum
-from typing import Tuple
+from typing import Tuple, TypedDict
 from datasets import load_dataset, Dataset
+from auramask.models.face_embeddings import FaceEmbedEnum
 from auramask.utils import preprocessing
 from os import cpu_count
-from typing import TypedDict
 
 
 class DatasetEnum(Enum):
@@ -84,6 +84,17 @@ class DatasetEnum(Enum):
                         batch[k] = np.array([f[k] for f in features])
             del loader
         return batch
+
+    @staticmethod
+    def compute_embeddings(img_batch, embedding_models: list[FaceEmbedEnum]) -> dict:
+        features = []
+        names = []
+        for model in embedding_models:
+            embed = model.get_model()(img_batch)
+            features.append(embed)
+            names.append(model.name)
+
+        return (tuple(features), list(names))
 
     @staticmethod
     def data_augmenter(examples, geom, aug):

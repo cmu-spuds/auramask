@@ -1,6 +1,5 @@
 # Imports
 from typing import Callable
-from keras.src.utils.losses_utils import ReductionV2
 from auramask.models.face_embeddings import FaceEmbedEnum
 from auramask.utils.distance import cosine_distance
 from keras.losses import Loss
@@ -25,7 +24,7 @@ class FaceEmbeddingLoss(Loss):
         f: FaceEmbedEnum,
         d: Callable = cosine_distance,
         name="FaceEmbeddingLoss_",
-        reduction=ReductionV2.SUM_OVER_BATCH_SIZE,
+        reduction="sum_over_batch_size",
         **kwargs,
     ):
         super().__init__(name=name + f.value, reduction=reduction)
@@ -58,7 +57,7 @@ class FaceEmbeddingThresholdLoss(FaceEmbeddingLoss):
         threshold: float,
         d: Callable = cosine_distance,
         name="FaceEmbeddingThresholdLoss",
-        reduction=ReductionV2.SUM_OVER_BATCH_SIZE,
+        reduction="sum_over_batch_size",
         **kwargs,
     ):
         super().__init__(f=f, d=d, name=name, reduction=reduction, **kwargs)
@@ -72,9 +71,8 @@ class FaceEmbeddingThresholdLoss(FaceEmbeddingLoss):
         return {**base_config, **config}
 
     def call(self, y_true: np.Tensor, y_pred: np.Tensor) -> np.Tensor:
-        emb_t = np.stop_gradient(self.f(y_true, training=False))
         emb_adv = self.f(y_pred, training=False)
-        distance = self.d(emb_t, emb_adv, -1)
+        distance = self.d(y_true, emb_adv, -1)
         dist_thresh = np.subtract(self.threshold, distance)
         return np.nn.leaky_relu(dist_thresh)
 
@@ -116,8 +114,7 @@ class EmbeddingDistanceLoss(Loss):
         """
         loss = 0.0
         for f in self.F:
-            emb_t = np.stop_gradient(f(y_true, training=False))
             emb_adv = f(y_pred, training=False)
-            sim = np.negative(cosine_distance(emb_t, emb_adv, -1))
+            sim = np.negative(cosine_distance(y_true, emb_adv, -1))
             loss = np.add(loss, sim)
         return np.divide(loss, self.N)

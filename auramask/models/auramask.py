@@ -5,6 +5,9 @@ from keras.activations import tanh
 from keras.metrics import Mean
 from keras.losses import Loss
 from keras_unet_collection import models
+
+from auramask.losses.embeddistance import FaceEmbeddingLoss
+from auramask.metrics.embeddistance import PercentageOverThreshold
 # import keras.ops as np
 
 
@@ -126,19 +129,29 @@ class AuraMask(Model):
         )
 
     def compute_loss(self, x=None, y=None, y_pred=None, sample_weight=None):
-        del x
         del sample_weight
+        x_rgb, x_mod = x
         tloss = tf.constant(0, dtype=tf.float32)  # tracked total loss
-        y_rgb = tf.stop_gradient(self.colorspace[1](y))  # computed rgb representation
         y_pred_rgb = self.colorspace[1](
             y_pred
         )  # computed rgb representation (with gradient passthrough only for hsv_to_rgb
 
-        for model, metric, c_w, c_c in self._custom_losses:
-            tmp_y, tmp_pred = (y_rgb, y_pred_rgb) if c_c is True else (y, y_pred)
-            sim_loss = model(tmp_y, tmp_pred)
+        for loss, metric, l_w, l_c in self._custom_losses:
+            if isinstance(loss, FaceEmbeddingLoss):
+                # print(y)
+                # print(loss.f.name.encode())
+                idx = tf.where(y[1] == loss.f.name)[0][0]
+                # print(idx)
+                tmp_y, tmp_pred = (
+                    (y[0][idx], y_pred_rgb) if l_c is True else (y[0][idx], y_pred)
+                )
+            else:
+                tmp_y, tmp_pred = (
+                    (x_rgb, y_pred_rgb) if l_c is True else (x_mod, y_pred)
+                )
+            sim_loss = loss(tmp_y, tmp_pred)
             metric.update_state(sim_loss)
-            tloss = tf.add(tloss, tf.multiply(sim_loss, c_w))
+            tloss = tf.add(tloss, tf.multiply(sim_loss, l_w))
 
         return tloss
 
@@ -146,13 +159,15 @@ class AuraMask(Model):
         return self.model.save(filepath, overwrite, save_format, **kwargs)
 
     def compute_metrics(self, x, y, y_pred, sample_weight):
-        del x
         del sample_weight
-        y_rgb = self.colorspace[1](y)
         y_pred_rgb = self.colorspace[1](y_pred)
 
         for metric in self._metrics:
-            metric.update_state(y_rgb, y_pred_rgb)
+            if isinstance(metric, PercentageOverThreshold):
+                idx = tf.where(y[1] == metric.f.name)[0][0]
+                metric.update_state(y[0][idx], y_pred_rgb)
+            else:
+                metric.update_state(x, y_pred_rgb)
         return self.get_metrics_result()
 
     def get_metrics_result(self):
@@ -171,13 +186,14 @@ class AuraMask(Model):
         return all_metrics
 
     def train_step(self, data):
-        X, y = data
+        X, y = (
+            data  # X is input image data, y is pre-computed set of embeddings ((N Embeddings), (N Names))
+        )
 
         with tf.GradientTape() as tape:
-            X = self.colorspace[0](X)
-            y = self.colorspace[0](y)
-            y_pred, _ = self(X, training=True)  # Forward pass
-            loss = self.compute_loss(y=y, y_pred=y_pred)  # Compute loss
+            X_mod = self.colorspace[0](X)  # Convert to chosen colorspace
+            y_pred, _ = self(X_mod, training=True)  # Forward pass with
+            loss = self.compute_loss(x=(X, X_mod), y=y, y_pred=y_pred)  # Compute loss
 
         # Compute Gradients
         trainable_vars = self.trainable_variables
@@ -193,15 +209,18 @@ class AuraMask(Model):
         return metrics
 
     def test_step(self, data):
-        X = data
+        X, y = (
+            data  # X is input image data, y is pre-computed set of embeddings ((N Embeddings), (N Names))
+        )
 
         y_pred, _ = self(X, training=False)
 
-        y = self.colorspace[0](X)
         y_pred = self.colorspace[0](y_pred)
 
+        X_mod = self.colorspace[0](X)  # Convert to chosen colorspace
+
         # Updates stateful loss metrics.
-        loss = self.compute_loss(y=y, y_pred=y_pred)
+        loss = self.compute_loss(x=(X, X_mod), y=y, y_pred=y_pred)
         metrics = self.compute_metrics(x=X, y=y, y_pred=y_pred, sample_weight=None)
         metrics["loss"] = loss
         return metrics
