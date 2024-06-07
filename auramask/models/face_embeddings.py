@@ -23,6 +23,7 @@ class FaceEmbedEnum(str, Enum):
     def get_model(self):
         input = layers.Input((None, None, 3))
         x = layers.Rescaling(255, offset=0)(input)  # convert to [0, 255]
+        x = layers.Lambda(rgb_to_bgr)(x)
 
         if self == FaceEmbedEnum.VGGFACE:
             x = layers.Resizing(224, 224, name="vggface-resize")(x)
@@ -33,7 +34,6 @@ class FaceEmbedEnum(str, Enum):
             # model = Model(inputs=input, outputs=x, name="vggface")
             model = VggFace(include_top=False, input_tensor=x, preprocess=True)
         elif self == FaceEmbedEnum.FACENET:
-            x = rgb_to_bgr(x)
             x = layers.Resizing(160, 160, name="facenet-resize")(x)
             # x = applications.imagenet_utils.preprocess_input(
             #     x, mode="tf"
@@ -42,7 +42,6 @@ class FaceEmbedEnum(str, Enum):
             # model = Model(inputs=input, outputs=x, name="facenet")
             model = FaceNet(input_tensor=x, preprocess=True)
         elif self == FaceEmbedEnum.FACENET512:
-            x = rgb_to_bgr(x)
             x = layers.Resizing(160, 160, name="facenet-resize")(x)
             # x = applications.imagenet_utils.preprocess_input(
             #     x, mode="tf"
@@ -51,7 +50,6 @@ class FaceEmbedEnum(str, Enum):
             # model = Model(inputs=input, outputs=x, name="facenet512")
             model = FaceNet(input_tensor=x, classes=512, preprocess=True)
         elif self == FaceEmbedEnum.ARCFACE:
-            x = rgb_to_bgr(x)
             x = layers.Resizing(112, 112, name="arcface-resize")(x)
             # x = applications.imagenet_utils.preprocess_input(
             #     x, mode="tf"
