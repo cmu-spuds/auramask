@@ -24,12 +24,13 @@ class AuraMask(Model):
     ):
         super().__init__(name=name, **kwargs)
         self.eps = eps
-        self.F = None
         self._custom_losses = []
 
         self.scaling = layers.Rescaling(scale=2, offset=-1)
 
         self.colorspace = colorspace
+
+        self.embed_order = []
 
         filters = [n_filters * pow(2, i) for i in range(depth)]
 
@@ -98,11 +99,11 @@ class AuraMask(Model):
             w = 1.0
             c = False
             for _ in range(len(loss)):
-                loss_i = loss.pop()
+                loss_i = loss.pop(0)
                 if weighted:
-                    w = loss_weights.pop()
+                    w = loss_weights.pop(0)
                 if conversion:
-                    c = loss_convert.pop()
+                    c = loss_convert.pop(0)
                 if isinstance(loss_i, Loss):
                     if w > 0:
                         self._custom_losses.append(
@@ -136,15 +137,19 @@ class AuraMask(Model):
             y_pred
         )  # computed rgb representation (with gradient passthrough only for hsv_to_rgb
 
+        idx = 0
+
         for loss, metric, l_w, l_c in self._custom_losses:
             if isinstance(loss, FaceEmbeddingLoss):
-                # print(y)
-                # print(loss.f.name.encode())
-                idx = tf.where(y[1] == loss.f.name)[0][0]
-                # print(idx)
+                # for i in tf.range(0, y[1].shape):
+                #     if tf.math.equal(y[1][i], loss.f.name):
+                #         break
+
+                # idx = tf.where(y[1] == loss.f.name).numpy()[0][0] #TODO: Breaks when running in non-eager mode
                 tmp_y, tmp_pred = (
                     (y[0][idx], y_pred_rgb) if l_c is True else (y[0][idx], y_pred)
                 )
+                idx += 1
             else:
                 tmp_y, tmp_pred = (
                     (x_rgb, y_pred_rgb) if l_c is True else (x_mod, y_pred)
@@ -162,10 +167,12 @@ class AuraMask(Model):
         del sample_weight
         y_pred_rgb = self.colorspace[1](y_pred)
 
+        idx = 0
+
         for metric in self._metrics:
             if isinstance(metric, PercentageOverThreshold):
-                idx = tf.where(y[1] == metric.f.name)[0][0]
                 metric.update_state(y[0][idx], y_pred_rgb)
+                idx += 1
             else:
                 metric.update_state(x, y_pred_rgb)
         return self.get_metrics_result()
@@ -178,11 +185,6 @@ class AuraMask(Model):
         for metric in self._metrics:
             all_metrics[metric.name] = metric.result()
             metric.reset_state()
-        if self.F:
-            for _, metric, _, _ in self.F:
-                all_metrics[metric.name] = metric.result()
-                metric.reset_state()
-
         return all_metrics
 
     def train_step(self, data):

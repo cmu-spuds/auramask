@@ -198,6 +198,7 @@ def load_data():
             prefetch=True,
             shuffle=True,
         )
+        .cache()
         .map(
             lambda x: DatasetEnum.data_augmenter(
                 x, augmenters["geom"], augmenters["aug"]
@@ -229,6 +230,7 @@ def load_data():
             ),
             num_parallel_calls=tf.data.AUTOTUNE,
         )
+        .cache()
         .prefetch(tf.data.AUTOTUNE)
     )
 
