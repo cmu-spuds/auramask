@@ -87,7 +87,7 @@ class SSIMLoss(Loss):
             k2=self.k2,
             channel_weights=[1.0, 1.0, 1.0],
         )
-        return tf.negative(loss)
+        return 1 - loss
 
 
 # Default values obtained by Wang et al.
@@ -128,16 +128,14 @@ class GRAYSSIM(SSIMLoss):
     def call(self, y_true, y_pred):
         y_t_gs = tf.image.rgb_to_grayscale(y_true)
         y_p_gs = tf.image.rgb_to_grayscale(y_pred)
-        return tf.negative(
-            tf.image.ssim(
-                y_t_gs,
-                y_p_gs,
-                max_val=self.mv,
-                filter_size=self.fz,
-                filter_sigma=self.filter_sigma,
-                k1=self.k1,
-                k2=self.k2,
-            )
+        return 1 - tf.image.ssim(
+            y_t_gs,
+            y_p_gs,
+            max_val=self.mv,
+            filter_size=self.fz,
+            filter_sigma=self.filter_sigma,
+            k1=self.k1,
+            k2=self.k2,
         )
 
 

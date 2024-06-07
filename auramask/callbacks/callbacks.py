@@ -36,10 +36,19 @@ class AuramaskCallback(WandbEvalCallback):
         super().__init__(
             data_table_columns=data_table_columns, pred_table_columns=pred_table_columns
         )
-        self.x = validation_data
-        self.y = validation_data
+        self.x = validation_data[0]
+        self.y = validation_data[1]
         self.log_freq = log_freq
         self.__cur_epoch = 0
+
+    def on_train_begin(self, logs: Dict[SaveStrategy, float] | None = None) -> None:
+        wandb.log(
+            {
+                "image": [wandb.Image(array_to_img(x_i)) for x_i in self.x[:5]],
+            },
+            step=0,
+        )
+        return super().on_train_begin(logs)
 
     def on_epoch_end(
         self, epoch: int, logs: Dict[SaveStrategy, float] | None = None
@@ -49,8 +58,9 @@ class AuramaskCallback(WandbEvalCallback):
         self.__cur_epoch = epoch
 
     def add_ground_truth(self, logs: Dict[str, float] | None = None) -> None:
-        for idx, (orig, aug) in enumerate(zip(self.x, self.y)):
-            self.data_table.add_data(idx, wandb.Image(orig), wandb.Image(aug))
+        pass
+        # for idx, (orig, embeds, names) in enumerate(zip(self.x, self.y)):
+        #     self.data_table.add_data(idx, wandb.Image(orig), wandb.Table(data=embeds[idx]))         #TODO: save all pre-computed embeddings to table y: ((N_EMBEDS), (N_NAMES))
 
     def add_model_predictions(
         self, epoch: int, logs: Dict[str, float] | None = None

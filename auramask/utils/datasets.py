@@ -1,9 +1,9 @@
 from enum import Enum
-from typing import Tuple
+from typing import Tuple, TypedDict
 from datasets import load_dataset, Dataset
+from auramask.models.face_embeddings import FaceEmbedEnum
 from auramask.utils import preprocessing
 from os import cpu_count
-from typing import TypedDict
 
 
 class DatasetEnum(Enum):
@@ -52,37 +52,49 @@ class DatasetEnum(Enum):
         magnitude: float
 
     @staticmethod
-    def get_augmenters(
-        loader_config: LoaderConfig, geom_config: GeomConfig, aug_config: AugConfig
-    ):
+    def get_augmenters(geom_config: GeomConfig, aug_config: AugConfig):
         return {
-            "loader": preprocessing.gen_image_loading_layers(**loader_config),
             "geom": preprocessing.gen_geometric_aug_layers(**geom_config),
             "aug": preprocessing.gen_non_geometric_aug_layers(**aug_config),
         }
 
     @staticmethod
-    def data_collater(features, loader):
-        if isinstance(features, dict):  # case batch_size=None: nothing to collate
-            return features
-        # elif config.TF_AVAILABLE:
-        #     import tensorflow as tf
-        # else:
-        #     raise ImportError("Called a Tensorflow-specific function but Tensorflow is not installed.")
-
+    def data_collater(features, args: LoaderConfig):
         import tensorflow as tf
         import numpy as np
 
-        first = features[0]
-        batch = {}
-        for k, v in first.items():
-            if isinstance(v, np.ndarray):
-                batch[k] = loader(np.stack([f[k] for f in features]))
-            elif isinstance(v, tf.Tensor):
-                batch[k] = loader(tf.stack([f[k] for f in features]))
+        with tf.device("CPU"):
+            loader = preprocessing.gen_image_loading_layers(**args)
+
+            if isinstance(features, dict):  # case batch_size=None: nothing to collate
+                batch = features
+            elif isinstance(features, tf.Tensor):
+                batch = {"image": loader(features)}
             else:
-                batch[k] = np.array([f[k] for f in features])
+                first = features[0]
+                batch = {}
+                for k, v in first.items():
+                    if isinstance(v, np.ndarray):
+                        batch[k] = loader(
+                            tf.stack([tf.convert_to_tensor(f[k]) for f in features])
+                        )
+                    elif isinstance(v, tf.Tensor):
+                        batch[k] = loader(tf.stack([f[k] for f in features]))
+                    else:
+                        batch[k] = np.array([f[k] for f in features])
+            del loader
         return batch
+
+    @staticmethod
+    def compute_embeddings(img_batch, embedding_models: list[FaceEmbedEnum]) -> dict:
+        features = []
+        names = []
+        for model in embedding_models:
+            embed = model.get_model()(img_batch)
+            features.append(embed)
+            names.append(model.name)
+
+        return (tuple(features), list(names))
 
     @staticmethod
     def data_augmenter(examples, geom, aug):

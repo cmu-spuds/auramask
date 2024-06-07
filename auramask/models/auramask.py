@@ -1,11 +1,13 @@
 from typing import Callable
 import tensorflow as tf
-from keras import Model
+from keras import Model, layers
 from keras.activations import tanh
-from keras.layers import Rescaling
 from keras.metrics import Mean
 from keras.losses import Loss
 from keras_unet_collection import models
+
+from auramask.losses.embeddistance import FaceEmbeddingLoss
+from auramask.metrics.embeddistance import PercentageOverThreshold
 # import keras.ops as np
 
 
@@ -22,12 +24,13 @@ class AuraMask(Model):
     ):
         super().__init__(name=name, **kwargs)
         self.eps = eps
-        self.F = None
         self._custom_losses = []
+
+        self.scaling = layers.Rescaling(scale=2, offset=-1)
 
         self.colorspace = colorspace
 
-        self.inscale = Rescaling(2, offset=-1)
+        self.embed_order = []
 
         filters = [n_filters * pow(2, i) for i in range(depth)]
 
@@ -63,7 +66,7 @@ class AuraMask(Model):
         if not training:
             inputs = self.colorspace[0](inputs)
 
-        mask = self.inscale(inputs)  # Scale to -1 to 1
+        mask = self.scaling(inputs)
         mask = self.model(mask)
         mask = tanh(mask)
         mask = tf.multiply(self.eps, mask)
@@ -96,11 +99,11 @@ class AuraMask(Model):
             w = 1.0
             c = False
             for _ in range(len(loss)):
-                loss_i = loss.pop()
+                loss_i = loss.pop(0)
                 if weighted:
-                    w = loss_weights.pop()
+                    w = loss_weights.pop(0)
                 if conversion:
-                    c = loss_convert.pop()
+                    c = loss_convert.pop(0)
                 if isinstance(loss_i, Loss):
                     if w > 0:
                         self._custom_losses.append(
@@ -126,21 +129,34 @@ class AuraMask(Model):
             **kwargs,
         )
 
-    @tf.function
     def compute_loss(self, x=None, y=None, y_pred=None, sample_weight=None):
-        del x
         del sample_weight
+        x_rgb, x_mod = x
         tloss = tf.constant(0, dtype=tf.float32)  # tracked total loss
-        y_rgb = tf.stop_gradient(self.colorspace[1](y))  # computed rgb representation
         y_pred_rgb = self.colorspace[1](
             y_pred
         )  # computed rgb representation (with gradient passthrough only for hsv_to_rgb
 
-        for model, metric, c_w, c_c in self._custom_losses:
-            tmp_y, tmp_pred = (y_rgb, y_pred_rgb) if c_c is True else (y, y_pred)
-            sim_loss = model(tmp_y, tmp_pred)
+        idx = 0
+
+        for loss, metric, l_w, l_c in self._custom_losses:
+            if isinstance(loss, FaceEmbeddingLoss):
+                # for i in tf.range(0, y[1].shape):
+                #     if tf.math.equal(y[1][i], loss.f.name):
+                #         break
+
+                # idx = tf.where(y[1] == loss.f.name).numpy()[0][0] #TODO: Breaks when running in non-eager mode
+                tmp_y, tmp_pred = (
+                    (y[0][idx], y_pred_rgb) if l_c is True else (y[0][idx], y_pred)
+                )
+                idx += 1
+            else:
+                tmp_y, tmp_pred = (
+                    (x_rgb, y_pred_rgb) if l_c is True else (x_mod, y_pred)
+                )
+            sim_loss = loss(tmp_y, tmp_pred)
             metric.update_state(sim_loss)
-            tloss = tf.add(tloss, tf.multiply(sim_loss, c_w))
+            tloss = tf.add(tloss, tf.multiply(sim_loss, l_w))
 
         return tloss
 
@@ -148,13 +164,17 @@ class AuraMask(Model):
         return self.model.save(filepath, overwrite, save_format, **kwargs)
 
     def compute_metrics(self, x, y, y_pred, sample_weight):
-        del x
         del sample_weight
-        y_rgb = self.colorspace[1](y)
         y_pred_rgb = self.colorspace[1](y_pred)
 
+        idx = 0
+
         for metric in self._metrics:
-            metric.update_state(y_rgb, y_pred_rgb)
+            if isinstance(metric, PercentageOverThreshold):
+                metric.update_state(y[0][idx], y_pred_rgb)
+                idx += 1
+            else:
+                metric.update_state(x, y_pred_rgb)
         return self.get_metrics_result()
 
     def get_metrics_result(self):
@@ -165,22 +185,17 @@ class AuraMask(Model):
         for metric in self._metrics:
             all_metrics[metric.name] = metric.result()
             metric.reset_state()
-        if self.F:
-            for _, metric, _, _ in self.F:
-                all_metrics[metric.name] = metric.result()
-                metric.reset_state()
-
         return all_metrics
 
-    @tf.function
     def train_step(self, data):
-        X, y = data
+        X, y = (
+            data  # X is input image data, y is pre-computed set of embeddings ((N Embeddings), (N Names))
+        )
 
         with tf.GradientTape() as tape:
-            X = self.colorspace[0](X)
-            y = self.colorspace[0](y)
-            y_pred, _ = self(X, training=True)  # Forward pass
-            loss = self.compute_loss(y=y, y_pred=y_pred)  # Compute loss
+            X_mod = self.colorspace[0](X)  # Convert to chosen colorspace
+            y_pred, _ = self(X_mod, training=True)  # Forward pass with
+            loss = self.compute_loss(x=(X, X_mod), y=y, y_pred=y_pred)  # Compute loss
 
         # Compute Gradients
         trainable_vars = self.trainable_variables
@@ -196,15 +211,18 @@ class AuraMask(Model):
         return metrics
 
     def test_step(self, data):
-        X = data
+        X, y = (
+            data  # X is input image data, y is pre-computed set of embeddings ((N Embeddings), (N Names))
+        )
 
         y_pred, _ = self(X, training=False)
 
-        y = self.colorspace[0](X)
         y_pred = self.colorspace[0](y_pred)
 
+        X_mod = self.colorspace[0](X)  # Convert to chosen colorspace
+
         # Updates stateful loss metrics.
-        loss = self.compute_loss(y=y, y_pred=y_pred)
+        loss = self.compute_loss(x=(X, X_mod), y=y, y_pred=y_pred)
         metrics = self.compute_metrics(x=X, y=y, y_pred=y_pred, sample_weight=None)
         metrics["loss"] = loss
         return metrics
