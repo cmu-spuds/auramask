@@ -290,7 +290,7 @@ def initialize_loss():
         lpips = set(hparams.pop("lpips"))
         if len(lpips) != len(lam) and len(lam) > 1:
             raise argparse.ArgumentError(
-                "The length of lambda values must equal that of lpips argument"
+                message="The length of lambda values must equal that of lpips argument"
             )
         elif len(lam) <= 1:
             w = lam[0] if len(lam) > 0 else 1.0

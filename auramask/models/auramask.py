@@ -30,22 +30,20 @@ class AuraMask(Model):
 
         self.colorspace = colorspace
 
-        self.embed_order = []
-
         filters = [n_filters * pow(2, i) for i in range(depth)]
 
-        self.model: Model = models.unet_2d(
-            (None, None, 3),
-            filters,
-            n_labels=n_dims,
-            stack_num_down=2,
-            stack_num_up=2,
-            activation="ReLU",
-            output_activation=None,
-            batch_norm=True,
-            pool="max",
-            unpool="nearest",
-        )
+        # self.model: Model = models.unet_2d(
+        #     (None, None, 3),
+        #     filters,
+        #     n_labels=n_dims,
+        #     stack_num_down=2,
+        #     stack_num_up=2,
+        #     activation="ReLU",
+        #     output_activation=None,
+        #     batch_norm=True,
+        #     pool="max",
+        #     unpool="nearest",
+        # )
 
         # self.model = models.r2_unet_2d(
         #     (None, None, 3),
@@ -61,6 +59,26 @@ class AuraMask(Model):
         #     unpool="nearest",
         #     name="r2unet",
         # )
+
+        self.model: Model = models.att_unet_2d(
+            (None, None, 3),
+            filter_num=filters,
+            n_labels=n_dims,
+            stack_num_down=2,
+            stack_num_up=2,
+            activation="ReLU",
+            atten_activation="ReLU",
+            attention="add",
+            output_activation=None,
+            batch_norm=True,
+            pool=False,
+            unpool=False,
+            backbone="VGG16",
+            weights="imagenet",
+            freeze_backbone=True,
+            freeze_batch_norm=True,
+            name="attunet",
+        )
 
     def call(self, inputs, training=False):
         if not training:
@@ -141,11 +159,6 @@ class AuraMask(Model):
 
         for loss, metric, l_w, l_c in self._custom_losses:
             if isinstance(loss, FaceEmbeddingLoss):
-                # for i in tf.range(0, y[1].shape):
-                #     if tf.math.equal(y[1][i], loss.f.name):
-                #         break
-
-                # idx = tf.where(y[1] == loss.f.name).numpy()[0][0] #TODO: Breaks when running in non-eager mode
                 tmp_y, tmp_pred = (
                     (y[0][idx], y_pred_rgb) if l_c is True else (y[0][idx], y_pred)
                 )
