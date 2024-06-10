@@ -1,10 +1,8 @@
 from typing import Callable
 import tensorflow as tf
-from keras import Model, layers
-from keras.activations import tanh
+from keras import Model
 from keras.metrics import Mean
 from keras.losses import Loss
-from keras_unet_collection import models
 
 from auramask.losses.embeddistance import FaceEmbeddingLoss
 from auramask.metrics.embeddistance import PercentageOverThreshold
@@ -14,82 +12,21 @@ from auramask.metrics.embeddistance import PercentageOverThreshold
 class AuraMask(Model):
     def __init__(
         self,
-        n_filters,
-        n_dims,
-        eps=0.02,
-        depth=5,
+        backbone: Model,
         colorspace: tuple[Callable, Callable] = None,
         name="AuraMask",
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
-        self.eps = eps
         self._custom_losses = []
-
-        self.scaling = layers.Rescaling(scale=2, offset=-1)
-
         self.colorspace = colorspace
-
-        filters = [n_filters * pow(2, i) for i in range(depth)]
-
-        # self.model: Model = models.unet_2d(
-        #     (None, None, 3),
-        #     filters,
-        #     n_labels=n_dims,
-        #     stack_num_down=2,
-        #     stack_num_up=2,
-        #     activation="ReLU",
-        #     output_activation=None,
-        #     batch_norm=True,
-        #     pool="max",
-        #     unpool="nearest",
-        # )
-
-        # self.model = models.r2_unet_2d(
-        #     (None, None, 3),
-        #     filters,
-        #     n_labels=n_dims,
-        #     stack_num_down=2,
-        #     stack_num_up=2,
-        #     recur_num=2,
-        #     activation="GELU",
-        #     output_activation=None,
-        #     batch_norm=True,
-        #     pool="max",
-        #     unpool="nearest",
-        #     name="r2unet",
-        # )
-
-        self.model: Model = models.att_unet_2d(
-            (None, None, 3),
-            filter_num=filters,
-            n_labels=n_dims,
-            stack_num_down=2,
-            stack_num_up=2,
-            activation="ReLU",
-            atten_activation="ReLU",
-            attention="add",
-            output_activation=None,
-            batch_norm=True,
-            pool=False,
-            unpool=False,
-            backbone="VGG16",
-            weights="imagenet",
-            freeze_backbone=True,
-            freeze_batch_norm=True,
-            name="attunet",
-        )
+        self.backbone = backbone
 
     def call(self, inputs, training=False):
         if not training:
             inputs = self.colorspace[0](inputs)
 
-        mask = self.scaling(inputs)
-        mask = self.model(mask)
-        mask = tanh(mask)
-        mask = tf.multiply(self.eps, mask)
-        out = tf.add(mask, inputs)
-        out = tf.clip_by_value(out, 0.0, 1.0)
+        out, mask = self.backbone(inputs)
 
         if not training:
             out = self.colorspace[1](out)

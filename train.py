@@ -27,11 +27,13 @@ from auramask.metrics.embeddistance import PercentageOverThreshold
 from auramask.models.face_embeddings import FaceEmbedEnum
 from auramask.models.auramask import AuraMask
 
+from auramask.utils import backbones
 from auramask.utils.colorspace import ColorSpaceEnum
 from auramask.utils.datasets import DatasetEnum
 
 import tensorflow as tf
 
+import keras
 from keras.optimizers import Adam
 from keras.losses import MeanSquaredError, MeanAbsoluteError
 
@@ -100,14 +102,23 @@ def parse_args():
         prog="AuraMask Training",
         description="A training script for the AuraMask network",
     )
+    parser.add_argument(
+        "-m",
+        "--model-backbone",
+        type=backbones.BaseModels,
+        action=EnumAction,
+        required=True,
+    )
+    parser.add_argument("--model-config", type=argparse.FileType("r"))
+    parser.add_argument(
+        "-F", type=FaceEmbedEnum, nargs="+", required=False, action=EnumAction
+    )
+    parser.add_argument("-p", "--rho", type=float, default=1.0)
     parser.add_argument("-a", "--alpha", type=float, default=2e-4)
     parser.add_argument("-e", "--epsilon", type=float, default=0.03)
     parser.add_argument("-l", "--lambda", type=float, default=[1.0], nargs="+")
-    parser.add_argument("-p", "--rho", type=float, default=1.0)
-    parser.add_argument("-g", "--gamma", type=float, default=0.1)
     parser.add_argument("-B", "--batch-size", dest="batch", type=int, default=32)
     parser.add_argument("-E", "--epochs", type=int, default=5)
-    parser.add_argument("-d", "--depth", type=int, default=5)
     parser.add_argument(
         "-L",
         "--lpips",
@@ -128,15 +139,10 @@ def parse_args():
             "color",
             "illumination",
             "spatial",
+            "aesthetic",
             "none",
         ],
         nargs="+",
-    )
-    parser.add_argument(
-        "--aesthetic", default=False, type=bool, action=argparse.BooleanOptionalAction
-    )
-    parser.add_argument(
-        "-F", type=FaceEmbedEnum, nargs="+", required=False, action=EnumAction
     )
     parser.add_argument(
         "-S",
@@ -148,9 +154,8 @@ def parse_args():
         "--log", default=True, type=bool, action=argparse.BooleanOptionalAction
     )
     parser.add_argument("--log-dir", default=None, type=dir_path)
-    parser.add_argument("--t-split", type=str, required=True)
-    parser.add_argument("--v-split", type=str, required=True)
-    parser.add_argument("--n-filters", type=int, default=64)
+    parser.add_argument("--training", type=str, required=True)
+    parser.add_argument("--validation", type=str, required=True)
     parser.add_argument(
         "--eager", default=False, type=bool, action=argparse.BooleanOptionalAction
     )
@@ -175,12 +180,16 @@ def parse_args():
 
     args = parser.parse_args()
 
+    from json import load
+
+    args.model_config = load(args.model_config)
+
     return args
 
 
 def load_data():
     ds: DatasetEnum = hparams["dataset"]
-    t_ds, v_ds = ds.fetch_dataset(hparams["t_split"], hparams["v_split"])
+    t_ds, v_ds = ds.fetch_dataset(hparams["training"], hparams["validation"])
 
     w, h = hparams["input"]
 
@@ -251,13 +260,15 @@ def load_data():
 
     # exit()
 
+    hparams["dataset"] = ds.name.lower()
+
     return t_ds, v_ds
 
 
 def initialize_loss():
     losses = []
     weights = []
-    loss_config = []
+    loss_config = {}
     cs_transforms = []
     metrics = []
 
@@ -268,22 +279,15 @@ def initialize_loss():
         for f in F:
             losses.append(FaceEmbeddingThresholdLoss(f=f, threshold=f.get_threshold()))
             weights.append(rho)
-            # metrics.append(CosineDistance(f=losses[-1].f))
             metrics.append(
                 PercentageOverThreshold(f=losses[-1].f, threshold=f.get_threshold())
             )
-            loss_config.append(losses[-1].get_config() | {"weight": weights[-1]})
+            loss_config[losses[-1].name] = losses[-1].get_config() | {
+                "weight": weights[-1]
+            }
             cs_transforms.append(
                 is_not_rgb
             )  # Determine if it needs to be transformed to rgb space
-
-    if hparams.pop("aesthetic"):
-        losses.append(
-            AestheticLoss(name="NIMA-A", kind="nima-aes", backbone="nasnetmobile")
-        )
-        weights.append(hparams.pop("gamma"))
-        loss_config.append(losses[-1].get_config() | {"weight": weights[-1]})
-        cs_transforms.append(is_not_rgb)
 
     if "none" not in hparams["lpips"]:
         lam = hparams.pop("lambda")
@@ -340,13 +344,18 @@ def initialize_loss():
             elif loss_i == "spatial":
                 tmp_loss = SpatialConsistencyLoss()
                 cs_transforms.append(is_not_rgb)
+            elif loss_i == "aesthetic":
+                tmp_loss = AestheticLoss(
+                    name="NIMA-A", kind="nima-aes", backbone="nasnetmobile"
+                )
+                cs_transforms.append(is_not_rgb)
             else:
                 tmp_loss = PerceptualLoss(backbone=loss_i)
                 cs_transforms.append(is_not_rgb)
 
             losses.append(tmp_loss)
             weights.append(w_i)
-            loss_config.append(tmp_loss.get_config() | {"weight": w_i})
+            loss_config[tmp_loss.name] = tmp_loss.get_config() | {"weight": w_i}
 
     if not is_not_rgb:
         cs_transforms = None
@@ -357,15 +366,32 @@ def initialize_loss():
 
 
 def initialize_model():
-    model = AuraMask(
-        n_filters=hparams["n_filters"],
-        n_dims=3,
-        eps=hparams["epsilon"],
-        depth=hparams["depth"],
-        colorspace=hparams["color_space"].value,
+    eps = hparams["epsilon"]
+
+    def preproc(inputs):
+        inputs = keras.layers.Rescaling(scale=2, offset=-1)(inputs)
+        return inputs
+
+    def postproc(x, inputs):
+        x = tf.multiply(eps, x)
+        out = tf.add(x, inputs)
+        out = tf.clip_by_value(out, 0.0, 1.0)
+        return [out, x]
+
+    model_config: dict = hparams["model_config"]
+    base_model: backbones.BaseModels = hparams.pop("model_backbone")
+    hparams["model"] = base_model.name.lower()
+    base_model = base_model.build_backbone(
+        model_config=model_config,
+        preprocess=preproc,
+        activation_fn=keras.activations.tanh,
+        post_processing=postproc,
     )
 
-    hparams["model"] = model.model.name
+    model = AuraMask(
+        backbone=base_model,
+        colorspace=hparams["color_space"].value,
+    )
 
     losses, losses_w, losses_t, metrics = initialize_loss()
     optimizer = Adam(learning_rate=hparams["alpha"])
@@ -374,7 +400,7 @@ def initialize_model():
         loss=losses,
         loss_weights=losses_w,
         loss_convert=losses_t,
-        run_eagerly=hparams["eager"],
+        run_eagerly=hparams.pop("eager"),
         metrics=metrics,
     )
     return model

@@ -24,7 +24,6 @@ class FaceEmbedEnum(str, Enum):
         global model_obj
 
         if "model_obj" not in globals():
-            print("New Global Context")
             model_obj = {}
 
         if self.name not in model_obj.keys():
