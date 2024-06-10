@@ -1,5 +1,6 @@
 import unittest
 import tensorflow as tf
+from keras.metrics import CosineSimilarity
 
 from auramask.losses.embeddistance import cosine_distance
 
@@ -33,12 +34,13 @@ class TestCosineDistance(unittest.TestCase):
         dist = cosine_distance(a, b, axis=-1)
         tf.debugging.assert_near(dist, 1.0)
 
-    # Test Orthogonal CD: 2
-    def test_orthogonal_embed(self):
-        a = tf.zeros(self._image_shape) + 0.5
-        b = tf.ones(self._image_shape)
+    # Test Against Implementation:
+    def test_against_tf(self):
+        a = tf.ones(self._image_shape)
+        b = tf.random.uniform(self._image_shape)
         dist = cosine_distance(a, b, axis=-1)
-        tf.debugging.assert_near(dist, 2.0)
+        tf_dist = 1 - CosineSimilarity()(a, b)
+        tf.debugging.assert_near(dist, tf_dist)
 
 
 if __name__ == "__main__":

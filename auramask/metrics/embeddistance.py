@@ -54,9 +54,8 @@ class PercentageOverThreshold(metrics.Mean):
         return {**base_config, **config}
 
     def update_state(self, y_true, y_pred, sample_weight=None):
-        emb_t = self.f(y_true, training=False)
         emb_adv = self.f(y_pred, training=False)
-        dist = cosine_distance(emb_t, emb_adv, -1)
+        dist = cosine_distance(y_true, emb_adv, -1)
         accuracy = ops.cast(
             ops.less_equal(dist, self.threshold), dtype=backend.floatx()
         )

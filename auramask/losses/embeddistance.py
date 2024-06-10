@@ -68,9 +68,8 @@ class FaceEmbeddingThresholdLoss(FaceEmbeddingLoss):
         return {**base_config, **config}
 
     def call(self, y_true: KerasTensor, y_pred: KerasTensor) -> KerasTensor:
-        emb_t = ops.stop_gradient(self.f(y_true, training=False))
         emb_adv = self.f(y_pred, training=False)
-        distance = self.d(emb_t, emb_adv, -1)
+        distance = self.d(y_true, emb_adv, -1)
         dist_thresh = ops.subtract(self.threshold, distance)
         return ops.nn.leaky_relu(dist_thresh)
 
@@ -112,8 +111,7 @@ class EmbeddingDistanceLoss(Loss):
         """
         loss = 0.0
         for f in self.F:
-            emb_t = ops.stop_gradient(f(y_true))
-            emb_adv = f(y_pred)
-            sim = ops.negative(cosine_distance(emb_t, emb_adv, -1))
+            emb_adv = f(y_pred, training=False)
+            sim = ops.negative(cosine_distance(y_true, emb_adv, -1))
             loss = ops.add(loss, sim)
         return ops.divide(loss, self.N)

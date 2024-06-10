@@ -1,6 +1,19 @@
 from keras_cv import layers as clayers
 
-from keras import layers
+from keras import layers, backend
+
+
+def rgb_to_bgr(x):
+    if backend.image_data_format() == "channels_first":
+        # 'RGB'->'BGR'
+        if backend.ndim(x) == 3:
+            x = x[::-1, ...]
+        else:
+            x = x[:, ::-1, ...]
+    else:
+        # 'RGB'->'BGR'
+        x = x[..., ::-1]
+    return x
 
 
 # TODO: the w and h refer to the resampled and not center-cropped. Could be misleading to some users.
@@ -18,7 +31,7 @@ def gen_image_loading_layers(w: int, h: int, crop: bool = True) -> clayers.Augme
     return clayers.Augmenter(
         [
             # clayers.Equalization((0, 255)),
-            clayers.Resizing(w, h, crop_to_aspect_ratio=True),
+            clayers.Resizing(w, h, crop_to_aspect_ratio=crop),
             clayers.Rescaling(scale=1.0 / 255, offset=0),
             layers.CenterCrop(224, 224),
         ]
