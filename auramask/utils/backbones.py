@@ -31,7 +31,7 @@ class BaseModels(Enum):
             inputs = preprocess(inputs)
 
         # Get model using config dict
-        x = self.value(**model_config)(inputs)
+        x = self.value(**model_config)(inputs)[0]
 
         # Use activation function if not defined by builder
         if activation_fn:

@@ -1,10 +1,9 @@
-from keras import Model, utils, layers, backend
+from keras import Model, utils, layers, backend, ops
 from keras.src.applications.imagenet_utils import (
     obtain_input_shape,
     validate_activation,
 )
 import os
-import tensorflow as tf
 
 WEIGHTS_PATH = (
     "https://github.com/serengil/deepface_models/releases/download/"
@@ -13,7 +12,7 @@ WEIGHTS_PATH = (
 
 
 def preprocess_input(x):
-    x = tf.subtract(x, [93.540, 104.7624, 129.1863])
+    x = ops.subtract(x, [93.540, 104.7624, 129.1863])
     return x
 
 

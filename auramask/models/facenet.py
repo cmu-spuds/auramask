@@ -1,8 +1,7 @@
-from keras import Model, utils, layers, backend
+from keras import Model, utils, layers, backend, ops
 from keras.src.applications.imagenet_utils import obtain_input_shape
 import os
 from functools import partial
-import tensorflow as tf
 
 WEIGHTS_PATH_128 = (
     "https://github.com/serengil/deepface_models/releases/download/"
@@ -17,11 +16,11 @@ WEIGHTS_PATH_512 = (
 
 def preprocess_input(x):
     mean, std = (
-        tf.reduce_mean(x, axis=[-3, -2, -1], keepdims=True),
-        tf.math.reduce_std(x, axis=[-3, -2, -1], keepdims=True),
+        ops.mean(x, axis=[-3, -2, -1], keepdims=True),
+        ops.std(x, axis=[-3, -2, -1], keepdims=True),
     )
-    x = tf.subtract(x, mean)
-    x = tf.divide(x, tf.maximum(std, backend.epsilon()))
+    x = ops.subtract(x, mean)
+    x = ops.divide(x, ops.maximum(std, backend.epsilon()))
     return x
 
 

@@ -13,12 +13,12 @@ from auramask.utils.preprocessing import rgb_to_bgr
 # TODO: Concrete function execution (https://medium.com/tinyclues-vision/optimizing-tensorflow-models-for-inference-d3636cf34034)
 class FaceEmbedEnum(str, Enum):
     VGGFACE = "VGG-Face"
-    # FACENET = "Facenet"
-    # FACENET512 = "Facenet512"
+    FACENET = "Facenet"
+    FACENET512 = "Facenet512"
     # OPENFACE = "OpenFace"  # TODO: Quickly NaN
     # DEEPFACE = "DeepFace"  # TODO: OOM errors
-    # DEEPID = "DeepID"
-    # ARCFACE = "ArcFace"
+    DEEPID = "DeepID"
+    ARCFACE = "ArcFace"
 
     def get_model(self):
         global model_obj

@@ -6,6 +6,8 @@ from pathlib import Path
 from random import choice
 from string import ascii_uppercase
 
+import keras
+
 from auramask.callbacks.callbacks import init_callbacks
 
 from auramask.losses.ffl import FocalFrequencyLoss
@@ -31,9 +33,7 @@ from auramask.utils import backbones
 from auramask.utils.colorspace import ColorSpaceEnum
 from auramask.utils.datasets import DatasetEnum
 
-import tensorflow as tf
-
-from keras import optimizers as opts, losses as ls, layers, activations
+from keras import optimizers as opts, losses as ls, layers, activations, ops, utils
 
 from datetime import datetime
 
@@ -210,16 +210,16 @@ def load_data():
             lambda x: DatasetEnum.data_augmenter(
                 x, augmenters["geom"], augmenters["aug"]
             ),
-            num_parallel_calls=tf.data.AUTOTUNE,
+            num_parallel_calls=-1,
         )
         .map(
             lambda x, y: (
                 x,
                 DatasetEnum.compute_embeddings(y, hparams["F"]),
             ),
-            num_parallel_calls=tf.data.AUTOTUNE,
+            num_parallel_calls=-1,
         )
-        .prefetch(tf.data.AUTOTUNE)
+        .prefetch(-1)
     )
 
     v_ds = (
@@ -235,10 +235,10 @@ def load_data():
                 x,
                 DatasetEnum.compute_embeddings(x, hparams["F"]),
             ),
-            num_parallel_calls=tf.data.AUTOTUNE,
+            num_parallel_calls=-1,
         )
         .cache()
-        .prefetch(tf.data.AUTOTUNE)
+        .prefetch(-1)
     )
 
     # import tensorflow_datasets as tfds
@@ -366,14 +366,14 @@ def initialize_loss():
 def initialize_model():
     eps = hparams["epsilon"]
 
-    def preproc(inputs):
+    def preproc(inputs: keras.KerasTensor):
         inputs = layers.Rescaling(scale=2, offset=-1)(inputs)
         return inputs
 
-    def postproc(x, inputs):
-        x = tf.multiply(eps, x)
-        out = tf.add(x, inputs)
-        out = tf.clip_by_value(out, 0.0, 1.0)
+    def postproc(x: keras.KerasTensor, inputs: keras.KerasTensor):
+        x = ops.multiply(eps, x)
+        out = ops.add(x, inputs)
+        out = ops.clip(out, 0.0, 1.0)
         return [out, x]
 
     model_config: dict = hparams["model_config"]
@@ -405,11 +405,9 @@ def initialize_model():
 
 
 def set_seed():
-    from keras.utils import set_random_seed
-
     seed = hparams["seed"]
     seed = int(hashlib.sha256(seed.encode("utf-8")).hexdigest(), 16) % 10**8
-    set_random_seed(seed)
+    utils.set_random_seed(seed)
     hparams["seed"] = seed
 
 
