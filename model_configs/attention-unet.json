@@ -1,0 +1,17 @@
+{
+    "filter_num": [64, 128, 256, 512, 1024],
+    "n_labels": 3,
+    "stack_num_down":2,
+    "stack_num_up":2,
+    "activation":"ReLU",
+    "atten_activation":"ReLU",
+    "attention":"add",
+    "output_activation":null,
+    "batch_norm":true,
+    "pool":false,
+    "unpool":false,
+    "backbone":"VGG16",
+    "weights":"imagenet",
+    "freeze_backbone":true,
+    "freeze_batch_norm":true
+}

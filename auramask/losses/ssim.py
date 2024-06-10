@@ -126,8 +126,8 @@ class GRAYSSIM(SSIMLoss):
         super().__init__(max_val, filter_size, filter_sigma, k1, k2, name, **kwargs)
 
     def call(self, y_true, y_pred):
-        y_t_gs = tf.image.rgb_to_grayscale(y_true)
-        y_p_gs = tf.image.rgb_to_grayscale(y_pred)
+        y_t_gs = tf.reduce_mean(y_true, 3, keepdims=True)
+        y_p_gs = tf.reduce_mean(y_pred, 3, keepdims=True)
         return 1 - tf.image.ssim(
             y_t_gs,
             y_p_gs,
