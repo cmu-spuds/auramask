@@ -1,8 +1,9 @@
 import io
-from os import PathLike, getenv
+from os import PathLike, getenv, path
 from typing import Any, Dict, Literal
 
 import wandb
+from keras import callbacks as k_callbacks
 from wandb.integration.keras import (
     WandbMetricsLogger,
     WandbEvalCallback,
@@ -46,7 +47,7 @@ class AuramaskCallback(WandbEvalCallback):
             {
                 "image": [wandb.Image(array_to_img(x_i)) for x_i in self.x[:5]],
             },
-            step=0,
+            step=-1,
         )
         return super().on_train_begin(logs)
 
@@ -73,7 +74,6 @@ class AuramaskCallback(WandbEvalCallback):
                 "image": [wandb.Image(array_to_img(y_i)) for y_i in y[:5]],
                 "mask": [wandb.Image(array_to_img(m_i)) for m_i in mask[:5]],
             },
-            step=epoch + 1,
         )
 
         for idx in table_idxs:
@@ -170,20 +170,24 @@ def init_callbacks(hparams: dict, sample, logdir, note: str = ""):
 
     callbacks = []
     if getenv("WANDB_MODE") != "offline":
-        run = wandb.init(
+        wandb.init(
             project="auramask",
+            id=getenv("WANDB_RUN_ID", None),
             dir=logdir,
             config=tmp_hparams,
             name=name,
             notes=note,
+            resume="allow",
         )
-        if getenv("SLURM_JOB_NAME"):
-            run.mark_preempting()
+
+        callbacks.append(
+            k_callbacks.BackupAndRestore(backup_dir=path.join(logdir, "backup"))
+        )
 
         if checkpoint:
             callbacks.append(
                 AuramaskCheckpoint(
-                    filepath=logdir,
+                    filepath=path.join(logdir, "checkpoints"),
                     freq_mode="epoch",
                     save_weights_only=False,
                     save_freq=int(getenv("AURAMASK_CHECKPOINT_FREQ", 100)),
