@@ -1,5 +1,5 @@
 import io
-from os import PathLike, getenv, environ
+from os import PathLike, getenv
 from typing import Any, Dict, Literal
 
 import wandb
@@ -155,19 +155,30 @@ def init_callbacks(hparams: dict, sample, logdir, note: str = ""):
     )
     tmp_hparams["input"] = str(tmp_hparams["input"])
 
-    if getenv("SLURM_JOB_NAME") and getenv("SLURM_ARRAY_TASK_ID"):
-        name = "%s-%s" % (
-            environ["SLURM_JOB_NAME"],
-            environ["SLURM_ARRAY_TASK_ID"],
+    if (
+        getenv("SLURM_JOB_NAME")
+        and getenv("SLURM_ARRAY_TASK_ID")
+        and getenv("SLURM_JOB_ID")
+    ):
+        name = "%s-%s-%s" % (
+            getenv("SLURM_JOB_NAME"),
+            getenv("SLURM_ARRAY_TASK_ID"),
+            getenv("SLURM_JOB_ID"),
         )
     else:
         name = None
 
     callbacks = []
     if getenv("WANDB_MODE") != "offline":
-        wandb.init(
-            project="auramask", dir=logdir, config=tmp_hparams, name=name, notes=note
+        run = wandb.init(
+            project="auramask",
+            dir=logdir,
+            config=tmp_hparams,
+            name=name,
+            notes=note,
         )
+        if getenv("SLURM_JOB_NAME"):
+            run.mark_preempting()
 
         if checkpoint:
             callbacks.append(
