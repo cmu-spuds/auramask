@@ -20,13 +20,13 @@ class AuraMask(Model):
         super().__init__(name=name, **kwargs)
         self._custom_losses = []
         self.colorspace = colorspace
-        self.backbone = backbone
+        self.model = backbone
 
     def call(self, inputs, training=False):
         if not training:
             inputs = self.colorspace[0](inputs)
 
-        out, mask = self.backbone(inputs)
+        out, mask = self.model(inputs)
 
         if not training:
             out = self.colorspace[1](out)

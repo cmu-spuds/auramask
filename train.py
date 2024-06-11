@@ -37,7 +37,6 @@ import keras
 from keras.optimizers import Adam
 from keras.losses import MeanSquaredError, MeanAbsoluteError
 
-from datetime import datetime
 
 from git import Repo
 
@@ -443,22 +442,9 @@ def main():
         else:
             note = ""
         if not logdir:
-            logdir = Path(
-                os.path.join(
-                    "logs",
-                    branch,
-                    datetime.now().strftime("%m-%d"),
-                    datetime.now().strftime("%H.%M"),
-                )
-            )
+            logdir = Path(os.path.join("logs"))
         else:
-            logdir = Path(
-                os.path.join(
-                    logdir,
-                    datetime.now().strftime("%m-%d"),
-                    datetime.now().strftime("%H.%M"),
-                )
-            )
+            logdir = Path(os.path.join(logdir))
         logdir.mkdir(parents=True, exist_ok=True)
         logdir = str(logdir)
         v = get_sample_data(v_ds)
