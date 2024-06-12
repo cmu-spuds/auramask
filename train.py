@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from random import choice
 from string import ascii_uppercase
+from datetime import datetime
 
 from auramask.callbacks.callbacks import init_callbacks
 
@@ -26,6 +27,7 @@ from auramask.metrics.embeddistance import PercentageOverThreshold
 
 from auramask.models.face_embeddings import FaceEmbedEnum
 from auramask.models.auramask import AuraMask
+from auramask.models.zero_dce import get_enhanced_image
 
 from auramask.utils import backbones
 from auramask.utils.colorspace import ColorSpaceEnum
@@ -366,19 +368,24 @@ def initialize_loss():
 
 def initialize_model():
     eps = hparams["epsilon"]
+    base_model: backbones.BaseModels = hparams.pop("model_backbone")
 
-    def preproc(inputs):
-        inputs = keras.layers.Rescaling(scale=2, offset=-1)(inputs)
-        return inputs
+    if base_model == backbones.BaseModels.ZERODCE:
+        postproc = get_enhanced_image
+        preproc = None
+    else:
 
-    def postproc(x, inputs):
-        x = tf.multiply(eps, x)
-        out = tf.add(x, inputs)
-        out = tf.clip_by_value(out, 0.0, 1.0)
-        return [out, x]
+        def preproc(inputs):
+            inputs = keras.layers.Rescaling(scale=2, offset=-1)(inputs)
+            return inputs
+
+        def postproc(x, inputs):
+            x = tf.multiply(eps, x)
+            out = tf.add(x, inputs)
+            out = tf.clip_by_value(out, 0.0, 1.0)
+            return [out, x]
 
     model_config: dict = hparams["model_config"]
-    base_model: backbones.BaseModels = hparams.pop("model_backbone")
     hparams["model"] = base_model.name.lower()
     base_model = base_model.build_backbone(
         model_config=model_config,
@@ -442,7 +449,11 @@ def main():
         else:
             note = ""
         if not logdir:
-            logdir = Path(os.path.join("logs"))
+            logdir = Path(
+                os.path.join("logs"),
+                datetime.now().strftime("%m-%d"),
+                datetime.now().strftime("%H.%M"),
+            )
         else:
             logdir = Path(os.path.join(logdir))
         logdir.mkdir(parents=True, exist_ok=True)

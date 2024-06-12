@@ -1,0 +1,7 @@
+{
+    "filters": 32,
+    "layer_activations": "relu",
+    "kernel_size": [3,3],
+    "strides": [1,1],
+    "padding": "same"
+}

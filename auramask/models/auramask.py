@@ -5,6 +5,7 @@ from keras.metrics import Mean
 from keras.losses import Loss
 
 from auramask.losses.embeddistance import FaceEmbeddingLoss
+from auramask.losses.zero_dce import IlluminationSmoothnessLoss
 from auramask.metrics.embeddistance import PercentageOverThreshold
 # import keras.ops as np
 
@@ -87,6 +88,7 @@ class AuraMask(Model):
     def compute_loss(self, x=None, y=None, y_pred=None, sample_weight=None):
         del sample_weight
         x_rgb, x_mod = x
+        y_pred, mask = y_pred
         tloss = tf.constant(0, dtype=tf.float32)  # tracked total loss
         y_pred_rgb = self.colorspace[1](
             y_pred
@@ -100,6 +102,9 @@ class AuraMask(Model):
                     (y[0][idx], y_pred_rgb) if l_c is True else (y[0][idx], y_pred)
                 )
                 idx += 1
+            elif isinstance(loss, IlluminationSmoothnessLoss):
+                tmp_pred = mask
+                tmp_y = None
             else:
                 tmp_y, tmp_pred = (
                     (x_rgb, y_pred_rgb) if l_c is True else (x_mod, y_pred)
@@ -144,8 +149,10 @@ class AuraMask(Model):
 
         with tf.GradientTape() as tape:
             X_mod = self.colorspace[0](X)  # Convert to chosen colorspace
-            y_pred, _ = self(X_mod, training=True)  # Forward pass with
-            loss = self.compute_loss(x=(X, X_mod), y=y, y_pred=y_pred)  # Compute loss
+            y_pred, mask = self(X_mod, training=True)  # Forward pass with
+            loss = self.compute_loss(
+                x=(X, X_mod), y=y, y_pred=(y_pred, mask)
+            )  # Compute loss
 
         # Compute Gradients
         trainable_vars = self.trainable_variables
@@ -165,14 +172,14 @@ class AuraMask(Model):
             data  # X is input image data, y is pre-computed set of embeddings ((N Embeddings), (N Names))
         )
 
-        y_pred, _ = self(X, training=False)
+        y_pred, mask = self(X, training=False)
 
         y_pred = self.colorspace[0](y_pred)
 
         X_mod = self.colorspace[0](X)  # Convert to chosen colorspace
 
         # Updates stateful loss metrics.
-        loss = self.compute_loss(x=(X, X_mod), y=y, y_pred=y_pred)
+        loss = self.compute_loss(x=(X, X_mod), y=y, y_pred=(y_pred, mask))
         metrics = self.compute_metrics(x=X, y=y, y_pred=y_pred, sample_weight=None)
         metrics["loss"] = loss
         return metrics
