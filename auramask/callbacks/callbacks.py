@@ -155,19 +155,6 @@ def init_callbacks(hparams: dict, sample, logdir, note: str = ""):
     )
     tmp_hparams["input"] = str(tmp_hparams["input"])
 
-    if (
-        getenv("SLURM_JOB_NAME")
-        and getenv("SLURM_ARRAY_TASK_ID")
-        and getenv("SLURM_JOB_ID")
-    ):
-        name = "%s-%s-%s" % (
-            getenv("SLURM_JOB_NAME"),
-            getenv("SLURM_ARRAY_TASK_ID"),
-            getenv("SLURM_JOB_ID"),
-        )
-    else:
-        name = None
-
     callbacks = []
     if getenv("WANDB_MODE") != "offline":
         wandb.init(
@@ -175,7 +162,7 @@ def init_callbacks(hparams: dict, sample, logdir, note: str = ""):
             id=getenv("WANDB_RUN_ID", None),
             dir=logdir,
             config=tmp_hparams,
-            name=name,
+            name=getenv("SLURM_JOB_NAME", None),
             notes=note,
             resume="allow",
         )
