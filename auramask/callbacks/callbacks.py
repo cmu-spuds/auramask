@@ -47,7 +47,7 @@ class AuramaskCallback(WandbEvalCallback):
             {
                 "image": [wandb.Image(array_to_img(x_i)) for x_i in self.x[:5]],
             },
-            step=-1,
+            step=0,
         )
         return super().on_train_begin(logs)
 
@@ -69,22 +69,43 @@ class AuramaskCallback(WandbEvalCallback):
         y, mask = self.model(self.x, training=False)
         table_idxs = self.data_table_ref.get_index()
 
-        wandb.log(
-            {
-                "image": [wandb.Image(array_to_img(y_i)) for y_i in y[:5]],
-                "mask": [wandb.Image(array_to_img(m_i)) for m_i in mask[:5]],
-            },
-        )
+        if mask.shape[-1] > 3 and mask.shape[-1] % 3 == 0:
+            data = {}
+            for i in range(0, mask.shape[-1], 3):
+                data["r%d" % (i / 3)] = [
+                    wandb.Image(array_to_img(m_i)) for m_i in mask[:, :, :, i : i + 3]
+                ]
 
-        for idx in table_idxs:
-            pred = y[idx]
-            m = mask[idx]
-            self.pred_table.add_data(
-                epoch,
-                self.data_table_ref.data[idx][0],
-                wandb.Image(pred),
-                wandb.Image(m),
+            data["image"] = [wandb.Image(array_to_img(y_i)) for y_i in y[:]]
+            wandb.log(data, step=wandb.run.step)
+
+            # for idx in table_idxs:
+            #     pred = y[idx]
+            #     m = mask[idx]
+            #     self.pred_table.add_data(
+            #         epoch,
+            #         self.data_table_ref.data[idx][0],
+            #         wandb.Image(pred),
+            #         wandb.Image(m),
+            #     )
+        else:
+            wandb.log(
+                {
+                    "image": [wandb.Image(array_to_img(y_i)) for y_i in y[:]],
+                    "mask": [wandb.Image(array_to_img(m_i)) for m_i in mask[:]],
+                },
+                step=wandb.run.step,
             )
+
+            for idx in table_idxs:
+                pred = y[idx]
+                m = mask[idx]
+                self.pred_table.add_data(
+                    epoch,
+                    self.data_table_ref.data[idx][0],
+                    wandb.Image(pred),
+                    wandb.Image(m),
+                )
 
     def on_train_end(self, logs: Dict[str, float] | None = None) -> None:
         super().on_epoch_end(self.__cur_epoch, logs=logs)
