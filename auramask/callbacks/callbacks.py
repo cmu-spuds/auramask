@@ -44,7 +44,10 @@ class AuramaskCallback(WandbEvalCallback):
     def on_train_begin(self, logs: Dict[SaveStrategy, float] | None = None) -> None:
         wandb.log(
             {
-                "image": [wandb.Image(array_to_img(x_i)) for x_i in self.x[:5]],
+                "image": [
+                    wandb.Image(array_to_img(x_i * 255, scale=False))
+                    for x_i in self.x[:5]
+                ],
             },
             step=0,
         )
@@ -70,8 +73,13 @@ class AuramaskCallback(WandbEvalCallback):
 
         wandb.log(
             {
-                "image": [wandb.Image(array_to_img(y_i)) for y_i in y[:5]],
-                "mask": [wandb.Image(array_to_img(m_i)) for m_i in mask[:5]],
+                "image": [
+                    wandb.Image(array_to_img(y_i * 255, scale=False)) for y_i in y[:5]
+                ],
+                "mask": [
+                    wandb.Image(array_to_img(m_i * 255, scale=False))
+                    for m_i in mask[:5]
+                ],
             },
             step=epoch + 1,
         )

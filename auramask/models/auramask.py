@@ -142,10 +142,14 @@ class AuraMask(Model):
             data  # X is input image data, y is pre-computed set of embeddings ((N Embeddings), (N Names))
         )
 
+        X_mod = tf.identity(X)
+
         with tf.GradientTape() as tape:
-            X_mod = self.colorspace[0](X)  # Convert to chosen colorspace
-            y_pred, _ = self(X_mod, training=True)  # Forward pass with
-            loss = self.compute_loss(x=(X, X_mod), y=y, y_pred=y_pred)  # Compute loss
+            X_mod = self.colorspace[0](X_mod)  # Convert to chosen colorspace
+            y_pred, mask = self(X_mod, training=True)  # Forward pass with
+            loss = self.compute_loss(
+                x=(X, X_mod), y=y, y_pred=(y_pred, mask)
+            )  # Compute loss
 
         # Compute Gradients
         trainable_vars = self.trainable_variables
@@ -168,6 +172,8 @@ class AuraMask(Model):
         y_pred, _ = self(X, training=False)
 
         y_pred = self.colorspace[0](y_pred)
+
+        X_mod = tf.identity(X)
 
         X_mod = self.colorspace[0](X)  # Convert to chosen colorspace
 
