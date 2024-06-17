@@ -1,8 +1,9 @@
 import io
-from os import PathLike, getenv, environ
+from os import PathLike, getenv, path
 from typing import Any, Dict, Literal
 
 import wandb
+from keras import callbacks as k_callbacks
 from wandb.integration.keras import (
     WandbMetricsLogger,
     WandbEvalCallback,
@@ -71,28 +72,52 @@ class AuramaskCallback(WandbEvalCallback):
         y, mask = self.model(self.x, training=False)
         table_idxs = self.data_table_ref.get_index()
 
-        wandb.log(
-            {
-                "image": [
-                    wandb.Image(preprocessing.image.array_to_img(y_i)) for y_i in y[:5]
-                ],
-                "mask": [
+        if mask.shape[-1] > 3 and mask.shape[-1] % 3 == 0:
+            data = {}
+            for i in range(0, mask.shape[-1], 3):
+                data["r%d" % (i / 3)] = [
                     wandb.Image(preprocessing.image.array_to_img(m_i))
-                    for m_i in mask[:5]
-                ],
-            },
-            step=epoch + 1,
-        )
+                    for m_i in mask[:, :, :, i : i + 3]
+                ]
 
-        for idx in table_idxs:
-            pred = y[idx]
-            m = mask[idx]
-            self.pred_table.add_data(
-                epoch,
-                self.data_table_ref.data[idx][0],
-                wandb.Image(pred),
-                wandb.Image(m),
+            data["image"] = [
+                wandb.Image(preprocessing.image.array_to_img(y_i)) for y_i in y[:]
+            ]
+            wandb.log(data, step=wandb.run.step)
+
+            # for idx in table_idxs:
+            #     pred = y[idx]
+            #     m = mask[idx]
+            #     self.pred_table.add_data(
+            #         epoch,
+            #         self.data_table_ref.data[idx][0],
+            #         wandb.Image(pred),
+            #         wandb.Image(m),
+            #     )
+        else:
+            wandb.log(
+                {
+                    "image": [
+                        wandb.Image(preprocessing.image.array_to_img(y_i))
+                        for y_i in y[:]
+                    ],
+                    "mask": [
+                        wandb.Image(preprocessing.image.array_to_img(m_i))
+                        for m_i in mask[:]
+                    ],
+                },
+                step=wandb.run.step,
             )
+
+            for idx in table_idxs:
+                pred = y[idx]
+                m = mask[idx]
+                self.pred_table.add_data(
+                    epoch,
+                    self.data_table_ref.data[idx][0],
+                    wandb.Image(pred),
+                    wandb.Image(m),
+                )
 
     def on_train_end(self, logs: Dict[str, float] | None = None) -> None:
         super().on_epoch_end(self.__cur_epoch, logs=logs)
@@ -163,24 +188,26 @@ def init_callbacks(hparams: dict, sample, logdir, note: str = ""):
     )
     tmp_hparams["input"] = str(tmp_hparams["input"])
 
-    if getenv("SLURM_JOB_NAME") and getenv("SLURM_ARRAY_TASK_ID"):
-        name = "%s-%s" % (
-            environ["SLURM_JOB_NAME"],
-            environ["SLURM_ARRAY_TASK_ID"],
-        )
-    else:
-        name = None
-
     callbacks = []
     if getenv("WANDB_MODE") != "offline":
         wandb.init(
-            project="auramask", dir=logdir, config=tmp_hparams, name=name, notes=note
+            project="auramask",
+            id=getenv("WANDB_RUN_ID", None),
+            dir=logdir,
+            config=tmp_hparams,
+            name=getenv("SLURM_JOB_NAME", None),
+            notes=note,
+            resume="allow",
+        )
+
+        callbacks.append(
+            k_callbacks.BackupAndRestore(backup_dir=path.join(logdir, "backup"))
         )
 
         if checkpoint:
             callbacks.append(
                 AuramaskCheckpoint(
-                    filepath=logdir,
+                    filepath=path.join(logdir, "checkpoints"),
                     freq_mode="epoch",
                     save_weights_only=False,
                     save_freq=int(getenv("AURAMASK_CHECKPOINT_FREQ", 100)),

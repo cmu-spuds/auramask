@@ -119,12 +119,16 @@ class IlluminationSmoothnessLoss(Loss):
         *illumination smoothness loss* is added to each curve parameter map.
         """
         del y_true
-        batch_size, h, w, _ = y_pred.shape
-        count_h = (h - 1) * w
-        count_w = h * (w - 1)
+        batch_size = ops.shape(y_pred)[0]
+        h_x = ops.shape(y_pred)[1]
+        w_x = ops.shape(y_pred)[2]
+        count_h = (ops.shape(y_pred)[2] - 1) * ops.shape(y_pred)[1]
+        count_w = ops.shape(y_pred)[2] * (ops.shape(y_pred)[3] - 1)
         # dy, dx = tf.image.image_gradients(y_pred)
-        h_tv = ops.abs((y_pred[:, 1:, :, :] - y_pred[:, : h - 1, :, :]))
-        w_tv = ops.abs((y_pred[:, :, 1:, :] - y_pred[:, :, : w - 1, :]))
+        # h_tv = tf.abs((y_pred[:, 1:, :, :] - y_pred[:, : h - 1, :, :]))
+        # w_tv = tf.abs((y_pred[:, :, 1:, :] - y_pred[:, :, : w - 1, :]))
+        h_tv = ops.sum(ops.square((y_pred[:, 1:, :, :] - y_pred[:, : h_x - 1, :, :])))
+        w_tv = ops.sum(ops.square((y_pred[:, :, 1:, :] - y_pred[:, :, : w_x - 1, :])))
         batch_size = ops.cast(batch_size, dtype="float32")
         count_h = ops.cast(count_h, dtype="float32")
         count_w = ops.cast(count_w, dtype="float32")

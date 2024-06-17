@@ -3,6 +3,7 @@ from functools import partial
 from types import NoneType, FunctionType
 from keras import Model, Input, backend
 from keras_unet_collection import models as unet_models
+from auramask.models import zero_dce
 
 input_shape = (
     (None, None, 3)
@@ -15,6 +16,7 @@ class BaseModels(Enum):
     UNET = partial(unet_models.unet_2d, input_size=input_shape)
     R2UNET = partial(unet_models.r2_unet_2d, input_size=input_shape)
     ATTUNET = partial(unet_models.att_unet_2d, input_size=input_shape)
+    ZERODCE = partial(zero_dce.build_dce_net, input_shape=input_shape)
 
     def build_backbone(
         self,
