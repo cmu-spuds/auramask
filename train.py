@@ -37,12 +37,7 @@ from auramask.utils.datasets import DatasetEnum
 
 from keras import optimizers as opts, losses as ls, activations, ops, utils
 
-
-from git import Repo
-
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"
-
-branch = Repo("./").active_branch.name  # Used for debugging runs
 
 # Global hparams object
 hparams: dict = {}

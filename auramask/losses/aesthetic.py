@@ -3,7 +3,6 @@ from typing import Literal
 from keras import ops, KerasTensor, Loss
 
 from auramask.models.nima import NIMA
-from auramask.models.vila import VILA
 
 
 def _normalize_labels(labels: KerasTensor) -> KerasTensor:
@@ -23,7 +22,7 @@ class AestheticLoss(Loss):
         | Literal["nasnetmobile"]
         | Literal["inceptionresnetv2"] = "mobilenet",
         kind: Literal["nima-aes"] | Literal["nima-tech"] | Literal["vila"] = "nima-aes",
-        model: NIMA | VILA | None = None,
+        model: NIMA | None = None,
         name="AestheticLoss",
         **kwargs,
     ):
@@ -41,11 +40,6 @@ class AestheticLoss(Loss):
                 for layer in self.model.layers:
                     layer.trainable = False
                     layer._name = "%s/%s" % (name, layer.name)
-            elif kind == "vila":
-                self.model = VILA()
-                for layer in self.model.layers:
-                    layer._name = "%s/%s" % (name, layer.name)
-
         self.model.trainable = False
 
     def get_config(self):

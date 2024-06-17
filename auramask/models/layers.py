@@ -1,5 +1,4 @@
-from keras import Sequential
-from keras import layers
+from keras import Sequential, layers
 
 
 class ResBlock(layers.Layer):
