@@ -115,7 +115,7 @@ def parse_args():
     parser.add_argument("-E", "--epochs", type=int, default=5)
     parser.add_argument(
         "-L",
-        "--lpips",
+        "--losses",
         type=str,
         default=["none"],
         choices=[
@@ -283,18 +283,18 @@ def initialize_loss():
                 is_not_rgb
             )  # Determine if it needs to be transformed to rgb space
 
-    if "none" not in hparams["lpips"]:
+    if "none" not in hparams["losses"]:
         lam = hparams.pop("lambda")
-        lpips = set(hparams.pop("lpips"))
-        if len(lpips) != len(lam) and len(lam) > 1:
+        loss_in = set(hparams.pop("losses"))
+        if len(loss_in) != len(lam) and len(lam) > 1:
             raise argparse.ArgumentError(
                 message="The length of lambda values must equal that of lpips argument"
             )
         elif len(lam) <= 1:
             w = lam[0] if len(lam) > 0 else 1.0
-            iters = zip(lpips, [w] * len(lpips))
+            iters = zip(loss_in, [w] * len(loss_in))
         else:
-            iters = zip(lpips, lam)
+            iters = zip(loss_in, lam)
 
         for loss_i, w_i in iters:
             if loss_i == "mse":
@@ -441,9 +441,11 @@ def main():
             note = ""
         if not logdir:
             logdir = Path(
-                os.path.join("logs"),
-                datetime.now().strftime("%m-%d"),
-                datetime.now().strftime("%H.%M"),
+                os.path.join(
+                    "logs",
+                    datetime.now().strftime("%m-%d"),
+                    datetime.now().strftime("%H.%M"),
+                )
             )
         else:
             logdir = Path(os.path.join(logdir))

@@ -147,10 +147,14 @@ class AuraMask(Model):
     def _tensorflow_train_step(self, data):
         from tensorflow import GradientTape
 
-        X, y = data
+        X, y = (
+            data  # X is input image data, y is pre-computed set of embeddings ((N Embeddings), (N Names))
+        )
+
+        X_mod = ops.copy(X)
 
         with GradientTape() as tape:
-            X_mod = self.colorspace[0](X)  # Convert to chosen colorspace
+            X_mod = self.colorspace[0](X_mod)  # Convert to chosen colorspace
             y_pred, mask = self(X_mod, training=True)  # Forward pass with
             loss = self.compute_loss(
                 x=(X, X_mod), y=y, y_pred=(y_pred, mask)
@@ -177,6 +181,8 @@ class AuraMask(Model):
         y_pred, mask = self(X, training=False)
 
         y_pred = self.colorspace[0](y_pred)
+
+        X_mod = ops.copy(X)
 
         X_mod = self.colorspace[0](X)  # Convert to chosen colorspace
 
