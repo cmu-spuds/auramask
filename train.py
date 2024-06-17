@@ -11,7 +11,6 @@ import keras
 
 from auramask.callbacks.callbacks import init_callbacks
 
-from auramask.losses.ffl import FocalFrequencyLoss
 from auramask.losses.perceptual import PerceptualLoss
 from auramask.losses.embeddistance import (
     FaceEmbeddingThresholdLoss,
@@ -319,9 +318,6 @@ def initialize_loss():
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "msssim":
                 tmp_loss = MSSSIMLoss()
-                cs_transforms.append(False)
-            elif loss_i == "ffl":
-                tmp_loss = FocalFrequencyLoss()
                 cs_transforms.append(False)
             elif loss_i == "nima":
                 tmp_loss = AestheticLoss(name="NIMA-T", kind="nima-tech")

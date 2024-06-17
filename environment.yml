@@ -1,6 +1,6 @@
 # environment.yml
 
-name: auramask-k3
+name: auramask
 channels:
   - defaults
 dependencies:
