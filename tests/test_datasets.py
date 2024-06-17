@@ -1,7 +1,5 @@
 import unittest
-import tensorflow as tf
-from keras.layers import CenterCrop
-from keras.preprocessing.image import img_to_array
+from keras import layers, preprocessing
 from unittest.mock import patch, MagicMock
 from datasets import Dataset
 from auramask.utils.datasets import DatasetEnum
@@ -10,7 +8,7 @@ import numpy as np
 from PIL import Image
 
 
-class testCenterCrop(CenterCrop):
+class testCenterCrop(layers.CenterCrop):
     def call(self, inputs):
         return inputs
 
@@ -18,7 +16,7 @@ class testCenterCrop(CenterCrop):
 def create_PIL_Image(dims: tuple) -> Image:
     imarray = rand(dims[0], dims[1], dims[2]) * 255
     im = Image.fromarray(imarray.astype("uint8")).convert("RGB")
-    im = img_to_array(im)
+    im = preprocessing.image.img_to_array(im)
     return im
 
 
@@ -126,11 +124,9 @@ class TestDatasetEnum(unittest.TestCase):
         transformed_example = DatasetEnum.data_collater(example_data, loader_args)
         print(transformed_example)
         self.assertIn("image", transformed_example)
-        tf.debugging.assert_rank(transformed_example["image"], 4)
-        tf.debugging.assert_equal((2, 256, 256, 3), transformed_example["image"].shape)
+        np.testing.assert_equal((2, 256, 256, 3), transformed_example["image"].shape)
         self.assertIn("labels", transformed_example)
-        tf.debugging.assert_rank(transformed_example["labels"], 2)
-        tf.debugging.assert_equal((2, 2), transformed_example["image"].shape)
+        np.testing.assert_equal((2, 2), transformed_example["image"].shape)
 
     @patch("auramask.utils.preprocessing.CenterCrop", testCenterCrop)
     def test_data_resizing_larger(self):
@@ -142,11 +138,9 @@ class TestDatasetEnum(unittest.TestCase):
 
         transformed_example = DatasetEnum.data_collater(example_data, loader_args)
         self.assertIn("x", transformed_example)
-        tf.debugging.assert_rank(transformed_example["x"], 4)
-        tf.debugging.assert_equal((2, 256, 256, 3), transformed_example["x"].shape)
+        np.testing.assert_equal((2, 256, 256, 3), transformed_example["x"].shape)
         self.assertIn("y", transformed_example)
-        tf.debugging.assert_rank(transformed_example["y"], 4)
-        tf.debugging.assert_equal((2, 256, 256, 3), transformed_example["y"].shape)
+        np.testing.assert_equal((2, 256, 256, 3), transformed_example["y"].shape)
 
     @patch("auramask.utils.preprocessing.CenterCrop", testCenterCrop)
     def test_data_resizing_same(self):
@@ -158,11 +152,9 @@ class TestDatasetEnum(unittest.TestCase):
         data_loader = DatasetEnum.LFW.get_data_loader(w, h, augment=False)
         transformed_example = data_loader(example_data)
         self.assertIn("x", transformed_example)
-        tf.debugging.assert_rank(transformed_example["x"], 4)
-        tf.debugging.assert_equal((2, 256, 256, 3), transformed_example["x"].shape)
+        np.testing.assert_equal((2, 256, 256, 3), transformed_example["x"].shape)
         self.assertIn("y", transformed_example)
-        tf.debugging.assert_rank(transformed_example["y"], 4)
-        tf.debugging.assert_equal((2, 256, 256, 3), transformed_example["y"].shape)
+        np.testing.assert_equal((2, 256, 256, 3), transformed_example["y"].shape)
 
     @patch("auramask.utils.preprocessing.CenterCrop", testCenterCrop)
     def test_data_resizing_mixed_smaller(self):
@@ -176,11 +168,9 @@ class TestDatasetEnum(unittest.TestCase):
         for example_data in examples:
             transformed_example = data_loader(example_data)
             self.assertIn("x", transformed_example)
-            tf.debugging.assert_rank(transformed_example["x"], 4)
-            tf.debugging.assert_equal((2, 256, 256, 3), transformed_example["x"].shape)
+            np.testing.assert_equal((2, 256, 256, 3), transformed_example["x"].shape)
             self.assertIn("y", transformed_example)
-            tf.debugging.assert_rank(transformed_example["y"], 4)
-            tf.debugging.assert_equal((2, 256, 256, 3), transformed_example["y"].shape)
+            np.testing.assert_equal((2, 256, 256, 3), transformed_example["y"].shape)
 
 
 if __name__ == "__main__":

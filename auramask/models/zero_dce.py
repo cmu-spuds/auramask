@@ -1,11 +1,10 @@
 from types import FunctionType, NoneType
-from keras import layers, Model, backend, utils
-import tensorflow as tf
+from keras import layers, Model, backend, utils, ops, KerasTensor
 
 
 def build_dce_net(
     input_shape: tuple | NoneType = None,
-    input_tensor: tf.Tensor | NoneType = None,
+    input_tensor: KerasTensor | NoneType = None,
     filters: int = 32,
     layer_activations: str | FunctionType = "relu",
     kernel_size=(3, 3),
@@ -88,12 +87,12 @@ def get_enhanced_image(output, data):
     r6 = output[:, :, :, 15:18]
     r7 = output[:, :, :, 18:21]
     r8 = output[:, :, :, 21:24]
-    x = data + r1 * (tf.square(data) - data)
-    x = x + r2 * (tf.square(x) - x)
-    x = x + r3 * (tf.square(x) - x)
-    enhanced_image = x + r4 * (tf.square(x) - x)
-    x = enhanced_image + r5 * (tf.square(enhanced_image) - enhanced_image)
-    x = x + r6 * (tf.square(x) - x)
-    x = x + r7 * (tf.square(x) - x)
-    enhanced_image = x + r8 * (tf.square(x) - x)
+    x = data + r1 * (ops.square(data) - data)
+    x = x + r2 * (ops.square(x) - x)
+    x = x + r3 * (ops.square(x) - x)
+    enhanced_image = x + r4 * (ops.square(x) - x)
+    x = enhanced_image + r5 * (ops.square(enhanced_image) - enhanced_image)
+    x = x + r6 * (ops.square(x) - x)
+    x = x + r7 * (ops.square(x) - x)
+    enhanced_image = x + r8 * (ops.square(x) - x)
     return enhanced_image, output
