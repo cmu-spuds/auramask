@@ -1,30 +1,28 @@
-# environment.yml
-
-name: auramask
+name: auramask-k3
 channels:
   - defaults
 dependencies:
-  - _libgcc_mutex=0.1=main
-  - _openmp_mutex=5.1=1_gnu
-  - bzip2=1.0.8=h5eee18b_6
-  - ca-certificates=2024.3.11=h06a4308_0
-  - ld_impl_linux-64=2.38=h1181459_1
-  - libffi=3.4.4=h6a678d5_1
-  - libgcc-ng=11.2.0=h1234567_1
-  - libgomp=11.2.0=h1234567_1
-  - libstdcxx-ng=11.2.0=h1234567_1
-  - libuuid=1.41.5=h5eee18b_0
-  - ncurses=6.4=h6a678d5_0
-  - openssl=3.0.14=h5eee18b_0
-  - pip=24.0=py311h06a4308_0
-  - python=3.11.9=h955ad1f_0
-  - readline=8.2=h5eee18b_0
-  - setuptools=69.5.1=py311h06a4308_0
-  - sqlite=3.45.3=h5eee18b_0
-  - tk=8.6.14=h39e8969_0
-  - wheel=0.43.0=py311h06a4308_0
-  - xz=5.4.6=h5eee18b_1
-  - zlib=1.2.13=h5eee18b_1
+  - _libgcc_mutex=0.1
+  - _openmp_mutex=5.1
+  - bzip2=1.0.8
+  - ca-certificates=2024.3.11
+  - ld_impl_linux-64=2.38
+  - libffi=3.4.4
+  - libgcc-ng=11.2.0
+  - libgomp=11.2.0
+  - libstdcxx-ng=11.2.0
+  - libuuid=1.41.5
+  - ncurses=6.4
+  - openssl=3.0.14
+  - pip=24.0
+  - python=3.11.9
+  - readline=8.2
+  - setuptools=69.5.1
+  - sqlite=3.45.3
+  - tk=8.6.14
+  - wheel=0.43.0
+  - xz=5.4.6
+  - zlib=1.2.13
   - pip:
       - absl-py==2.1.0
       - aiohttp==3.9.5
@@ -32,6 +30,7 @@ dependencies:
       - array-record==0.5.1
       - astunparse==1.6.3
       - attrs==23.2.0
+      - cachetools==5.3.3
       - certifi==2024.6.2
       - cfgv==3.4.0
       - charset-normalizer==3.3.2
@@ -50,6 +49,8 @@ dependencies:
       - gast==0.5.4
       - gitdb==4.0.11
       - gitpython==3.1.43
+      - google-auth==2.30.0
+      - google-auth-oauthlib==1.2.0
       - google-pasta==0.2.0
       - googleapis-common-protos==1.63.1
       - grpcio==1.64.1
@@ -87,6 +88,7 @@ dependencies:
       - nvidia-cusparse-cu12==12.2.0.103
       - nvidia-nccl-cu12==2.19.3
       - nvidia-nvjitlink-cu12==12.3.101
+      - oauthlib==3.2.2
       - opt-einsum==3.3.0
       - optree==0.11.0
       - packaging==24.1
@@ -96,16 +98,20 @@ dependencies:
       - pre-commit==3.7.1
       - promise==2.3
       - protobuf==4.25.3
-      - psutil==5.9.8
+      - psutil==6.0.0
       - pyarrow==16.1.0
       - pyarrow-hotfix==0.6
+      - pyasn1==0.6.0
+      - pyasn1-modules==0.4.0
       - pygments==2.18.0
       - python-dateutil==2.9.0.post0
       - pytz==2024.1
       - pyyaml==6.0.1
       - regex==2024.5.15
       - requests==2.32.3
+      - requests-oauthlib==2.0.0
       - rich==13.7.1
+      - rsa==4.9
       - ruff==0.4.9
       - sentry-sdk==2.5.1
       - setproctitle==1.3.3
@@ -116,6 +122,7 @@ dependencies:
       - tensorboard-data-server==0.7.2
       - tensorflow==2.16.1
       - tensorflow-datasets==4.9.6
+      - tensorflow-estimator==2.15.0
       - tensorflow-io-gcs-filesystem==0.37.0
       - tensorflow-metadata==1.15.0
       - termcolor==2.4.0
@@ -127,7 +134,8 @@ dependencies:
       - virtualenv==20.26.2
       - wandb==0.17.2
       - werkzeug==3.0.3
-      - wrapt==1.16.0
+      - wrapt==1.14.1
       - xxhash==3.4.1
       - yarl==1.9.4
       - zipp==3.19.2
+prefix: /home/meeko/miniconda3/envs/auramask-k3

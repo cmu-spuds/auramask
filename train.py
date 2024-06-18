@@ -371,7 +371,7 @@ def initialize_model():
         def postproc(x: keras.KerasTensor, inputs: keras.KerasTensor):
             x = ops.multiply(eps, x)
             out = ops.add(x, inputs)
-            out = ops.clip_by_value(out, 0.0, 1.0)
+            out = ops.clip(out, 0.0, 1.0)
             return [out, x]
 
     model_config: dict = hparams["model_config"]
@@ -397,6 +397,7 @@ def initialize_model():
         loss_convert=losses_t,
         run_eagerly=hparams.pop("eager"),
         metrics=metrics,
+        jit_compile=False,
     )
     return model
 
@@ -448,8 +449,7 @@ def main():
         logdir.mkdir(parents=True, exist_ok=True)
         logdir = str(logdir)
         v = get_sample_data(v_ds)
-        # t = get_sample_data(t_ds)
-        # model(v[0])
+        model(v[0])
         callbacks = init_callbacks(hparams, v, logdir, note)
     else:
         callbacks = None

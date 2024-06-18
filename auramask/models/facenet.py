@@ -195,14 +195,14 @@ def inception_resnet_block(x, scale, block_type, block_idx, activation="relu"):
     )
     up = conv2d_bn(
         mixed,
-        backend.int_shape(x)[channel_axis],
+        ops.shape(x)[channel_axis],
         1,
         activation=None,
         use_bias=True,
         name=name_fmt("Conv2d_1x1"),
     )
     up = layers.Lambda(
-        scaling, output_shape=backend.int_shape(up)[1:], arguments={"scale": scale}
+        scaling, output_shape=ops.shape(up)[1:], arguments={"scale": scale}
     )(up)
     x = layers.add([x, up])
     if activation is not None:

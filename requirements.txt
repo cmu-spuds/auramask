@@ -1,9 +1,9 @@
-datasets
-keras
-keras_cv
+datasets[vision]
 keras_unet_collection
 numpy
-tensorflow[and-cuda]
+tensorflow[and-cuda]==2.15.0post1
+keras
+keras_cv
 wandb
 ruff
 pre-commit

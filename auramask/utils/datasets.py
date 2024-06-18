@@ -1,6 +1,6 @@
 from enum import Enum
-from typing import Tuple, TypedDict
-from datasets import load_dataset, Dataset
+from typing import TypedDict
+from datasets import load_dataset
 from auramask.models.face_embeddings import FaceEmbedEnum
 from auramask.utils import preprocessing
 from os import cpu_count
@@ -13,9 +13,7 @@ class DatasetEnum(Enum):
     FDF = ("logasja/FDF", "fdf", ["image"])
     VGGFACE2 = ("logasja/VGGFace2", "256", ["image"])
 
-    def fetch_dataset(
-        self, t_split: str, v_split: str, ds_format="tf"
-    ) -> Tuple[Dataset, Dataset]:
+    def fetch_dataset(self, t_split: str, v_split: str, ds_format="tf"):
         dataset, name, _ = self.value
         t_ds = load_dataset(
             dataset,
