@@ -1,4 +1,4 @@
-from keras import Loss, ops, KerasTensor
+from keras import Loss, ops, KerasTensor, backend as K
 
 
 def ssim(
@@ -38,6 +38,82 @@ def ssim(
     return ops.sum(ssim_per_channel * channel_weights, [-1]) / ops.sum(channel_weights)
 
 
+class DSSIMObjective(Loss):
+    """Difference of Structural Similarity (DSSIM loss function).
+    Clipped between 0 and 0.5
+
+    Note : You should add a regularization term like a l2 loss in addition to this one.
+    Note : In theano, the `kernel_size` must be a factor of the output size. So 3 could
+           not be the `kernel_size` for an output of 32.
+
+    # Arguments
+        k1: Parameter of the SSIM (default 0.01)
+        k2: Parameter of the SSIM (default 0.03)
+        kernel_size: Size of the sliding window (default 3)
+        max_value: Max value of the output (default 1.0)
+    """
+
+    def __init__(
+        self,
+        k1=0.01,
+        k2=0.03,
+        kernel_size=3,
+        max_value=1.0,
+        name="DSSIMObjective",
+        reduction="sum_over_batch_size",
+        **kwargs,
+    ):
+        super().__init__(name=name, reduction=reduction, **kwargs)
+        self.kernel_size = kernel_size
+        self.k1 = k1
+        self.k2 = k2
+        self.max_value = max_value
+        self.c1 = (self.k1 * self.max_value) ** 2
+        self.c2 = (self.k2 * self.max_value) ** 2
+        self.dim_ordering = K.image_data_format()
+        self.backend = K.backend()
+
+    def __call__(self, y_true, y_pred):
+        # There are additional parameters for this function
+        # Note: some of the 'modes' for edge behavior do not yet have a
+        # gradient definition in the Theano tree
+        #   and cannot be used for learning
+
+        kernel = [self.kernel_size, self.kernel_size]
+        y_true = ops.reshape(y_true, [-1] + list(ops.shape(y_pred)[1:]))
+        y_pred = ops.reshape(y_pred, [-1] + list(ops.shape(y_pred)[1:]))
+
+        patches_pred = ops.image.extract_patches(
+            y_pred, kernel, kernel, padding="valid", data_format=self.dim_ordering
+        )
+
+        patches_true = ops.image.extract_patches(
+            y_true, kernel, kernel, padding="valid", data_format=self.dim_ordering
+        )
+
+        # Reshape to get the var in the cells
+        bs, w, h, c1, c2, c3 = ops.shape(patches_pred)
+        patches_pred = ops.reshape(patches_pred, [-1, w, h, c1 * c2 * c3])
+        patches_true = ops.reshape(patches_true, [-1, w, h, c1 * c2 * c3])
+        # Get mean
+        u_true = ops.mean(patches_true, axis=-1)
+        u_pred = ops.mean(patches_pred, axis=-1)
+        # Get variance
+        var_true = ops.var(patches_true, axis=-1)
+        var_pred = ops.var(patches_pred, axis=-1)
+        # Get std dev
+        covar_true_pred = (
+            ops.mean(patches_true * patches_pred, axis=-1) - u_true * u_pred
+        )
+
+        ssim = (2 * u_true * u_pred + self.c1) * (2 * covar_true_pred + self.c2)
+        denom = (ops.square(u_true) + ops.square(u_pred) + self.c1) * (
+            var_pred + var_true + self.c2
+        )
+        ssim /= denom  # no need for clipping, c1 and c2 make the denom non-zero
+        return (1.0 - ssim) / 2.0
+
+
 class SSIMLoss(Loss):
     def __init__(
         self,
@@ -50,11 +126,11 @@ class SSIMLoss(Loss):
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
-        self.mv = ops.cast(max_val, dtype="float32")
-        self.fz = ops.cast(filter_size, dtype="int32")
-        self.k1 = ops.cast(k1, dtype="float32")
-        self.k2 = ops.cast(k2, dtype="float32")
-        self.filter_sigma = ops.cast(filter_sigma, dtype="float32")
+        self.mv = max_val
+        self.fz = filter_size
+        self.k1 = k1
+        self.k2 = k2
+        self.filter_sigma = filter_sigma
 
     def get_config(self):
         return {
