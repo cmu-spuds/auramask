@@ -1,7 +1,7 @@
 datasets[vision]
 keras_unet_collection
 numpy
-tensorflow[and-cuda]==2.15.0post1
+tensorflow[and-cuda]
 keras
 keras_cv
 wandb
