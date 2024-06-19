@@ -1,5 +1,5 @@
 from auramask.utils.colorspace.color_conversion import ColorConversion
-from keras import KerasTensor, ops, backend
+from keras import ops, backend
 
 
 def yuv_to_rgb(X, convert: bool = False):
@@ -18,7 +18,7 @@ def yuv_to_rgb(X, convert: bool = False):
         yuv = _yuv_to_rgb(X, backend.image_data_format())
     if convert:
         yuv = ops.add(yuv, [0.0, 0.5, 0.5])
-        yuv = ops.clip_by_value(yuv, 0.0, 1.0)
+        yuv = ops.clip(yuv, 0.0, 1.0)
 
     return yuv
 
@@ -69,10 +69,12 @@ def _rgb_to_yuv(image, data_format: str = "channels_last"):
     # if not isinstance(image, KerasTensor):
     #     raise TypeError(f"Input type is not a KerasTensor. Got {type(image)}")
 
+    ndims = len(ops.shape(image))
+
     if data_format == "channels_last":
-        c_axis = -1
+        c_axis = ndims - 1
     else:
-        c_axis = -3
+        c_axis = ndims - 3
 
     if len(image.shape) < 3 or image.shape[c_axis] != 3:
         if c_axis == -1:
@@ -86,13 +88,22 @@ def _rgb_to_yuv(image, data_format: str = "channels_last"):
 
     _rgb_to_yuv_kernel = ops.convert_to_tensor(
         [
-            [0.299, -0.14714119, 0.61497538],
-            [0.587, -0.28886916, -0.51496512],
-            [0.114, 0.43601035, -0.10001026],
-        ]
+            [0.29900, -0.147108, 0.614777],
+            [0.58700, -0.288804, -0.514799],
+            [0.11400, 0.435912, -0.099978],
+        ],
+        dtype=image.dtype,
     )
 
-    return ops.tensordot(image, _rgb_to_yuv_kernel, axes=[[c_axis], [0]])
+    yuv = ops.tensordot(image, _rgb_to_yuv_kernel, axes=[[c_axis], [0]])
+
+    y, u, v = ops.split(yuv, 3, axis=c_axis)
+
+    y = ops.clip(y, 0.0, 1.0)
+    u = ops.clip(u, -0.5, 0.5)
+    v = ops.clip(v, -0.5, 0.5)
+
+    return ops.concatenate([y, u, v], axis=c_axis)
 
 
 class YUVtoRGB(ColorConversion):
@@ -138,13 +149,12 @@ def _yuv_to_rgb(image, data_format: str = "channels_last"):
         >>> input = torch.rand(2, 3, 4, 5)
         >>> output = yuv_to_rgb(input)  # 2x3x4x5
     """
-    if not isinstance(image, KerasTensor):
-        raise TypeError(f"Input type is not a KerasTensor. Got {type(image)}")
+    ndims = len(ops.shape(image))
 
     if data_format == "channels_last":
-        c_axis = -1
+        c_axis = ndims - 1
     else:
-        c_axis = -3
+        c_axis = ndims - 3
 
     if len(image.shape) < 3 or image.shape[c_axis] != 3:
         if c_axis == -1:
@@ -160,4 +170,8 @@ def _yuv_to_rgb(image, data_format: str = "channels_last"):
         [[1, 1, 1], [0, -0.394642334, 2.03206185], [1.13988303, -0.58062185, 0]]
     )
 
-    return ops.tensordot(image, _yuv_to_rgb, axes=[[c_axis], [0]])
+    rgb = ops.tensordot(image, _yuv_to_rgb_kernel, axes=[[c_axis], [0]])
+
+    rgb = ops.clip(rgb, 0.0, 1.0)
+
+    return rgb

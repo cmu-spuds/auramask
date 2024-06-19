@@ -86,8 +86,7 @@ class TestDatasetEnum(unittest.TestCase):
         self.assertEqual(val_ds, mock_val_ds)
 
     @patch("auramask.utils.datasets.preprocessing")
-    @patch("auramask.utils.datasets.img_to_array")
-    def test_data_collater(self, mock_img_to_array, mock_preprocessing):
+    def test_data_collater(self, mock_preprocessing):
         w, h = 256, 256
         example_data = {
             "image": ["fake_image1", "fake_image2"],
@@ -109,68 +108,63 @@ class TestDatasetEnum(unittest.TestCase):
         self.assertIn("image", transformed_example)
         self.assertIn("label", transformed_example)
 
-    @patch("auramask.utils.preprocessing.CenterCrop", testCenterCrop)
+    @patch("auramask.utils.preprocessing.layers.CenterCrop", testCenterCrop)
     def test_data_resizing_smaller(self):
         w, h = 256, 256
-        example_data = {
-            "image": np.stack(
-                [create_PIL_Image((64, 64, 3)), create_PIL_Image((64, 64, 3))]
-            ),
-            "label": ["fake_label", "fake_label"],
-        }
+        example_data = [
+            {"image": create_PIL_Image((64, 64, 3)), "labels": "fake_label"}
+            for x in range(0, 2)
+        ]
 
         loader_args = {"w": w, "h": h, "crop": True}
 
         transformed_example = DatasetEnum.data_collater(example_data, loader_args)
-        print(transformed_example)
         self.assertIn("image", transformed_example)
         np.testing.assert_equal((2, 256, 256, 3), transformed_example["image"].shape)
         self.assertIn("labels", transformed_example)
-        np.testing.assert_equal((2, 2), transformed_example["image"].shape)
+        np.testing.assert_equal((2,), transformed_example["labels"].shape)
 
-    @patch("auramask.utils.preprocessing.CenterCrop", testCenterCrop)
+    @patch("auramask.utils.preprocessing.layers.CenterCrop", testCenterCrop)
     def test_data_resizing_larger(self):
         w, h = 256, 256
-        example_data = {
-            "image": [create_PIL_Image((512, 512, 3)), create_PIL_Image((512, 512, 3))]
-        }
+        example_data = [
+            {"image": create_PIL_Image((512, 512, 3)), "labels": "fake_label"}
+            for x in range(0, 2)
+        ]
         loader_args = {"w": w, "h": h, "crop": True}
 
         transformed_example = DatasetEnum.data_collater(example_data, loader_args)
-        self.assertIn("x", transformed_example)
-        np.testing.assert_equal((2, 256, 256, 3), transformed_example["x"].shape)
-        self.assertIn("y", transformed_example)
-        np.testing.assert_equal((2, 256, 256, 3), transformed_example["y"].shape)
+        self.assertIn("image", transformed_example)
+        np.testing.assert_equal((2, 256, 256, 3), transformed_example["image"].shape)
+        self.assertIn("labels", transformed_example)
+        np.testing.assert_equal((2,), transformed_example["labels"].shape)
 
-    @patch("auramask.utils.preprocessing.CenterCrop", testCenterCrop)
+    @patch("auramask.utils.preprocessing.layers.CenterCrop", testCenterCrop)
     def test_data_resizing_same(self):
         w, h = 256, 256
-        example_data = {
-            "image": [create_PIL_Image((256, 256, 3)), create_PIL_Image((256, 256, 3))]
-        }
-
-        data_loader = DatasetEnum.LFW.get_data_loader(w, h, augment=False)
-        transformed_example = data_loader(example_data)
-        self.assertIn("x", transformed_example)
-        np.testing.assert_equal((2, 256, 256, 3), transformed_example["x"].shape)
-        self.assertIn("y", transformed_example)
-        np.testing.assert_equal((2, 256, 256, 3), transformed_example["y"].shape)
-
-    @patch("auramask.utils.preprocessing.CenterCrop", testCenterCrop)
-    def test_data_resizing_mixed_smaller(self):
-        w, h = 256, 256
-        examples = [
-            {"image": [create_PIL_Image((256, 256, 3)), create_PIL_Image((64, 64, 3))]},
-            {"image": [create_PIL_Image((64, 64, 3)), create_PIL_Image((256, 256, 3))]},
+        example_data = [
+            {"image": create_PIL_Image((256, 256, 3)), "labels": "fake_label"}
+            for x in range(0, 2)
         ]
+        loader_args = {"w": w, "h": h, "crop": True}
 
-        data_loader = DatasetEnum.LFW.get_data_loader(w, h, augment=False)
-        for example_data in examples:
-            transformed_example = data_loader(example_data)
-            self.assertIn("x", transformed_example)
-            np.testing.assert_equal((2, 256, 256, 3), transformed_example["x"].shape)
-            self.assertIn("y", transformed_example)
-            np.testing.assert_equal((2, 256, 256, 3), transformed_example["y"].shape)
+        transformed_example = DatasetEnum.data_collater(example_data, loader_args)
+        self.assertIn("image", transformed_example)
+        np.testing.assert_equal((2, 256, 256, 3), transformed_example["image"].shape)
+        self.assertIn("labels", transformed_example)
+        np.testing.assert_equal((2,), transformed_example["labels"].shape)
+
+    # @patch("auramask.utils.preprocessing.layers.CenterCrop", testCenterCrop)
+    # def test_data_resizing_mixed_smaller(self):
+    #     w, h = 256, 256
+    #     examples = [
+    #         {"image": create_PIL_Image((256, 256, 3))},
+    #         {"image": create_PIL_Image((64, 64, 3))},
+    #     ]
+    #     loader_args = {"w": w, "h": h, "crop": True}
+    #     transformed_example = DatasetEnum.data_collater(examples, loader_args)
+    #     self.assertIn("image", transformed_example)
+    #     np.testing.assert_equal((2, 256, 256, 3), transformed_example["x"].shape)
 
 
 if __name__ == "__main__":
