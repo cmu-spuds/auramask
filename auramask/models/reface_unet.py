@@ -336,7 +336,7 @@ def _reface_unet_base(
 
 
 def reface_unet(
-    input_size,
+    input_shape,
     filter_num,
     E,
     D,
@@ -351,7 +351,7 @@ def reface_unet(
     """
     ReFace
 
-    reface_unet(input_size, filter_num, E, D, n_labels,
+    reface_unet(input_shape, filter_num, E, D, n_labels,
                  aspp_num_down=256, aspp_num_up=128, activation='ReLU', output_activation='Softmax',
                  batch_norm=True, pool=True, unpool=True, name='resunet')
 
@@ -359,7 +359,7 @@ def reface_unet(
 
     Input
     ----------
-        input_size: the size/shape of network input, e.g., `(128, 128, 3)`.
+        input_shape: the size/shape of network input, e.g., `(128, 128, 3)`.
         filter_num: a list that defines the number of filters for each \
                     down- and upsampling levels. e.g., `[64, 128, 256, 512]`.
                     The depth is expected as `len(filter_num)`.
@@ -383,7 +383,7 @@ def reface_unet(
 
     # activation_func = eval(activation)
 
-    IN = layers.Input(input_size)
+    IN = layers.Input(input_shape)
     X = IN
 
     X = _reface_unet_base(
