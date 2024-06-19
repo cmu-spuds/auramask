@@ -411,7 +411,7 @@ def set_seed():
 
 def get_sample_data(ds):
     for x in ds.take(1):
-        inp = x[:8]
+        inp = x[0][:8]
     return inp
 
 
@@ -449,7 +449,7 @@ def main():
         logdir.mkdir(parents=True, exist_ok=True)
         logdir = str(logdir)
         v = get_sample_data(v_ds)
-        model(v[0])
+        model(v)
         callbacks = init_callbacks(hparams, v, logdir, note)
     else:
         callbacks = None

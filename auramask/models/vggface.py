@@ -12,8 +12,15 @@ WEIGHTS_PATH = (
 
 
 def preprocess_input(x):
-    x = ops.subtract(x, [93.540, 104.7624, 129.1863])
-    return x
+    if backend.image_data_format() == "channels_last":
+        axis = -1
+    else:
+        axis = -3
+    b, g, r = ops.split(x, 3, axis=axis)
+    b = ops.subtract(b, 93.540)
+    g = ops.subtract(g, 104.7624)
+    r = ops.subtract(r, 129.1863)
+    return ops.concatenate([b, g, r], axis=axis)
 
 
 def VggFace(

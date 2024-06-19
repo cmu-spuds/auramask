@@ -5,6 +5,7 @@ from keras_unet_collection.layer_utils import (
     decode_layer,
     CONV_stack,
 )
+from tensorflow.keras.layers import ReLU, LeakyReLU, PReLU, ELU, Softmax  # type: ignore  # noqa: F401
 
 
 def reface_encoding_block(
