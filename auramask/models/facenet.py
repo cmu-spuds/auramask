@@ -1,8 +1,7 @@
-from keras import Model, utils, layers, backend
+from keras import Model, utils, layers, backend, ops
 from keras.src.applications.imagenet_utils import obtain_input_shape
 import os
 from functools import partial
-import tensorflow as tf
 
 WEIGHTS_PATH_128 = (
     "https://github.com/serengil/deepface_models/releases/download/"
@@ -17,11 +16,11 @@ WEIGHTS_PATH_512 = (
 
 def preprocess_input(x):
     mean, std = (
-        tf.reduce_mean(x, axis=[-3, -2, -1], keepdims=True),
-        tf.math.reduce_std(x, axis=[-3, -2, -1], keepdims=True),
+        ops.mean(x, axis=[-3, -2, -1], keepdims=True),
+        ops.std(x, axis=[-3, -2, -1], keepdims=True),
     )
-    x = tf.subtract(x, mean)
-    x = tf.divide(x, tf.maximum(std, backend.epsilon()))
+    x = ops.subtract(x, mean)
+    x = ops.divide(x, ops.maximum(std, backend.epsilon()))
     return x
 
 
@@ -196,14 +195,14 @@ def inception_resnet_block(x, scale, block_type, block_idx, activation="relu"):
     )
     up = conv2d_bn(
         mixed,
-        backend.int_shape(x)[channel_axis],
+        ops.shape(x)[channel_axis],
         1,
         activation=None,
         use_bias=True,
         name=name_fmt("Conv2d_1x1"),
     )
     up = layers.Lambda(
-        scaling, output_shape=backend.int_shape(up)[1:], arguments={"scale": scale}
+        scaling, output_shape=ops.shape(up)[1:], arguments={"scale": scale}
     )(up)
     x = layers.add([x, up])
     if activation is not None:

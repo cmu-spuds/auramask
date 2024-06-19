@@ -1,13 +1,9 @@
-from typing import Callable
-import tensorflow as tf
-from keras import Model
-from keras.metrics import Mean
-from keras.losses import Loss
+from typing import Any, Callable
+from keras import ops, backend, Model, Loss, metrics as m
 
 from auramask.losses.embeddistance import FaceEmbeddingLoss
 from auramask.losses.zero_dce import IlluminationSmoothnessLoss
 from auramask.metrics.embeddistance import PercentageOverThreshold
-# import keras.ops as np
 
 
 class AuraMask(Model):
@@ -36,17 +32,16 @@ class AuraMask(Model):
 
     def compile(
         self,
-        optimizer="rmsprop",
-        loss=None,
-        metrics=None,
-        loss_weights=None,
+        optimizer: str = "rmsprop",
+        loss: Any | None = None,
+        loss_weights: Any | None = None,
         loss_convert=None,
-        weighted_metrics=None,
-        run_eagerly=None,
-        steps_per_execution=None,
-        jit_compile=None,
-        pss_evaluation_shards=0,
-        **kwargs,
+        metrics: Any | None = None,
+        weighted_metrics: Any | None = None,
+        run_eagerly: bool = False,
+        steps_per_execution: int = 1,
+        jit_compile: str = "auto",
+        auto_scale_loss: bool = True,
     ):
         self._metrics = metrics
         if isinstance(loss, list):
@@ -63,7 +58,7 @@ class AuraMask(Model):
                 if isinstance(loss_i, Loss):
                     if w > 0:
                         self._custom_losses.append(
-                            (loss_i, Mean(name=loss_i.name), w, c)
+                            (loss_i, m.Mean(name=loss_i.name), w, c)
                         )
                     else:
                         del loss_i
@@ -73,23 +68,22 @@ class AuraMask(Model):
                         loss_weights.append(w)
 
         return super().compile(
-            optimizer,
-            loss,
-            None,
-            loss_weights,
-            weighted_metrics,
-            run_eagerly,
-            steps_per_execution,
-            jit_compile,
-            pss_evaluation_shards,
-            **kwargs,
+            optimizer=optimizer,
+            loss=loss,
+            loss_weights=loss_weights,
+            metrics=metrics,
+            weighted_metrics=weighted_metrics,
+            run_eagerly=run_eagerly,
+            steps_per_execution=steps_per_execution,
+            jit_compile=jit_compile,
+            auto_scale_loss=auto_scale_loss,
         )
 
     def compute_loss(self, x=None, y=None, y_pred=None, sample_weight=None):
         del sample_weight
         x_rgb, x_mod = x
         y_pred, mask = y_pred
-        tloss = tf.constant(0, dtype=tf.float32)  # tracked total loss
+        tloss = 0  # tracked total loss
         y_pred_rgb = self.colorspace[1](
             y_pred
         )  # computed rgb representation (with gradient passthrough only for hsv_to_rgb
@@ -111,7 +105,7 @@ class AuraMask(Model):
                 )
             sim_loss = loss(tmp_y, tmp_pred)
             metric.update_state(sim_loss)
-            tloss = tf.add(tloss, tf.multiply(sim_loss, l_w))
+            tloss = ops.add(tloss, ops.multiply(sim_loss, l_w))
 
         return tloss
 
@@ -142,13 +136,25 @@ class AuraMask(Model):
             metric.reset_state()
         return all_metrics
 
-    def train_step(self, data):
+    def train_step(self, *args, **kwargs):
+        if backend.backend() == "jax":
+            return self._jax_train_step(*args, **kwargs)
+        elif backend.backend() == "tensorflow":
+            return self._tensorflow_train_step(*args, **kwargs)
+        elif backend.backend() == "torch":
+            return self._torch_train_step(*args, **kwargs)
+
+    def _tensorflow_train_step(self, data):
+        from tensorflow import GradientTape
+
         X, y = (
             data  # X is input image data, y is pre-computed set of embeddings ((N Embeddings), (N Names))
         )
 
-        with tf.GradientTape() as tape:
-            X_mod = self.colorspace[0](X)  # Convert to chosen colorspace
+        X_mod = ops.copy(X)
+
+        with GradientTape() as tape:
+            X_mod = self.colorspace[0](X_mod)  # Convert to chosen colorspace
             y_pred, mask = self(X_mod, training=True)  # Forward pass with
             loss = self.compute_loss(
                 x=(X, X_mod), y=y, y_pred=(y_pred, mask)
@@ -175,6 +181,8 @@ class AuraMask(Model):
         y_pred, mask = self(X, training=False)
 
         y_pred = self.colorspace[0](y_pred)
+
+        X_mod = ops.copy(X)
 
         X_mod = self.colorspace[0](X)  # Convert to chosen colorspace
 

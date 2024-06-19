@@ -1,6 +1,4 @@
-import tensorflow as tf
-from keras.losses import Loss
-
+from keras import Loss, ops, Variable, KerasTensor
 # Implementations pulled from https://github.com/keras-team/keras-io/blob/master/examples/vision/zero_dce.py
 
 """
@@ -28,23 +26,22 @@ class ColorConstancyLoss(Loss):
     5. [Keras tutorial for implementing Zero-DCE](https://keras.io/examples/vision/zero_dce/#color-constancy-loss)
 
     Args:
-        x (tf.Tensor): image.
+        x (KerasTensor): image.
     """
 
     def __init__(self, name="ColorConstancyLoss", **kwargs):
         super().__init__(name=name, **kwargs)
 
-    @tf.function
     def call(self, y_true, y_pred):
-        mean_rgb = tf.reduce_mean(y_pred, axis=(1, 2), keepdims=True)
-        mean_red, mean_green, mean_blue = tf.split(mean_rgb, 3, axis=3)
-        difference_red_green = tf.subtract(mean_red, mean_green)
-        difference_red_blue = tf.subtract(mean_red, mean_blue)
-        difference_green_blue = tf.subtract(mean_blue, mean_green)
-        sum_of_squares = tf.sqrt(
-            tf.square(difference_red_green)
-            + tf.square(difference_red_blue)
-            + tf.square(difference_green_blue)
+        mean_rgb = ops.mean(y_pred, axis=(1, 2), keepdims=True)
+        mean_red, mean_green, mean_blue = ops.split(mean_rgb, 3, axis=3)
+        difference_red_green = ops.subtract(mean_red, mean_green)
+        difference_red_blue = ops.subtract(mean_red, mean_blue)
+        difference_green_blue = ops.subtract(mean_blue, mean_green)
+        sum_of_squares = ops.sqrt(
+            ops.square(difference_red_green)
+            + ops.square(difference_red_blue)
+            + ops.square(difference_green_blue)
         )
         return sum_of_squares
 
@@ -66,7 +63,7 @@ class ExposureControlLoss(Loss):
     5. [Keras tutorial for implementing Zero-DCE](https://keras.io/examples/vision/zero_dce/#exposure-loss)
 
     Args:
-        x (tf.Tensor): image.
+        x (KerasTensor): image.
         window_size (int): The size of the window for each dimension of the input tensor for average pooling.
         mean_val (int): The average intensity value of a local region to the well-exposedness level.
     """
@@ -75,10 +72,9 @@ class ExposureControlLoss(Loss):
         self, mean_val=0.6, window_size=16, name="ExposureControlLoss", **kwargs
     ):
         super().__init__(name=name, **kwargs)
-        self.mean_val = tf.constant(mean_val, tf.float32)
+        self.mean_val = Variable(mean_val)
         self.window_size = window_size
 
-    @tf.function
     def call(self, y_true, y_pred):
         """
         ### Exposure loss
@@ -87,11 +83,11 @@ class ExposureControlLoss(Loss):
         It measures the distance between the average intensity value of a local region
         and a preset well-exposedness level (set to `0.6`).
         """
-        x = tf.reduce_mean(y_pred, axis=-1, keepdims=True)
-        mean = tf.nn.avg_pool2d(
-            x, ksize=self.window_size, strides=self.window_size, padding="VALID"
+        x = ops.mean(y_pred, axis=-1, keepdims=True)
+        mean = ops.nn.average_pool(
+            x, pool_size=self.window_size, strides=self.window_size, padding="valid"
         )
-        return tf.square(mean - self.mean_val)
+        return ops.square(mean - self.mean_val)
 
 
 class IlluminationSmoothnessLoss(Loss):
@@ -109,13 +105,12 @@ class IlluminationSmoothnessLoss(Loss):
     5. [Keras tutorial for implementing Zero-DCE](https://keras.io/examples/vision/zero_dce/#illumination-smoothness-loss)
 
     Args:
-        x (tf.Tensor): image.
+        x (KerasTensor): image.
     """
 
     def __init__(self, name="IlluminationSmoothnessLoss", **kwargs):
         super().__init__(name=name, reduction="none", **kwargs)
 
-    @tf.function
     def call(self, y_true, y_pred):
         """
         ### Illumination smoothness loss
@@ -124,23 +119,19 @@ class IlluminationSmoothnessLoss(Loss):
         *illumination smoothness loss* is added to each curve parameter map.
         """
         del y_true
-        batch_size = tf.shape(y_pred)[0]
-        h_x = tf.shape(y_pred)[1]
-        w_x = tf.shape(y_pred)[2]
-        count_h = (tf.shape(y_pred)[2] - 1) * tf.shape(y_pred)[1]
-        count_w = tf.shape(y_pred)[2] * (tf.shape(y_pred)[3] - 1)
+        batch_size = ops.shape(y_pred)[0]
+        h_x = ops.shape(y_pred)[1]
+        w_x = ops.shape(y_pred)[2]
+        count_h = (ops.shape(y_pred)[2] - 1) * ops.shape(y_pred)[1]
+        count_w = ops.shape(y_pred)[2] * (ops.shape(y_pred)[3] - 1)
         # dy, dx = tf.image.image_gradients(y_pred)
         # h_tv = tf.abs((y_pred[:, 1:, :, :] - y_pred[:, : h - 1, :, :]))
         # w_tv = tf.abs((y_pred[:, :, 1:, :] - y_pred[:, :, : w - 1, :]))
-        h_tv = tf.reduce_sum(
-            tf.square((y_pred[:, 1:, :, :] - y_pred[:, : h_x - 1, :, :]))
-        )
-        w_tv = tf.reduce_sum(
-            tf.square((y_pred[:, :, 1:, :] - y_pred[:, :, : w_x - 1, :]))
-        )
-        batch_size = tf.cast(batch_size, dtype=tf.float32)
-        count_h = tf.cast(count_h, dtype=tf.float32)
-        count_w = tf.cast(count_w, dtype=tf.float32)
+        h_tv = ops.sum(ops.square((y_pred[:, 1:, :, :] - y_pred[:, : h_x - 1, :, :])))
+        w_tv = ops.sum(ops.square((y_pred[:, :, 1:, :] - y_pred[:, :, : w_x - 1, :])))
+        batch_size = ops.cast(batch_size, dtype="float32")
+        count_h = ops.cast(count_h, dtype="float32")
+        count_w = ops.cast(count_w, dtype="float32")
         return 2 * (h_tv / count_h + w_tv / count_w) / batch_size
 
 
@@ -155,76 +146,75 @@ class SpatialConsistencyLoss(Loss):
     def __init__(self, name="SpatialConsistencyLoss", **kwargs):
         super().__init__(name=name, **kwargs)
 
-        self.left_kernel = tf.constant(
-            [[[[0, 0, 0]], [[-1, 1, 0]], [[0, 0, 0]]]], dtype=tf.float32
+        self.left_kernel = Variable(
+            [[[[0, 0, 0]], [[-1, 1, 0]], [[0, 0, 0]]]], dtype="float32"
         )
-        self.right_kernel = tf.constant(
-            [[[[0, 0, 0]], [[0, 1, -1]], [[0, 0, 0]]]], dtype=tf.float32
+        self.right_kernel = Variable(
+            [[[[0, 0, 0]], [[0, 1, -1]], [[0, 0, 0]]]], dtype="float32"
         )
-        self.up_kernel = tf.constant(
-            [[[[0, -1, 0]], [[0, 1, 0]], [[0, 0, 0]]]], dtype=tf.float32
+        self.up_kernel = Variable(
+            [[[[0, -1, 0]], [[0, 1, 0]], [[0, 0, 0]]]], dtype="float32"
         )
-        self.down_kernel = tf.constant(
-            [[[[0, 0, 0]], [[0, 1, 0]], [[0, -1, 0]]]], dtype=tf.float32
-        )
-
-    @tf.function
-    def call(self, y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
-        original_mean = tf.reduce_mean(y_true, 3, keepdims=True)
-        enhanced_mean = tf.reduce_mean(y_pred, 3, keepdims=True)
-        original_pool = tf.nn.avg_pool2d(
-            original_mean, ksize=4, strides=4, padding="VALID"
-        )
-        enhanced_pool = tf.nn.avg_pool2d(
-            enhanced_mean, ksize=4, strides=4, padding="VALID"
+        self.down_kernel = Variable(
+            [[[[0, 0, 0]], [[0, 1, 0]], [[0, -1, 0]]]], dtype="float32"
         )
 
-        d_original_left = tf.nn.conv2d(
+    def call(self, y_true: KerasTensor, y_pred: KerasTensor) -> KerasTensor:
+        original_mean = ops.mean(y_true, 3, keepdims=True)
+        enhanced_mean = ops.mean(y_pred, 3, keepdims=True)
+        original_pool = ops.nn.average_pool(
+            original_mean, pool_size=4, strides=4, padding="VALID"
+        )
+        enhanced_pool = ops.nn.average_pool(
+            enhanced_mean, pool_size=4, strides=4, padding="VALID"
+        )
+
+        d_original_left = ops.nn.conv(
             original_pool,
             self.left_kernel,
             strides=[1, 1, 1, 1],
             padding="SAME",
         )
-        d_original_right = tf.nn.conv2d(
+        d_original_right = ops.nn.conv(
             original_pool,
             self.right_kernel,
             strides=[1, 1, 1, 1],
             padding="SAME",
         )
-        d_original_up = tf.nn.conv2d(
+        d_original_up = ops.nn.conv(
             original_pool, self.up_kernel, strides=[1, 1, 1, 1], padding="SAME"
         )
-        d_original_down = tf.nn.conv2d(
+        d_original_down = ops.nn.conv(
             original_pool,
             self.down_kernel,
             strides=[1, 1, 1, 1],
             padding="SAME",
         )
 
-        d_enhanced_left = tf.nn.conv2d(
+        d_enhanced_left = ops.nn.conv(
             enhanced_pool,
             self.left_kernel,
             strides=[1, 1, 1, 1],
             padding="SAME",
         )
-        d_enhanced_right = tf.nn.conv2d(
+        d_enhanced_right = ops.nn.conv(
             enhanced_pool,
             self.right_kernel,
             strides=[1, 1, 1, 1],
             padding="SAME",
         )
-        d_enhanced_up = tf.nn.conv2d(
+        d_enhanced_up = ops.nn.conv(
             enhanced_pool, self.up_kernel, strides=[1, 1, 1, 1], padding="SAME"
         )
-        d_enhanced_down = tf.nn.conv2d(
+        d_enhanced_down = ops.nn.conv(
             enhanced_pool,
             self.down_kernel,
             strides=[1, 1, 1, 1],
             padding="SAME",
         )
 
-        d_left = tf.square(d_original_left - d_enhanced_left)
-        d_right = tf.square(d_original_right - d_enhanced_right)
-        d_up = tf.square(d_original_up - d_enhanced_up)
-        d_down = tf.square(d_original_down - d_enhanced_down)
+        d_left = ops.square(d_original_left - d_enhanced_left)
+        d_right = ops.square(d_original_right - d_enhanced_right)
+        d_up = ops.square(d_original_up - d_enhanced_up)
+        d_down = ops.square(d_original_down - d_enhanced_down)
         return d_left + d_right + d_up + d_down

@@ -1,5 +1,5 @@
 {
-    "filters": [32, 64, 128, 256, 512],
+    "filter_num": [32, 64, 128, 256, 512],
     "n_labels": 3,
     "stack_num_down":2,
     "stack_num_up":2,

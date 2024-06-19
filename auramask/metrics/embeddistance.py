@@ -1,11 +1,10 @@
-from keras.metrics import Mean
-from keras import Model, backend
+from keras import metrics
+from keras import Model, backend, ops, KerasTensor
 from auramask.utils.distance import cosine_distance
 from auramask.models.face_embeddings import FaceEmbedEnum
-import tensorflow as tf
 
 
-class CosineDistance(Mean):
+class CosineDistance(metrics.Mean):
     """Computes the distance for the given model (f) that returns a vector of embeddings with the distance metric (cosine distance by default).
 
     Args:
@@ -30,13 +29,15 @@ class CosineDistance(Mean):
         config = {"name": self.name, "f": self.f.name}
         return {**base_config, **config}
 
-    def update_state(self, y_true: tf.Tensor, y_pred: tf.Tensor, sample_weight=None):
+    def update_state(
+        self, y_true: KerasTensor, y_pred: KerasTensor, sample_weight=None
+    ):
         emb_t = self.f(y_true, training=False)
         emb_adv = self.f(y_pred, training=False)
         return super().update_state(cosine_distance(emb_t, emb_adv, -1))
 
 
-class PercentageOverThreshold(Mean):
+class PercentageOverThreshold(metrics.Mean):
     def __init__(self, f: FaceEmbedEnum | Model, name="PoT_", threshold=0.5, **kwargs):
         if isinstance(f, FaceEmbedEnum):
             super().__init__(name=name + f.value, **kwargs)
@@ -55,5 +56,7 @@ class PercentageOverThreshold(Mean):
     def update_state(self, y_true, y_pred, sample_weight=None):
         emb_adv = self.f(y_pred, training=False)
         dist = cosine_distance(y_true, emb_adv, -1)
-        accuracy = tf.cast(tf.less_equal(dist, self.threshold), dtype=backend.floatx())
+        accuracy = ops.cast(
+            ops.less_equal(dist, self.threshold), dtype=backend.floatx()
+        )
         return super().update_state(accuracy)

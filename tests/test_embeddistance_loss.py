@@ -1,6 +1,6 @@
 import unittest
-import tensorflow as tf
-from keras.metrics import CosineSimilarity
+from keras import metrics, random, ops
+from numpy import testing
 
 from auramask.losses.embeddistance import cosine_distance
 
@@ -20,27 +20,27 @@ class TestCosineDistance(unittest.TestCase):
 
     # Test Same CD: 0
     def test_same_embed(self):
-        a = tf.random.uniform(
-            self._image_shape, minval=0, maxval=1.0, dtype=tf.float32, seed=123
+        a = random.uniform(
+            self._image_shape, minval=0, maxval=1.0, dtype="float32", seed=123
         )
-        b = tf.identity(a)
+        b = ops.copy(a)
         dist = cosine_distance(a, b, axis=-1)
-        tf.debugging.assert_near(dist, 0.0)
+        testing.assert_almost_equal(dist, 0.0)
 
     # Test Opposite CD: 1
     def test_opposite_embed(self):
-        a = tf.zeros(self._image_shape)
-        b = tf.ones(self._image_shape)
+        a = ops.zeros(self._image_shape)
+        b = ops.ones(self._image_shape)
         dist = cosine_distance(a, b, axis=-1)
-        tf.debugging.assert_near(dist, 1.0)
+        testing.assert_almost_equal(dist, 1.0)
 
     # Test Against Implementation:
     def test_against_tf(self):
-        a = tf.ones(self._image_shape)
-        b = tf.random.uniform(self._image_shape)
+        a = ops.ones(self._image_shape)
+        b = random.uniform(self._image_shape)
         dist = cosine_distance(a, b, axis=-1)
-        tf_dist = 1 - CosineSimilarity()(a, b)
-        tf.debugging.assert_near(dist, tf_dist)
+        tf_dist = 1 - metrics.CosineSimilarity()(a, b)
+        testing.assert_almost_equal(dist, tf_dist)
 
 
 if __name__ == "__main__":

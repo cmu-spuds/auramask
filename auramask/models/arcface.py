@@ -1,4 +1,4 @@
-from keras import Model, utils, layers, backend
+from keras import Model, utils, layers, backend, ops
 from keras.src.applications.imagenet_utils import obtain_input_shape
 import os
 
@@ -9,10 +9,8 @@ WEIGHTS_PATH = (
 
 
 def preprocess_input(x):
-    import tensorflow as tf
-
-    x = tf.subtract(x, 127.5)
-    x = tf.divide(x, 128)
+    x = ops.subtract(x, 127.5)
+    x = ops.divide(x, 128)
     return x
 
 

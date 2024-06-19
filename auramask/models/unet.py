@@ -1,17 +1,7 @@
-import tensorflow as tf
-from keras.layers import (
-    Layer,
-    Input,
-    Conv2D,
-    MaxPooling2D,
-    Dropout,
-    BatchNormalization,
-    Conv2DTranspose,
-    concatenate,
-)
+from keras import layers, Model
 
 
-class EncoderBlock(Layer):
+class EncoderBlock(layers.Layer):
     def __init__(
         self,
         n_filters=32,
@@ -25,14 +15,14 @@ class EncoderBlock(Layer):
         self.dropout_prob = dropout_prob
         self.max_pooling = max_pooling
 
-        self.conv1 = Conv2D(
+        self.conv1 = layers.Conv2D(
             n_filters,
             kernel,
             activation="relu",
             padding="same",
             kernel_initializer="HeNormal",
         )
-        self.conv2 = Conv2D(
+        self.conv2 = layers.Conv2D(
             n_filters,
             kernel,
             activation="relu",
@@ -40,9 +30,9 @@ class EncoderBlock(Layer):
             kernel_initializer="HeNormal",
         )
 
-        self.bn = BatchNormalization()
-        self.do = Dropout(dropout_prob) if dropout_prob > 0 else None
-        self.mp = MaxPooling2D(pool_size=(2, 2)) if max_pooling else None
+        self.bn = layers.BatchNormalization()
+        self.do = layers.Dropout(dropout_prob) if dropout_prob > 0 else None
+        self.mp = layers.MaxPooling2D(pool_size=(2, 2)) if max_pooling else None
 
     def call(self, x):
         x = self.conv1(x)
@@ -66,18 +56,18 @@ class EncoderBlock(Layer):
         return next_layer, x
 
 
-class DecoderBlock(Layer):
+class DecoderBlock(layers.Layer):
     def __init__(self, kernel=3, stride=2, n_filters=32, name="UDecoder", **kwargs):
         super().__init__(name=name, **kwargs)
 
-        self.up1 = Conv2DTranspose(
+        self.up1 = layers.Conv2DTranspose(
             n_filters,
             (kernel, kernel),  # Kernel size
             strides=(stride, stride),
             padding="same",
         )
 
-        self.conv1 = Conv2D(
+        self.conv1 = layers.Conv2D(
             n_filters,
             kernel,
             activation="relu",
@@ -85,7 +75,7 @@ class DecoderBlock(Layer):
             kernel_initializer="HeNormal",
         )
 
-        self.conv2 = Conv2D(
+        self.conv2 = layers.Conv2D(
             n_filters,
             kernel,
             activation="relu",
@@ -100,7 +90,7 @@ class DecoderBlock(Layer):
         x = self.up1(x)
 
         # Merge the skip connection from previous block to prevent information loss
-        x = concatenate([x, skp], axis=3)
+        x = layers.concatenate([x, skp], axis=3)
 
         # Add 2 Conv Layers with relu activation and HeNormal initialization for further processing
         # The parameters for the function are similar to encoder
@@ -110,7 +100,7 @@ class DecoderBlock(Layer):
         return x
 
 
-class UNet(tf.keras.Model):
+class UNet(Model):
     def __init__(self, n_filters, n_dims, name="UNet", **kwargs):
         super().__init__(name=name, **kwargs)
         # Encoder includes multiple convolutional mini blocks with different maxpooling, dropout and filter parameters
@@ -138,14 +128,14 @@ class UNet(tf.keras.Model):
         self.ublock8 = DecoderBlock(n_filters=n_filters * 2)
         self.ublock9 = DecoderBlock(n_filters=n_filters)
 
-        self.conv1 = Conv2D(
+        self.conv1 = layers.Conv2D(
             n_filters,
             3,
             activation="relu",
             padding="same",
             kernel_initializer="he_normal",
         )
-        self.conv2 = Conv2D(n_dims, 1, padding="same")
+        self.conv2 = layers.Conv2D(n_dims, 1, padding="same")
 
     def call(self, inputs):
         ## Encoder Path
@@ -180,14 +170,14 @@ def EncoderMiniBlock(inputs, n_filters=32, dropout_prob=0.3, max_pooling=True):
     # Add 2 Conv Layers with relu activation and HeNormal initialization using TensorFlow
     # Proper insitialization prevents exploding and vanishing gradients
     # 'Same' padding will pad input to conv layer so output is same height and width.
-    conv = Conv2D(
+    conv = layers.Conv2D(
         n_filters,
         3,  # Kernel size
         activation="relu",
         padding="same",
         kernel_initializer="HeNormal",
     )(inputs)
-    conv = Conv2D(
+    conv = layers.Conv2D(
         n_filters,
         3,  # Kernel size
         activation="relu",
@@ -196,17 +186,17 @@ def EncoderMiniBlock(inputs, n_filters=32, dropout_prob=0.3, max_pooling=True):
     )(conv)
 
     # Batch Normalization will normalize the output of the last layer based on the batch's mean and std dev
-    conv = BatchNormalization()(conv, training=False)
+    conv = layers.BatchNormalization()(conv, training=False)
 
     # In case of overfitting, dropout will regularize the loss and gradient computation to shrink the influence of weights on output
     if dropout_prob > 0:
-        conv = Dropout(dropout_prob)(conv)
+        conv = layers.Dropout(dropout_prob)(conv)
 
     # Pooling reduces the size of the image while keeping the number of channels same
     # Pooling has been kept as optional as the last encoder layer does not use pooling (hence, makes the encoder block flexible to use)
     # Below, Max pooling considers the maximum of the input slice for output computation and uses stride of 2 to traverse across input image
     if max_pooling:
-        next_layer = MaxPooling2D(pool_size=(2, 2))(conv)
+        next_layer = layers.MaxPooling2D(pool_size=(2, 2))(conv)
     else:
         next_layer = conv
 
@@ -224,7 +214,7 @@ def DecoderMiniBlock(prev_layer_input, skip_layer_input, n_filters=32):
     The function returns the decoded layer output
     """
     # Start with a transpose convolution layer to first increase the size of the image
-    up = Conv2DTranspose(
+    up = layers.Conv2DTranspose(
         n_filters,
         (3, 3),  # Kernel size
         strides=(2, 2),
@@ -232,18 +222,18 @@ def DecoderMiniBlock(prev_layer_input, skip_layer_input, n_filters=32):
     )(prev_layer_input)
 
     # Merge the skip connection from previous block to prevent information loss
-    merge = concatenate([up, skip_layer_input], axis=3)
+    merge = layers.concatenate([up, skip_layer_input], axis=3)
 
     # Add 2 Conv Layers with relu activation and HeNormal initialization for further processing
     # The parameters for the function are similar to encoder
-    conv = Conv2D(
+    conv = layers.Conv2D(
         n_filters,
         3,  # Kernel size
         activation="relu",
         padding="same",
         kernel_initializer="HeNormal",
     )(merge)
-    conv = Conv2D(
+    conv = layers.Conv2D(
         n_filters,
         3,  # Kernel size
         activation="relu",
@@ -260,7 +250,7 @@ def UNetGen(input_size=(128, 128, 3), n_filters=32, n_classes=3):
     """
 
     # Input size represent the size of 1 image (the size used for pre-processing)
-    inputs = Input(input_size)
+    inputs = layers.Input(input_size)
 
     # Encoder includes multiple convolutional mini blocks with different maxpooling, dropout and filter parameters
     cblock1 = EncoderMiniBlock(inputs, n_filters, dropout_prob=0, max_pooling=True)
@@ -288,13 +278,13 @@ def UNetGen(input_size=(128, 128, 3), n_filters=32, n_classes=3):
     # Complete the model with 1 3x3 convolution layer (Same as the prev Conv Layers)
     # Followed by a 1x1 Conv layer to get the image to the desired size.
     # Observe the number of channels will be equal to number of output classes
-    x = Conv2D(
+    x = layers.Conv2D(
         n_filters, 3, activation="relu", padding="same", kernel_initializer="he_normal"
     )(ublock9)
 
-    x = Conv2D(n_classes, 1, padding="same")(x)
+    x = layers.Conv2D(n_classes, 1, padding="same")(x)
 
     # Define the model
-    model = tf.keras.Model(inputs=inputs, outputs=x, name="U-Net")
+    model = Model(inputs=inputs, outputs=x, name="U-Net")
 
     return model

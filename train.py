@@ -7,9 +7,10 @@ from random import choice
 from string import ascii_uppercase
 from datetime import datetime
 
+import keras
+
 from auramask.callbacks.callbacks import init_callbacks
 
-from auramask.losses.ffl import FocalFrequencyLoss
 from auramask.losses.perceptual import PerceptualLoss
 from auramask.losses.embeddistance import (
     FaceEmbeddingThresholdLoss,
@@ -33,18 +34,9 @@ from auramask.utils import backbones
 from auramask.utils.colorspace import ColorSpaceEnum
 from auramask.utils.datasets import DatasetEnum
 
-import tensorflow as tf
-
-import keras
-from keras.optimizers import Adam
-from keras.losses import MeanSquaredError, MeanAbsoluteError
-
-
-from git import Repo
+from keras import optimizers as opts, losses as ls, activations, ops, utils
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"
-
-branch = Repo("./").active_branch.name  # Used for debugging runs
 
 # Global hparams object
 hparams: dict = {}
@@ -122,7 +114,7 @@ def parse_args():
     parser.add_argument("-E", "--epochs", type=int, default=5)
     parser.add_argument(
         "-L",
-        "--lpips",
+        "--losses",
         type=str,
         default=["none"],
         choices=[
@@ -213,16 +205,16 @@ def load_data():
             lambda x: DatasetEnum.data_augmenter(
                 x, augmenters["geom"], augmenters["aug"]
             ),
-            num_parallel_calls=tf.data.AUTOTUNE,
+            num_parallel_calls=-1,
         )
         .map(
             lambda x, y: (
                 x,
                 DatasetEnum.compute_embeddings(y, hparams["F"]),
             ),
-            num_parallel_calls=tf.data.AUTOTUNE,
+            num_parallel_calls=-1,
         )
-        .prefetch(tf.data.AUTOTUNE)
+        .prefetch(-1)
     )
 
     v_ds = (
@@ -238,10 +230,10 @@ def load_data():
                 x,
                 DatasetEnum.compute_embeddings(x, hparams["F"]),
             ),
-            num_parallel_calls=tf.data.AUTOTUNE,
+            num_parallel_calls=-1,
         )
         .cache()
-        .prefetch(tf.data.AUTOTUNE)
+        .prefetch(-1)
     )
 
     # import tensorflow_datasets as tfds
@@ -290,25 +282,25 @@ def initialize_loss():
                 is_not_rgb
             )  # Determine if it needs to be transformed to rgb space
 
-    if "none" not in hparams["lpips"]:
+    if "none" not in hparams["losses"]:
         lam = hparams.pop("lambda")
-        lpips = set(hparams.pop("lpips"))
-        if len(lpips) != len(lam) and len(lam) > 1:
+        loss_in = set(hparams.pop("losses"))
+        if len(loss_in) != len(lam) and len(lam) > 1:
             raise argparse.ArgumentError(
                 message="The length of lambda values must equal that of lpips argument"
             )
         elif len(lam) <= 1:
             w = lam[0] if len(lam) > 0 else 1.0
-            iters = zip(lpips, [w] * len(lpips))
+            iters = zip(loss_in, [w] * len(loss_in))
         else:
-            iters = zip(lpips, lam)
+            iters = zip(loss_in, lam)
 
         for loss_i, w_i in iters:
             if loss_i == "mse":
-                tmp_loss = MeanSquaredError()
+                tmp_loss = ls.MeanSquaredError()
                 cs_transforms.append(False)
             elif loss_i == "mae":
-                tmp_loss = MeanAbsoluteError()
+                tmp_loss = ls.MeanAbsoluteError()
                 cs_transforms.append(False)
             elif loss_i == "ssim":
                 tmp_loss = (
@@ -326,9 +318,6 @@ def initialize_loss():
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "msssim":
                 tmp_loss = MSSSIMLoss()
-                cs_transforms.append(False)
-            elif loss_i == "ffl":
-                tmp_loss = FocalFrequencyLoss()
                 cs_transforms.append(False)
             elif loss_i == "nima":
                 tmp_loss = AestheticLoss(name="NIMA-T", kind="nima-tech")
@@ -379,10 +368,10 @@ def initialize_model():
             inputs = keras.layers.Rescaling(scale=2, offset=-1)(inputs)
             return inputs
 
-        def postproc(x, inputs):
-            x = tf.multiply(eps, x)
-            out = tf.add(x, inputs)
-            out = tf.clip_by_value(out, 0.0, 1.0)
+        def postproc(x: keras.KerasTensor, inputs: keras.KerasTensor):
+            x = ops.multiply(eps, x)
+            out = ops.add(x, inputs)
+            out = ops.clip(out, 0.0, 1.0)
             return [out, x]
 
     model_config: dict = hparams["model_config"]
@@ -390,7 +379,7 @@ def initialize_model():
     base_model = base_model.build_backbone(
         model_config=model_config,
         preprocess=preproc,
-        activation_fn=keras.activations.tanh,
+        activation_fn=activations.tanh,
         post_processing=postproc,
     )
 
@@ -400,7 +389,7 @@ def initialize_model():
     )
 
     losses, losses_w, losses_t, metrics = initialize_loss()
-    optimizer = Adam(learning_rate=hparams["alpha"])
+    optimizer = opts.Adam(learning_rate=hparams["alpha"])
     model.compile(
         optimizer=optimizer,
         loss=losses,
@@ -408,16 +397,15 @@ def initialize_model():
         loss_convert=losses_t,
         run_eagerly=hparams.pop("eager"),
         metrics=metrics,
+        jit_compile=False,
     )
     return model
 
 
 def set_seed():
-    from keras.utils import set_random_seed
-
     seed = hparams["seed"]
     seed = int(hashlib.sha256(seed.encode("utf-8")).hexdigest(), 16) % 10**8
-    set_random_seed(seed)
+    utils.set_random_seed(seed)
     hparams["seed"] = seed
 
 
@@ -450,17 +438,18 @@ def main():
             note = ""
         if not logdir:
             logdir = Path(
-                os.path.join("logs"),
-                datetime.now().strftime("%m-%d"),
-                datetime.now().strftime("%H.%M"),
+                os.path.join(
+                    "logs",
+                    datetime.now().strftime("%m-%d"),
+                    datetime.now().strftime("%H.%M"),
+                )
             )
         else:
             logdir = Path(os.path.join(logdir))
         logdir.mkdir(parents=True, exist_ok=True)
         logdir = str(logdir)
         v = get_sample_data(v_ds)
-        # t = get_sample_data(t_ds)
-        # model(v[0])
+        model(v[0])
         callbacks = init_callbacks(hparams, v, logdir, note)
     else:
         callbacks = None

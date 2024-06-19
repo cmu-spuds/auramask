@@ -1,6 +1,5 @@
-from keras.metrics import Metric
+from keras import Metric, ops
 from auramask.models.lpips import LPIPS
-import tensorflow as tf
 
 
 class PerceptualSimilarity(Metric):
@@ -27,7 +26,7 @@ class PerceptualSimilarity(Metric):
         }
 
     def update_state(self, y_true, y_pred, sample_weight=None):
-        out = tf.reduce_mean(self.model([y_true, y_pred]))
+        out = ops.reduce_mean(self.model([y_true, y_pred]))
         self.similarity.assign_add(out)
 
     def result(self):

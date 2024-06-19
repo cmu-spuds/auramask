@@ -1,9 +1,8 @@
 # Imports
 from typing import Callable
+from keras import ops, Loss, KerasTensor
 from auramask.models.face_embeddings import FaceEmbedEnum
 from auramask.utils.distance import cosine_distance
-from keras.losses import Loss
-import tensorflow as np
 
 
 class FaceEmbeddingLoss(Loss):
@@ -42,12 +41,12 @@ class FaceEmbeddingLoss(Loss):
 
     def call(
         self,
-        y_true: np.Tensor,
-        y_pred: np.Tensor,
-    ) -> np.Tensor:
-        emb_t = np.stop_gradient(self.f(y_true, training=False))
+        y_true: KerasTensor,
+        y_pred: KerasTensor,
+    ) -> KerasTensor:
+        emb_t = ops.stop_gradient(self.f(y_true, training=False))
         emb_adv = self.f(y_pred, training=False)
-        return np.negative(self.d(emb_t, emb_adv, -1))
+        return ops.negative(self.d(emb_t, emb_adv, -1))
 
 
 class FaceEmbeddingThresholdLoss(FaceEmbeddingLoss):
@@ -61,20 +60,18 @@ class FaceEmbeddingThresholdLoss(FaceEmbeddingLoss):
         **kwargs,
     ):
         super().__init__(f=f, d=d, name=name, reduction=reduction, **kwargs)
-        self.threshold = np.constant(threshold, np.float32)
+        self.threshold = threshold
 
     def get_config(self) -> dict:
         base_config = super().get_config()
-        config = {
-            "threshold": np.strings.as_string(self.threshold, precision=2).numpy()
-        }
+        config = {"threshold": self.threshold}
         return {**base_config, **config}
 
-    def call(self, y_true: np.Tensor, y_pred: np.Tensor) -> np.Tensor:
+    def call(self, y_true: KerasTensor, y_pred: KerasTensor) -> KerasTensor:
         emb_adv = self.f(y_pred, training=False)
         distance = self.d(y_true, emb_adv, -1)
-        dist_thresh = np.subtract(self.threshold, distance)
-        return np.nn.leaky_relu(dist_thresh)
+        dist_thresh = ops.subtract(self.threshold, distance)
+        return ops.nn.leaky_relu(dist_thresh)
 
 
 class EmbeddingDistanceLoss(Loss):
@@ -89,7 +86,7 @@ class EmbeddingDistanceLoss(Loss):
     def __init__(self, F, name="EmbeddingsLoss", **kwargs):
         super().__init__(name=name, **kwargs)
         self.F = FaceEmbedEnum.build_F(F)
-        self.N = np.constant(len(F), dtype=np.float32)
+        self.N = len(F)
         self.f = F
 
     def get_config(self) -> dict:
@@ -115,6 +112,6 @@ class EmbeddingDistanceLoss(Loss):
         loss = 0.0
         for f in self.F:
             emb_adv = f(y_pred, training=False)
-            sim = np.negative(cosine_distance(y_true, emb_adv, -1))
-            loss = np.add(loss, sim)
-        return np.divide(loss, self.N)
+            sim = ops.negative(cosine_distance(y_true, emb_adv, -1))
+            loss = ops.add(loss, sim)
+        return ops.divide(loss, self.N)

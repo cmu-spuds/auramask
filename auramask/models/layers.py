@@ -1,18 +1,7 @@
-from keras import Sequential
-from keras.layers import (
-    Layer,
-    Conv2D,
-    SeparableConv2D,
-    MaxPooling2D,
-    Dropout,
-    BatchNormalization,
-    Conv2DTranspose,
-    concatenate,
-    Add,
-)
+from keras import Sequential, layers
 
 
-class ResBlock(Layer):
+class ResBlock(layers.Layer):
     def __init__(
         self,
         n_filters=64,
@@ -24,21 +13,21 @@ class ResBlock(Layer):
         **kwargs,
     ):
         super().__init__(name, **kwargs)
-        self.conv1 = Conv2D(
+        self.conv1 = layers.Conv2D(
             n_filters,
             kernel,
             padding=padding,
             activation=activation,
             kernel_initializer=kernel_initializer,
         )
-        self.conv2 = Conv2D(
+        self.conv2 = layers.Conv2D(
             n_filters,
             kernel,
             padding=padding,
             activation=activation,
             kernel_initializer=kernel_initializer,
         )
-        self.ladd = Add()
+        self.ladd = layers.Add()
 
     def call(self, inputs, training):
         x = self.conv1(inputs)
@@ -47,7 +36,7 @@ class ResBlock(Layer):
         return x
 
 
-class EncoderBlock(Layer):
+class EncoderBlock(layers.Layer):
     def __init__(
         self,
         n_filters=32,
@@ -66,14 +55,14 @@ class EncoderBlock(Layer):
 
         self._build_conv_layers(n_layers, n_filters, kernel)
 
-        self.bn = BatchNormalization()
-        self.do = Dropout(dropout_prob)
-        self.mp = MaxPooling2D(pool_size=(2, 2)) if max_pooling else None
+        self.bn = layers.BatchNormalization()
+        self.do = layers.Dropout(dropout_prob)
+        self.mp = layers.MaxPooling2D(pool_size=(2, 2)) if max_pooling else None
 
     def _build_conv_layers(self, n_layers, n_filters, kernel):
         for _ in range(n_layers):
             self.convs.add(
-                SeparableConv2D(
+                layers.SeparableConv2D(
                     n_filters,
                     kernel,
                     activation="relu",
@@ -130,13 +119,13 @@ class ResEncoderBlock(EncoderBlock):
             )
 
 
-class DecoderBlock(Layer):
+class DecoderBlock(layers.Layer):
     def __init__(
         self, kernel=3, stride=2, n_filters=32, n_layers=1, name="UDecoder", **kwargs
     ):
         super().__init__(name=name, **kwargs)
 
-        self.up1 = Conv2DTranspose(
+        self.up1 = layers.Conv2DTranspose(
             n_filters,
             (kernel, kernel),  # Kernel size
             strides=(stride, stride),
@@ -150,7 +139,7 @@ class DecoderBlock(Layer):
     def _build_conv_layers(self, n_layers, n_filters, kernel):
         for _ in range(n_layers):
             self.convs.add(
-                Conv2D(
+                layers.Conv2D(
                     n_filters,
                     kernel,
                     activation="relu",
@@ -166,7 +155,7 @@ class DecoderBlock(Layer):
         x = self.up1(x)
 
         # Merge the skip connection from previous block to prevent information loss
-        x = concatenate([x, skp], axis=3)
+        x = layers.concatenate([x, skp], axis=3)
 
         # Add 2 Conv Layers with relu activation and HeNormal initialization for further processing
         # The parameters for the function are similar to encoder
