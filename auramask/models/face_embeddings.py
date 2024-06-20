@@ -6,6 +6,7 @@ from keras import layers
 
 from auramask.models.arcface import ArcFace
 from auramask.models.facenet import FaceNet
+from auramask.models.deepid import DeepID
 from auramask.models.vggface import VggFace
 from auramask.utils.preprocessing import rgb_to_bgr
 
@@ -47,6 +48,9 @@ class FaceEmbedEnum(str, Enum):
             elif self == FaceEmbedEnum.ARCFACE:
                 x = layers.Resizing(112, 112, name="arcface-resize")(x)
                 model = ArcFace(input_tensor=x, preprocess=True, name=self.name)
+            elif self == FaceEmbedEnum.DEEPID:
+                x = layers.Resizing(47, 55, name="deepid-resize")(x)
+                model = DeepID(input_tensor=x, preprocess=True, name=self.name)
 
             model.trainable = False
             model_obj[self.name] = model

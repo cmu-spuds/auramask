@@ -109,8 +109,8 @@ class AuraMask(Model):
 
         return tloss
 
-    def save(self, filepath, overwrite=True, save_format=None, **kwargs):
-        return self.model.save(filepath, overwrite, save_format, **kwargs)
+    def save(self, filepath, overwrite=True, **kwargs):
+        return self.model.save(filepath, overwrite, **kwargs)
 
     def compute_metrics(self, x, y, y_pred, sample_weight):
         del sample_weight
