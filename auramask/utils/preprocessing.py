@@ -28,14 +28,14 @@ def gen_image_loading_layers(w: int, h: int, crop: bool = True) -> clayers.Augme
     Returns:
         Augmenter: keras_cv.layers.Augmenter
     """
-    return clayers.Augmenter(
-        [
-            # clayers.Equalization((0, 255)),
-            clayers.Resizing(w, h, crop_to_aspect_ratio=crop),
-            clayers.Rescaling(scale=1.0 / 255, offset=0),
-            layers.CenterCrop(224, 224),
-        ]
-    )
+    if crop:
+        return clayers.Augmenter(
+            [
+                clayers.Resizing(w, h, crop_to_aspect_ratio=True),
+                clayers.Rescaling(scale=1.0 / 255, offset=0),
+                layers.CenterCrop(int(w * 0.875), int(h * 0.875)),
+            ]
+        )
 
 
 def gen_geometric_aug_layers(
