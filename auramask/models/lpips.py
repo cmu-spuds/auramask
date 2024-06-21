@@ -1,7 +1,5 @@
 from typing import Literal
-from keras import Model, Layer, ops, saving
-from keras_cv import layers
-from os import path
+from keras import Model, Layer, ops, saving, utils, layers
 
 
 class WeightLayer(Layer):
@@ -49,14 +47,18 @@ class LPIPS(Model):
         super().__init__(name=name, **kwargs)
         self.backbone = backbone
         self.spatial = spatial
-        mdl_path = path.join(
-            path.expanduser("~/compiled"),
-            "lpips_%s%s.keras" % (backbone, "spatial" if spatial else ""),
+
+        mdl_path = utils.get_file(
+            origin="https://github.com/cmu-spuds/lpips_conversion/releases/download/keras/lpips_%s%s.keras"
+            % (backbone, "spatial" if spatial else ""),
+            cache_subdir="models",
         )
+
         self.augmenter = layers.Resizing(64, 64)
         self.net = saving.load_model(
             mdl_path, custom_objects={"WeightLayer": WeightLayer}
         )
+        self.net.trainable = False
 
     def get_config(self):
         return {
