@@ -153,4 +153,7 @@ def VggFace(
 
         model = Model(inputs, output, name=name)
 
+    # model.export("./compiled/vggface")
+    # model = layers.TFSMLayer("./compiled/vggface", name=name)
+
     return model

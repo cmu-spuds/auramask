@@ -1,0 +1,6 @@
+{
+    "weights": "hf",
+    "arch": "s2",
+    "task": "enhancement",
+    "dataset": "fivek"
+}
