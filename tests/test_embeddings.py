@@ -15,6 +15,7 @@ from auramask.models.arcface import ArcFace
 from auramask.models.deepid import DeepID
 
 from auramask.models.facenet import FaceNet
+from auramask.models.openface import OpenFace
 from auramask.models.vggface import VggFace
 from auramask.utils.preprocessing import rgb_to_bgr
 
@@ -355,6 +356,41 @@ class TestDeepIDEmbedding(unittest.TestCase):
         self._embed_model_name = "DeepID"
         self._embed_model_norm = "base"
         self._image_shape = (55, 47, 3)
+        self.atol = 1.2e-4
+        self.rtol = 1.2e-4
+        return super().setUpClass()
+
+    def tearDown(self) -> None:
+        del self._image_shape
+        del self._embed_model
+        return super().tearDownClass()
+
+    # Test Same CD: 0
+    def test_same_embed_fdf(self):
+        test_same_embed(self, FDF_IMG)
+
+    def test_same_embed_lfw(self):
+        test_same_embed(self, LFW_IMG)
+
+    def test_same_embed_vggface(self):
+        test_same_embed(self, VGG_IMG)
+
+    def test_diff_embed_lfw_fdf(self):
+        test_diff_embed(self, LFW_IMG, FDF_IMG)
+
+    def test_diff_embed_lfw_vgg(self):
+        test_diff_embed(self, LFW_IMG, VGG_IMG)
+
+    def test_diff_embed_fdf_vgg(self):
+        test_diff_embed(self, FDF_IMG, VGG_IMG)
+
+
+class TestOpenFaceEmbedding(unittest.TestCase):
+    def setUp(self) -> None:
+        self._embed_model = OpenFace(preprocess=PREPROC)
+        self._embed_model_name = "OpenFace"
+        self._embed_model_norm = "base"
+        self._image_shape = (96, 96, 3)
         self.atol = 1.2e-4
         self.rtol = 1.2e-4
         return super().setUpClass()

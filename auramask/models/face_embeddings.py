@@ -8,6 +8,7 @@ from auramask.models.arcface import ArcFace
 from auramask.models.facenet import FaceNet
 from auramask.models.deepid import DeepID
 from auramask.models.vggface import VggFace
+from auramask.models.openface import OpenFace
 from auramask.utils.preprocessing import rgb_to_bgr
 
 
@@ -16,7 +17,7 @@ class FaceEmbedEnum(str, Enum):
     VGGFACE = "VGG-Face"
     FACENET = "Facenet"
     FACENET512 = "Facenet512"
-    # OPENFACE = "OpenFace"  # TODO: Quickly NaN
+    OPENFACE = "OpenFace"
     # DEEPFACE = "DeepFace"  # TODO: OOM errors
     DEEPID = "DeepID"
     ARCFACE = "ArcFace"
@@ -53,6 +54,9 @@ class FaceEmbedEnum(str, Enum):
                     55, 47, name="deepid-resize", pad_to_aspect_ratio=True, fill_value=0
                 )(x)
                 model = DeepID(input_tensor=x, preprocess=True, name=self.name)
+            elif self == FaceEmbedEnum.OPENFACE:
+                x = layers.Resizing(96, 96, name="openface-resize")(x)
+                model = OpenFace(input_tensor=x, preprocess=True, name=self.name)
 
             model.trainable = False
             model_obj[self.name] = model
