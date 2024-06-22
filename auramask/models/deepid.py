@@ -8,16 +8,14 @@ WEIGHTS_PATH = (
 
 
 def preprocess_input(x):
-    return x
+    return layers.Rescaling(scale=1.0 / 255, offset=0)(x)
 
 
 def DeepID(
-    include_top=True,
     weights="deepface",
     input_tensor=None,
     input_shape=(55, 47, 3),
     classes=160,
-    classifier_activation="softmax",
     preprocess=False,
     name="DeepID",
 ):
@@ -81,7 +79,7 @@ def DeepID(
     else:
         inputs = img_input
 
-    model = Model(inputs=[inputs], outputs=y)
+    model = Model(inputs=inputs, outputs=y, name=name)
 
     if weights == "deepface":
         weights_path = utils.get_file(
