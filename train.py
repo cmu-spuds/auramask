@@ -112,6 +112,7 @@ def parse_args():
     parser.add_argument("-l", "--lambda", type=float, default=[1.0], nargs="+")
     parser.add_argument("-B", "--batch-size", dest="batch", type=int, default=32)
     parser.add_argument("-E", "--epochs", type=int, default=5)
+    parser.add_argument("-s", "--steps-per-epoch", type=int, default=-1)
     parser.add_argument(
         "-L",
         "--losses",
@@ -199,8 +200,8 @@ def load_data():
             collate_fn_args={"args": {"w": w, "h": h, "crop": True}},
             prefetch=True,
             shuffle=True,
+            drop_remainder=True,
         )
-        .cache()
         .map(
             lambda x: DatasetEnum.data_augmenter(
                 x, augmenters["geom"], augmenters["aug"]
@@ -214,6 +215,7 @@ def load_data():
             ),
             num_parallel_calls=-1,
         )
+        .repeat()
         .prefetch(-1)
     )
 
@@ -224,6 +226,7 @@ def load_data():
             collate_fn=DatasetEnum.data_collater,
             collate_fn_args={"args": {"w": w, "h": h, "crop": True}},
             prefetch=True,
+            drop_remainder=True,
         )
         .map(
             lambda x: (
@@ -462,6 +465,7 @@ def main():
         epochs=hparams["epochs"],
         verbose=verbose,
         validation_data=v_ds,
+        steps_per_epoch=hparams["steps_per_epoch"],
     )
     return training_history
 
