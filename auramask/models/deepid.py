@@ -48,9 +48,7 @@ def DeepID(
     else:
         x = img_input
 
-    x = layers.Conv2D(
-        20, (4, 4), name="Conv1", activation="relu", input_shape=(55, 47, 3)
-    )(x)
+    x = layers.Conv2D(20, (4, 4), name="Conv1", activation="relu")(x)
     x = layers.MaxPooling2D(pool_size=2, strides=2, name="Pool1")(x)
     x = layers.Dropout(rate=0.99, name="D1")(x)
 

@@ -49,7 +49,9 @@ class FaceEmbedEnum(str, Enum):
                 x = layers.Resizing(112, 112, name="arcface-resize")(x)
                 model = ArcFace(input_tensor=x, preprocess=True, name=self.name)
             elif self == FaceEmbedEnum.DEEPID:
-                x = layers.Resizing(55, 47, name="deepid-resize")(x)
+                x = layers.Resizing(
+                    55, 47, name="deepid-resize", pad_to_aspect_ratio=True, fill_value=0
+                )(x)
                 model = DeepID(input_tensor=x, preprocess=True, name=self.name)
 
             model.trainable = False

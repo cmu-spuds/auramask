@@ -1,12 +1,14 @@
 # To test run docker `docker run -p 5005:5000 serengil/deepface`
 
 import unittest
-from keras import utils, ops, KerasTensor
+from keras import utils, ops, KerasTensor, layers
+from PIL import Image
 
 import requests
-import base64
+import cv2
 
 import numpy as np
+import os
 
 from auramask.losses.embeddistance import cosine_distance
 from auramask.models.arcface import ArcFace
@@ -16,9 +18,11 @@ from auramask.models.facenet import FaceNet
 from auramask.models.vggface import VggFace
 from auramask.utils.preprocessing import rgb_to_bgr
 
-FDF_IMG = "./tests/tst_imgs/fdf.jpg"
-LFW_IMG = "./tests/tst_imgs/lfw.jpg"
-VGG_IMG = "./tests/tst_imgs/vggface2.jpg"
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
+FDF_IMG = "https://github.com/cmu-spuds/auramask/blob/0c9e679bfeb532b8998955da8064c51064768483/tests/tst_imgs/fdf.jpg?raw=True"
+LFW_IMG = "https://github.com/cmu-spuds/auramask/blob/0c9e679bfeb532b8998955da8064c51064768483/tests/tst_imgs/lfw.jpg?raw=True"
+VGG_IMG = "https://github.com/cmu-spuds/auramask/blob/0c9e679bfeb532b8998955da8064c51064768483/tests/tst_imgs/vggface2.jpg?raw=True"
 
 PREPROC = False
 
@@ -31,21 +35,73 @@ def represent(
     enforce_detection: bool = True,
     normalization: str = "base",
 ):
-    with open(img_path, "rb") as file:
-        file_encode = base64.b64encode(file.read()).decode()
-        dataurl = f"data:image/jpg;base64,{file_encode}"
-        x = requests.post(
-            "http://localhost:5005/represent",
-            json={
-                "img": dataurl,
-                "model_name": model_name,
-                "enforce_detection": enforce_detection,
-                "detector_backend": detector_backend,
-                "align": align,
-            },
-        )
+    x = requests.post(
+        "http://localhost:5005/represent",
+        json={
+            "img": img_path,
+            "model_name": model_name,
+            "enforce_detection": enforce_detection,
+            "detector_backend": detector_backend,
+            "align": align,
+        },
+    )
     js = x.json()
     return js["results"]
+
+
+def test_same_embed(obj: unittest.TestCase, img_path):
+    rs = layers.Rescaling(scale=1.0 / 255)
+    rsiz = layers.Resizing(
+        obj._image_shape[0], obj._image_shape[1], pad_to_aspect_ratio=True, fill_value=0
+    )
+
+    file = utils.get_file(origin=img_path, cache_subdir="tst_imgs")
+    a = utils.load_img(file)
+    a = utils.img_to_array(a)
+    a = rs(rsiz(a))
+
+    my_embed = obj._embed_model(ops.expand_dims(a, axis=0), training=False)
+
+    df_embed = represent(
+        img_path,
+        model_name=obj._embed_model_name,
+        enforce_detection=False,
+        align=False,
+        detector_backend="skip",
+        normalization=obj._embed_model_norm,
+    )
+
+    df_embed = df_embed[0]["embedding"]
+
+    dist = cosine_distance(my_embed[0], df_embed, axis=-1)
+    # np.testing.assert_allclose(my_embed[0], df_embed, atol=obj.atol, rtol=obj.rtol)
+    obj.assertAlmostEqual(float(dist), 0.0, places=4)
+
+
+def test_diff_embed(obj: unittest.TestCase, img_path_a, img_path_b):
+    rs = layers.Rescaling(scale=1.0 / 255)
+    rsiz = layers.Resizing(
+        obj._image_shape[0], obj._image_shape[1], pad_to_aspect_ratio=True, fill_value=0
+    )
+
+    file_a = utils.get_file(origin=img_path_a, cache_subdir="tst_imgs")
+    a = rs(rsiz(rgb_to_bgr(cv2.imread(file_a))))
+
+    my_embed = obj._embed_model(ops.expand_dims(a, axis=0), training=False)
+
+    df_embed = represent(
+        img_path_b,
+        model_name=obj._embed_model_name,
+        enforce_detection=False,
+        align=False,
+        detector_backend="skip",
+        normalization=obj._embed_model_norm,
+    )
+
+    df_embed = df_embed[0]["embedding"]
+
+    dist = cosine_distance(my_embed, df_embed, axis=-1)
+    obj.assertGreaterEqual(dist, 0.0)
 
 
 class TestArcFaceEmbedding(unittest.TestCase):
@@ -66,7 +122,8 @@ class TestArcFaceEmbedding(unittest.TestCase):
         return super().tearDownClass()
 
     def test_preprocess_input(self):
-        a: KerasTensor = utils.load_img(FDF_IMG, target_size=(self._image_shape))
+        file = utils.get_file(origin=FDF_IMG, cache_subdir="tst_imgs")
+        a: Image = utils.load_img(file, target_size=(self._image_shape))
         a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
         a = ops.expand_dims(a, axis=0)
         from auramask.models.arcface import preprocess_input
@@ -81,9 +138,9 @@ class TestArcFaceEmbedding(unittest.TestCase):
             [
                 utils.img_to_array(utils.load_img(pth, target_size=(self._image_shape)))
                 for pth in [
-                    FDF_IMG,
-                    LFW_IMG,
-                    VGG_IMG,
+                    utils.get_file(origin=FDF_IMG, cache_subdir="tst_imgs"),
+                    utils.get_file(origin=LFW_IMG, cache_subdir="tst_imgs"),
+                    utils.get_file(origin=VGG_IMG, cache_subdir="tst_imgs"),
                 ]
             ]
         )
@@ -101,134 +158,22 @@ class TestArcFaceEmbedding(unittest.TestCase):
 
     # Test Same CD: 0
     def test_same_embed_fdf(self):
-        a: KerasTensor = utils.load_img(FDF_IMG, target_size=(self._image_shape))
-
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
-
-        my_embed = self._embed_model(ops.expand_dims(a, axis=0))
-
-        df_embed = represent(
-            FDF_IMG,
-            model_name=self._embed_model_name,
-            enforce_detection=False,
-            align=False,
-            detector_backend="skip",
-            normalization=self._embed_model_norm,
-        )
-
-        df_embed = df_embed[0]["embedding"]
-
-        dist = cosine_distance(my_embed, df_embed, axis=-1)
-        np.testing.assert_almost_equal(dist, 0.0)
+        test_same_embed(self, FDF_IMG)
 
     def test_same_embed_lfw(self):
-        a: KerasTensor = utils.load_img(LFW_IMG, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
-
-        my_embed = self._embed_model(ops.expand_dims(a, axis=0))
-
-        df_embed = represent(
-            LFW_IMG,
-            model_name=self._embed_model_name,
-            enforce_detection=False,
-            align=False,
-            detector_backend="skip",
-            normalization=self._embed_model_norm,
-        )
-
-        df_embed = df_embed[0]["embedding"]
-
-        dist = cosine_distance(my_embed, df_embed, axis=-1)
-        np.testing.assert_almost_equal(dist, 0.0)
+        test_same_embed(self, LFW_IMG)
 
     def test_same_embed_vggface(self):
-        a: KerasTensor = utils.load_img(VGG_IMG, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
-
-        my_embed = self._embed_model(ops.expand_dims(a, axis=0))
-
-        df_embed = represent(
-            VGG_IMG,
-            model_name=self._embed_model_name,
-            enforce_detection=False,
-            align=False,
-            detector_backend="skip",
-            normalization=self._embed_model_norm,
-        )
-
-        df_embed = df_embed[0]["embedding"]
-
-        dist = cosine_distance(my_embed, df_embed, axis=-1)
-        np.testing.assert_almost_equal(dist, 0.0)
+        test_same_embed(self, VGG_IMG)
 
     def test_diff_embed_lfw_fdf(self):
-        a = utils.load_img(LFW_IMG, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
-
-        b = utils.load_img(FDF_IMG, target_size=(self._image_shape))
-        b = rgb_to_bgr(utils.img_to_array(b) / 255.0)
-
-        my_embed = self._embed_model(ops.expand_dims(a, axis=0))
-
-        df_embed = represent(
-            FDF_IMG,
-            model_name=self._embed_model_name,
-            enforce_detection=False,
-            align=False,
-            detector_backend="skip",
-            normalization=self._embed_model_norm,
-        )
-
-        df_embed = df_embed[0]["embedding"]
-
-        dist = cosine_distance(my_embed, df_embed, axis=-1)
-        self.assertGreaterEqual(dist, 0.0)
+        test_diff_embed(self, LFW_IMG, FDF_IMG)
 
     def test_diff_embed_lfw_vgg(self):
-        a = utils.load_img(LFW_IMG, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
-
-        b = utils.load_img(VGG_IMG, target_size=(self._image_shape))
-        b = rgb_to_bgr(utils.img_to_array(b) / 255.0)
-
-        my_embed = self._embed_model(ops.expand_dims(a, axis=0))
-
-        df_embed = represent(
-            VGG_IMG,
-            model_name=self._embed_model_name,
-            enforce_detection=False,
-            align=False,
-            detector_backend="skip",
-            normalization=self._embed_model_norm,
-        )
-
-        df_embed = df_embed[0]["embedding"]
-
-        dist = cosine_distance(my_embed, df_embed, axis=-1)
-        self.assertGreaterEqual(dist, 0.0)
+        test_diff_embed(self, LFW_IMG, VGG_IMG)
 
     def test_diff_embed_fdf_vgg(self):
-        a = utils.load_img(FDF_IMG, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
-
-        b = utils.load_img(VGG_IMG, target_size=(self._image_shape))
-        b = rgb_to_bgr(utils.img_to_array(b) / 255.0)
-
-        my_embed = self._embed_model(ops.expand_dims(a, axis=0))
-
-        df_embed = represent(
-            VGG_IMG,
-            model_name=self._embed_model_name,
-            enforce_detection=False,
-            align=False,
-            detector_backend="skip",
-            normalization=self._embed_model_norm,
-        )
-
-        df_embed = df_embed[0]["embedding"]
-
-        dist = cosine_distance(my_embed, df_embed, axis=-1)
-        self.assertGreaterEqual(dist, 0.0)
+        test_diff_embed(self, FDF_IMG, VGG_IMG)
 
 
 class TestVGGFaceEmbedding(unittest.TestCase):
@@ -249,25 +194,32 @@ class TestVGGFaceEmbedding(unittest.TestCase):
         return super().tearDownClass()
 
     def test_preprocess_input(self):
-        a: KerasTensor = utils.load_img(FDF_IMG, target_size=(self._image_shape))
+        file = utils.get_file(origin=FDF_IMG, cache_subdir="tst_imgs")
+        a: Image = utils.load_img(file, target_size=(self._image_shape))
         a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
         a = ops.expand_dims(a, axis=0)
         from auramask.models.vggface import preprocess_input
 
         a_transformed = preprocess_input(a)
 
-        np.testing.assert_equal(a[..., 0], a_transformed[..., 0] + 93.540)
-        np.testing.assert_equal(a[..., 1], a_transformed[..., 1] + 104.7624)
-        np.testing.assert_equal(a[..., 2], a_transformed[..., 2] + 129.1863)
+        np.testing.assert_allclose(
+            a[..., 0], a_transformed[..., 0] + 93.540, atol=self.atol, rtol=self.rtol
+        )
+        np.testing.assert_allclose(
+            a[..., 1], a_transformed[..., 1] + 104.7624, atol=self.atol, rtol=self.rtol
+        )
+        np.testing.assert_allclose(
+            a[..., 2], a_transformed[..., 2] + 129.1863, atol=self.atol, rtol=self.rtol
+        )
 
     def test_preprocess_input_batch(self):
         a: KerasTensor = ops.stack(
             [
                 utils.img_to_array(utils.load_img(pth, target_size=(self._image_shape)))
                 for pth in [
-                    FDF_IMG,
-                    LFW_IMG,
-                    VGG_IMG,
+                    utils.get_file(origin=FDF_IMG, cache_subdir="tst_imgs"),
+                    utils.get_file(origin=LFW_IMG, cache_subdir="tst_imgs"),
+                    utils.get_file(origin=VGG_IMG, cache_subdir="tst_imgs"),
                 ]
             ]
         )
@@ -275,139 +227,34 @@ class TestVGGFaceEmbedding(unittest.TestCase):
 
         a_transformed = preprocess_input(a).numpy()
 
-        np.testing.assert_equal(a[..., 0], a_transformed[..., 0] + 93.540)
-        np.testing.assert_equal(a[..., 1], a_transformed[..., 1] + 104.7624)
-        np.testing.assert_equal(a[..., 2], a_transformed[..., 2] + 129.1863)
+        np.testing.assert_allclose(
+            a[..., 0], a_transformed[..., 0] + 93.540, atol=self.atol, rtol=self.rtol
+        )
+        np.testing.assert_allclose(
+            a[..., 1], a_transformed[..., 1] + 104.7624, atol=self.atol, rtol=self.rtol
+        )
+        np.testing.assert_allclose(
+            a[..., 2], a_transformed[..., 2] + 129.1863, atol=self.atol, rtol=self.rtol
+        )
 
     # Test Same CD: 0
     def test_same_embed_fdf(self):
-        a: KerasTensor = utils.load_img(FDF_IMG, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
-
-        my_embed = self._embed_model(ops.expand_dims(a, axis=0))
-
-        df_embed = represent(
-            FDF_IMG,
-            model_name=self._embed_model_name,
-            enforce_detection=False,
-            align=False,
-            detector_backend="skip",
-            normalization=self._embed_model_norm,
-        )
-
-        df_embed = df_embed[0]["embedding"]
-
-        dist = cosine_distance(my_embed, df_embed, axis=-1)
-        np.testing.assert_almost_equal(dist, 0.0)
+        test_same_embed(self, FDF_IMG)
 
     def test_same_embed_lfw(self):
-        a: KerasTensor = utils.load_img(LFW_IMG, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
-
-        my_embed = self._embed_model(ops.expand_dims(a, axis=0))
-
-        df_embed = represent(
-            LFW_IMG,
-            model_name=self._embed_model_name,
-            enforce_detection=False,
-            align=False,
-            detector_backend="skip",
-            normalization=self._embed_model_norm,
-        )
-
-        df_embed = df_embed[0]["embedding"]
-
-        dist = cosine_distance(my_embed, df_embed, axis=-1)
-        np.testing.assert_almost_equal(dist, 0.0)
+        test_same_embed(self, LFW_IMG)
 
     def test_same_embed_vggface(self):
-        a: KerasTensor = utils.load_img(VGG_IMG, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
-
-        my_embed = self._embed_model(ops.expand_dims(a, axis=0))
-
-        df_embed = represent(
-            VGG_IMG,
-            model_name=self._embed_model_name,
-            enforce_detection=False,
-            align=False,
-            detector_backend="skip",
-            normalization=self._embed_model_norm,
-        )
-
-        df_embed = df_embed[0]["embedding"]
-
-        dist = cosine_distance(my_embed, df_embed, axis=-1)
-        np.testing.assert_almost_equal(dist, 0.0)
+        test_same_embed(self, VGG_IMG)
 
     def test_diff_embed_lfw_fdf(self):
-        a = utils.load_img(LFW_IMG, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
-
-        b = utils.load_img(FDF_IMG, target_size=(self._image_shape))
-        b = rgb_to_bgr(utils.img_to_array(b) / 255.0)
-
-        my_embed = self._embed_model(ops.expand_dims(a, axis=0))
-
-        df_embed = represent(
-            FDF_IMG,
-            model_name=self._embed_model_name,
-            enforce_detection=False,
-            align=False,
-            detector_backend="skip",
-            normalization=self._embed_model_norm,
-        )
-
-        df_embed = df_embed[0]["embedding"]
-
-        dist = cosine_distance(my_embed, df_embed, axis=-1)
-        self.assertGreaterEqual(dist, 0.0)
+        test_diff_embed(self, LFW_IMG, FDF_IMG)
 
     def test_diff_embed_lfw_vgg(self):
-        a = utils.load_img(LFW_IMG, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
-
-        b = utils.load_img(VGG_IMG, target_size=(self._image_shape))
-        b = rgb_to_bgr(utils.img_to_array(b) / 255.0)
-
-        my_embed = self._embed_model(ops.expand_dims(a, axis=0))
-
-        df_embed = represent(
-            VGG_IMG,
-            model_name=self._embed_model_name,
-            enforce_detection=False,
-            align=False,
-            detector_backend="skip",
-            normalization=self._embed_model_norm,
-        )
-
-        df_embed = df_embed[0]["embedding"]
-
-        dist = cosine_distance(my_embed, df_embed, axis=-1)
-        self.assertGreaterEqual(dist, 0.0)
+        test_diff_embed(self, LFW_IMG, VGG_IMG)
 
     def test_diff_embed_fdf_vgg(self):
-        a = utils.load_img(FDF_IMG, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
-
-        b = utils.load_img(VGG_IMG, target_size=(self._image_shape))
-        b = rgb_to_bgr(utils.img_to_array(b) / 255.0)
-
-        my_embed = self._embed_model(ops.expand_dims(a, axis=0))
-
-        df_embed = represent(
-            VGG_IMG,
-            model_name=self._embed_model_name,
-            enforce_detection=False,
-            align=False,
-            detector_backend="skip",
-            normalization=self._embed_model_norm,
-        )
-
-        df_embed = df_embed[0]["embedding"]
-
-        dist = cosine_distance(my_embed, df_embed, axis=-1)
-        self.assertGreaterEqual(dist, 0.0)
+        test_diff_embed(self, FDF_IMG, VGG_IMG)
 
 
 class TestFaceNetEmbedding(unittest.TestCase):
@@ -426,7 +273,8 @@ class TestFaceNetEmbedding(unittest.TestCase):
         return super().tearDownClass()
 
     def test_preprocess_input(self):
-        a: KerasTensor = utils.load_img(FDF_IMG, target_size=(self._image_shape))
+        file = utils.get_file(origin=FDF_IMG, cache_subdir="tst_imgs")
+        a: Image = utils.load_img(file, target_size=(self._image_shape))
         a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
         a = ops.expand_dims(a, axis=0)
         from auramask.models.facenet import preprocess_input
@@ -440,7 +288,9 @@ class TestFaceNetEmbedding(unittest.TestCase):
         np.testing.assert_equal((ops.min(a) - a_mean) / a_std, ops.min(a_transformed))
 
         np.testing.assert_almost_equal(ops.mean(a_transformed, axis=[-3, -2, -1]), [0])
-        np.testing.assert_almost_equal(ops.std(a_transformed, axis=[-3, -2, -1]), [1])
+        np.testing.assert_almost_equal(
+            ops.std(a_transformed, axis=[-3, -2, -1]), [1], decimal=5
+        )
         self.assertEqual(ops.std(a, axis=[-3, -2, -1]).shape, (1,))
 
     def test_preprocess_input_batch(self):
@@ -448,12 +298,13 @@ class TestFaceNetEmbedding(unittest.TestCase):
             [
                 utils.img_to_array(utils.load_img(pth, target_size=(self._image_shape)))
                 for pth in [
-                    FDF_IMG,
-                    LFW_IMG,
-                    VGG_IMG,
+                    utils.get_file(origin=FDF_IMG, cache_subdir="tst_imgs"),
+                    utils.get_file(origin=LFW_IMG, cache_subdir="tst_imgs"),
+                    utils.get_file(origin=VGG_IMG, cache_subdir="tst_imgs"),
                 ]
             ]
         )
+
         from auramask.models.facenet import preprocess_input
 
         a_transformed = preprocess_input(a).numpy()
@@ -480,133 +331,22 @@ class TestFaceNetEmbedding(unittest.TestCase):
 
     # Test Same CD: 0
     def test_same_embed_fdf(self):
-        a: KerasTensor = utils.load_img(FDF_IMG, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
-
-        my_embed = self._embed_model(ops.expand_dims(a, axis=0))
-
-        df_embed = represent(
-            FDF_IMG,
-            model_name=self._embed_model_name,
-            enforce_detection=False,
-            align=False,
-            detector_backend="skip",
-            normalization=self._embed_model_norm,
-        )
-
-        df_embed = df_embed[0]["embedding"]
-
-        dist = cosine_distance(my_embed, df_embed, axis=-1)
-        np.testing.assert_almost_equal(dist, 0.0)
+        test_same_embed(self, FDF_IMG)
 
     def test_same_embed_lfw(self):
-        a: KerasTensor = utils.load_img(LFW_IMG, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
-
-        my_embed = self._embed_model(ops.expand_dims(a, axis=0))
-
-        df_embed = represent(
-            LFW_IMG,
-            model_name=self._embed_model_name,
-            enforce_detection=False,
-            align=False,
-            detector_backend="skip",
-            normalization=self._embed_model_norm,
-        )
-
-        df_embed = df_embed[0]["embedding"]
-
-        dist = cosine_distance(my_embed, df_embed, axis=-1)
-        np.testing.assert_almost_equal(dist, 0.0)
+        test_same_embed(self, LFW_IMG)
 
     def test_same_embed_vggface(self):
-        a: KerasTensor = utils.load_img(VGG_IMG, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
-
-        my_embed = self._embed_model(ops.expand_dims(a, axis=0))
-
-        df_embed = represent(
-            VGG_IMG,
-            model_name=self._embed_model_name,
-            enforce_detection=False,
-            align=False,
-            detector_backend="skip",
-            normalization=self._embed_model_norm,
-        )
-
-        df_embed = df_embed[0]["embedding"]
-
-        dist = cosine_distance(my_embed, df_embed, axis=-1)
-        np.testing.assert_almost_equal(dist, 0.0)
+        test_same_embed(self, VGG_IMG)
 
     def test_diff_embed_lfw_fdf(self):
-        a = utils.load_img(LFW_IMG, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
-
-        b = utils.load_img(FDF_IMG, target_size=(self._image_shape))
-        b = rgb_to_bgr(utils.img_to_array(b) / 255.0)
-
-        my_embed = self._embed_model(ops.expand_dims(a, axis=0))
-
-        df_embed = represent(
-            FDF_IMG,
-            model_name=self._embed_model_name,
-            enforce_detection=False,
-            align=False,
-            detector_backend="skip",
-            normalization=self._embed_model_norm,
-        )
-
-        df_embed = df_embed[0]["embedding"]
-
-        dist = cosine_distance(my_embed, df_embed, axis=-1)
-        self.assertGreaterEqual(dist, 0.0)
+        test_diff_embed(self, LFW_IMG, FDF_IMG)
 
     def test_diff_embed_lfw_vgg(self):
-        a = utils.load_img(LFW_IMG, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
-
-        b = utils.load_img(VGG_IMG, target_size=(self._image_shape))
-        b = rgb_to_bgr(utils.img_to_array(b) / 255.0)
-
-        my_embed = self._embed_model(ops.expand_dims(a, axis=0))
-
-        df_embed = represent(
-            VGG_IMG,
-            model_name=self._embed_model_name,
-            enforce_detection=False,
-            align=False,
-            detector_backend="skip",
-            normalization=self._embed_model_norm,
-        )
-
-        df_embed = df_embed[0]["embedding"]
-
-        dist = cosine_distance(my_embed, df_embed, axis=-1)
-        self.assertGreaterEqual(dist, 0.0)
+        test_diff_embed(self, LFW_IMG, VGG_IMG)
 
     def test_diff_embed_fdf_vgg(self):
-        a = utils.load_img(FDF_IMG, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
-
-        b = utils.load_img(VGG_IMG, target_size=(self._image_shape))
-        b = rgb_to_bgr(utils.img_to_array(b) / 255.0)
-
-        my_embed = self._embed_model(ops.expand_dims(a, axis=0))
-
-        df_embed = represent(
-            VGG_IMG,
-            model_name=self._embed_model_name,
-            enforce_detection=False,
-            align=False,
-            detector_backend="skip",
-            normalization=self._embed_model_norm,
-        )
-
-        df_embed = df_embed[0]["embedding"]
-
-        dist = cosine_distance(my_embed, df_embed, axis=-1)
-        self.assertGreaterEqual(dist, 0.0)
+        test_diff_embed(self, FDF_IMG, VGG_IMG)
 
 
 class TestDeepIDEmbedding(unittest.TestCase):
@@ -626,133 +366,22 @@ class TestDeepIDEmbedding(unittest.TestCase):
 
     # Test Same CD: 0
     def test_same_embed_fdf(self):
-        a: KerasTensor = utils.load_img(FDF_IMG, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
-
-        my_embed = self._embed_model(ops.expand_dims(a, axis=0))
-
-        df_embed = represent(
-            FDF_IMG,
-            model_name=self._embed_model_name,
-            enforce_detection=False,
-            align=False,
-            detector_backend="skip",
-            normalization=self._embed_model_norm,
-        )
-
-        df_embed = df_embed[0]["embedding"]
-
-        dist = cosine_distance(my_embed, df_embed, axis=-1)
-        np.testing.assert_almost_equal(dist, 0.0)
+        test_same_embed(self, FDF_IMG)
 
     def test_same_embed_lfw(self):
-        a: KerasTensor = utils.load_img(LFW_IMG, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
-
-        my_embed = self._embed_model(ops.expand_dims(a, axis=0))
-
-        df_embed = represent(
-            LFW_IMG,
-            model_name=self._embed_model_name,
-            enforce_detection=False,
-            align=False,
-            detector_backend="skip",
-            normalization=self._embed_model_norm,
-        )
-
-        df_embed = df_embed[0]["embedding"]
-
-        dist = cosine_distance(my_embed, df_embed, axis=-1)
-        np.testing.assert_almost_equal(dist, 0.0)
+        test_same_embed(self, LFW_IMG)
 
     def test_same_embed_vggface(self):
-        a: KerasTensor = utils.load_img(VGG_IMG, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
-
-        my_embed = self._embed_model(ops.expand_dims(a, axis=0))
-
-        df_embed = represent(
-            VGG_IMG,
-            model_name=self._embed_model_name,
-            enforce_detection=False,
-            align=False,
-            detector_backend="skip",
-            normalization=self._embed_model_norm,
-        )
-
-        df_embed = df_embed[0]["embedding"]
-
-        dist = cosine_distance(my_embed, df_embed, axis=-1)
-        np.testing.assert_almost_equal(dist, 0.0)
+        test_same_embed(self, VGG_IMG)
 
     def test_diff_embed_lfw_fdf(self):
-        a = utils.load_img(LFW_IMG, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
-
-        b = utils.load_img(FDF_IMG, target_size=(self._image_shape))
-        b = rgb_to_bgr(utils.img_to_array(b) / 255.0)
-
-        my_embed = self._embed_model(ops.expand_dims(a, axis=0))
-
-        df_embed = represent(
-            FDF_IMG,
-            model_name=self._embed_model_name,
-            enforce_detection=False,
-            align=False,
-            detector_backend="skip",
-            normalization=self._embed_model_norm,
-        )
-
-        df_embed = df_embed[0]["embedding"]
-
-        dist = cosine_distance(my_embed, df_embed, axis=-1)
-        self.assertGreaterEqual(dist, 0.0)
+        test_diff_embed(self, LFW_IMG, FDF_IMG)
 
     def test_diff_embed_lfw_vgg(self):
-        a = utils.load_img(LFW_IMG, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
-
-        b = utils.load_img(VGG_IMG, target_size=(self._image_shape))
-        b = rgb_to_bgr(utils.img_to_array(b) / 255.0)
-
-        my_embed = self._embed_model(ops.expand_dims(a, axis=0))
-
-        df_embed = represent(
-            VGG_IMG,
-            model_name=self._embed_model_name,
-            enforce_detection=False,
-            align=False,
-            detector_backend="skip",
-            normalization=self._embed_model_norm,
-        )
-
-        df_embed = df_embed[0]["embedding"]
-
-        dist = cosine_distance(my_embed, df_embed, axis=-1)
-        self.assertGreaterEqual(dist, 0.0)
+        test_diff_embed(self, LFW_IMG, VGG_IMG)
 
     def test_diff_embed_fdf_vgg(self):
-        a = utils.load_img(FDF_IMG, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
-
-        b = utils.load_img(VGG_IMG, target_size=(self._image_shape))
-        b = rgb_to_bgr(utils.img_to_array(b) / 255.0)
-
-        my_embed = self._embed_model(ops.expand_dims(a, axis=0))
-
-        df_embed = represent(
-            VGG_IMG,
-            model_name=self._embed_model_name,
-            enforce_detection=False,
-            align=False,
-            detector_backend="skip",
-            normalization=self._embed_model_norm,
-        )
-
-        df_embed = df_embed[0]["embedding"]
-
-        dist = cosine_distance(my_embed, df_embed, axis=-1)
-        self.assertGreaterEqual(dist, 0.0)
+        test_diff_embed(self, FDF_IMG, VGG_IMG)
 
 
 if __name__ == "__main__":

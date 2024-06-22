@@ -87,15 +87,6 @@ class AuramaskCallback(WandbEvalCallback):
             ]
             wandb.log(data, step=wandb.run.step)
 
-            # for idx in table_idxs:
-            #     pred = y[idx]
-            #     m = mask[idx]
-            #     self.pred_table.add_data(
-            #         epoch,
-            #         self.data_table_ref.data[idx][0],
-            #         wandb.Image(pred),
-            #         wandb.Image(m),
-            #     )
         else:
             wandb.log(
                 {
