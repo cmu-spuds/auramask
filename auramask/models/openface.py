@@ -51,17 +51,17 @@ def OpenFace(
 
     x = layers.ZeroPadding2D(padding=(3, 3))(x)
     x = layers.Conv2D(64, (7, 7), strides=(2, 2), name="conv1")(x)
-    x = layers.BatchNormalization(axis=3, epsilon=0.00001, name="bn1")(x)
+    x = layers.BatchNormalization(axis=-1, epsilon=0.00001, name="bn1")(x)
     x = layers.Activation("relu")(x)
     x = layers.ZeroPadding2D(padding=(1, 1))(x)
     x = layers.MaxPooling2D(pool_size=3, strides=2)(x)
     x = layers.Lambda(lambda x: nn.lrn(x, alpha=1e-4, beta=0.75), name="lrn_1")(x)
     x = layers.Conv2D(64, (1, 1), name="conv2")(x)
-    x = layers.BatchNormalization(axis=3, epsilon=0.00001, name="bn2")(x)
+    x = layers.BatchNormalization(axis=-1, epsilon=0.00001, name="bn2")(x)
     x = layers.Activation("relu")(x)
     x = layers.ZeroPadding2D(padding=(1, 1))(x)
     x = layers.Conv2D(192, (3, 3), name="conv3")(x)
-    x = layers.BatchNormalization(axis=3, epsilon=0.00001, name="bn3")(x)
+    x = layers.BatchNormalization(axis=-1, epsilon=0.00001, name="bn3")(x)
     x = layers.Activation("relu")(x)
     x = layers.Lambda(lambda x: nn.lrn(x, alpha=1e-4, beta=0.75), name="lrn_2")(
         x
@@ -72,7 +72,7 @@ def OpenFace(
     # Inception3a
     inception_3a_3x3 = layers.Conv2D(96, (1, 1), name="inception_3a_3x3_conv1")(x)
     inception_3a_3x3 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_3a_3x3_bn1"
+        axis=-1, epsilon=0.00001, name="inception_3a_3x3_bn1"
     )(inception_3a_3x3)
     inception_3a_3x3 = layers.Activation("relu")(inception_3a_3x3)
     inception_3a_3x3 = layers.ZeroPadding2D(padding=(1, 1))(inception_3a_3x3)
@@ -80,13 +80,13 @@ def OpenFace(
         inception_3a_3x3
     )
     inception_3a_3x3 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_3a_3x3_bn2"
+        axis=-1, epsilon=0.00001, name="inception_3a_3x3_bn2"
     )(inception_3a_3x3)
     inception_3a_3x3 = layers.Activation("relu")(inception_3a_3x3)
 
     inception_3a_5x5 = layers.Conv2D(16, (1, 1), name="inception_3a_5x5_conv1")(x)
     inception_3a_5x5 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_3a_5x5_bn1"
+        axis=-1, epsilon=0.00001, name="inception_3a_5x5_bn1"
     )(inception_3a_5x5)
     inception_3a_5x5 = layers.Activation("relu")(inception_3a_5x5)
     inception_3a_5x5 = layers.ZeroPadding2D(padding=(2, 2))(inception_3a_5x5)
@@ -94,7 +94,7 @@ def OpenFace(
         inception_3a_5x5
     )
     inception_3a_5x5 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_3a_5x5_bn2"
+        axis=-1, epsilon=0.00001, name="inception_3a_5x5_bn2"
     )(inception_3a_5x5)
     inception_3a_5x5 = layers.Activation("relu")(inception_3a_5x5)
 
@@ -103,7 +103,7 @@ def OpenFace(
         inception_3a_pool
     )
     inception_3a_pool = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_3a_pool_bn"
+        axis=-1, epsilon=0.00001, name="inception_3a_pool_bn"
     )(inception_3a_pool)
     inception_3a_pool = layers.Activation("relu")(inception_3a_pool)
     inception_3a_pool = layers.ZeroPadding2D(padding=((3, 4), (3, 4)))(
@@ -112,13 +112,13 @@ def OpenFace(
 
     inception_3a_1x1 = layers.Conv2D(64, (1, 1), name="inception_3a_1x1_conv")(x)
     inception_3a_1x1 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_3a_1x1_bn"
+        axis=-1, epsilon=0.00001, name="inception_3a_1x1_bn"
     )(inception_3a_1x1)
     inception_3a_1x1 = layers.Activation("relu")(inception_3a_1x1)
 
     inception_3a = ops.concatenate(
         [inception_3a_3x3, inception_3a_5x5, inception_3a_pool, inception_3a_1x1],
-        axis=3,
+        axis=-1,
     )
 
     # Inception3b
@@ -126,7 +126,7 @@ def OpenFace(
         inception_3a
     )
     inception_3b_3x3 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_3b_3x3_bn1"
+        axis=-1, epsilon=0.00001, name="inception_3b_3x3_bn1"
     )(inception_3b_3x3)
     inception_3b_3x3 = layers.Activation("relu")(inception_3b_3x3)
     inception_3b_3x3 = layers.ZeroPadding2D(padding=(1, 1))(inception_3b_3x3)
@@ -134,7 +134,7 @@ def OpenFace(
         inception_3b_3x3
     )
     inception_3b_3x3 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_3b_3x3_bn2"
+        axis=-1, epsilon=0.00001, name="inception_3b_3x3_bn2"
     )(inception_3b_3x3)
     inception_3b_3x3 = layers.Activation("relu")(inception_3b_3x3)
 
@@ -142,7 +142,7 @@ def OpenFace(
         inception_3a
     )
     inception_3b_5x5 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_3b_5x5_bn1"
+        axis=-1, epsilon=0.00001, name="inception_3b_5x5_bn1"
     )(inception_3b_5x5)
     inception_3b_5x5 = layers.Activation("relu")(inception_3b_5x5)
     inception_3b_5x5 = layers.ZeroPadding2D(padding=(2, 2))(inception_3b_5x5)
@@ -150,7 +150,7 @@ def OpenFace(
         inception_3b_5x5
     )
     inception_3b_5x5 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_3b_5x5_bn2"
+        axis=-1, epsilon=0.00001, name="inception_3b_5x5_bn2"
     )(inception_3b_5x5)
     inception_3b_5x5 = layers.Activation("relu")(inception_3b_5x5)
 
@@ -168,7 +168,7 @@ def OpenFace(
         inception_3b_pool
     )
     inception_3b_pool = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_3b_pool_bn"
+        axis=-1, epsilon=0.00001, name="inception_3b_pool_bn"
     )(inception_3b_pool)
     inception_3b_pool = layers.Activation("relu")(inception_3b_pool)
     inception_3b_pool = layers.ZeroPadding2D(padding=(4, 4))(inception_3b_pool)
@@ -177,13 +177,13 @@ def OpenFace(
         inception_3a
     )
     inception_3b_1x1 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_3b_1x1_bn"
+        axis=-1, epsilon=0.00001, name="inception_3b_1x1_bn"
     )(inception_3b_1x1)
     inception_3b_1x1 = layers.Activation("relu")(inception_3b_1x1)
 
     inception_3b = ops.concatenate(
         [inception_3b_3x3, inception_3b_5x5, inception_3b_pool, inception_3b_1x1],
-        axis=3,
+        axis=-1,
     )
 
     # Inception3c
@@ -191,7 +191,7 @@ def OpenFace(
         128, (1, 1), strides=(1, 1), name="inception_3c_3x3_conv1"
     )(inception_3b)
     inception_3c_3x3 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_3c_3x3_bn1"
+        axis=-1, epsilon=0.00001, name="inception_3c_3x3_bn1"
     )(inception_3c_3x3)
     inception_3c_3x3 = layers.Activation("relu")(inception_3c_3x3)
     inception_3c_3x3 = layers.ZeroPadding2D(padding=(1, 1))(inception_3c_3x3)
@@ -199,7 +199,7 @@ def OpenFace(
         256, (3, 3), strides=(2, 2), name="inception_3c_3x3_conv" + "2"
     )(inception_3c_3x3)
     inception_3c_3x3 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_3c_3x3_bn" + "2"
+        axis=-1, epsilon=0.00001, name="inception_3c_3x3_bn" + "2"
     )(inception_3c_3x3)
     inception_3c_3x3 = layers.Activation("relu")(inception_3c_3x3)
 
@@ -207,7 +207,7 @@ def OpenFace(
         32, (1, 1), strides=(1, 1), name="inception_3c_5x5_conv1"
     )(inception_3b)
     inception_3c_5x5 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_3c_5x5_bn1"
+        axis=-1, epsilon=0.00001, name="inception_3c_5x5_bn1"
     )(inception_3c_5x5)
     inception_3c_5x5 = layers.Activation("relu")(inception_3c_5x5)
     inception_3c_5x5 = layers.ZeroPadding2D(padding=(2, 2))(inception_3c_5x5)
@@ -215,7 +215,7 @@ def OpenFace(
         64, (5, 5), strides=(2, 2), name="inception_3c_5x5_conv" + "2"
     )(inception_3c_5x5)
     inception_3c_5x5 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_3c_5x5_bn" + "2"
+        axis=-1, epsilon=0.00001, name="inception_3c_5x5_bn" + "2"
     )(inception_3c_5x5)
     inception_3c_5x5 = layers.Activation("relu")(inception_3c_5x5)
 
@@ -225,7 +225,7 @@ def OpenFace(
     )
 
     inception_3c = ops.concatenate(
-        [inception_3c_3x3, inception_3c_5x5, inception_3c_pool], axis=3
+        [inception_3c_3x3, inception_3c_5x5, inception_3c_pool], axis=-1
     )
 
     # inception 4a
@@ -233,7 +233,7 @@ def OpenFace(
         96, (1, 1), strides=(1, 1), name="inception_4a_3x3_conv" + "1"
     )(inception_3c)
     inception_4a_3x3 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_4a_3x3_bn" + "1"
+        axis=-1, epsilon=0.00001, name="inception_4a_3x3_bn" + "1"
     )(inception_4a_3x3)
     inception_4a_3x3 = layers.Activation("relu")(inception_4a_3x3)
     inception_4a_3x3 = layers.ZeroPadding2D(padding=(1, 1))(inception_4a_3x3)
@@ -241,7 +241,7 @@ def OpenFace(
         192, (3, 3), strides=(1, 1), name="inception_4a_3x3_conv" + "2"
     )(inception_4a_3x3)
     inception_4a_3x3 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_4a_3x3_bn" + "2"
+        axis=-1, epsilon=0.00001, name="inception_4a_3x3_bn" + "2"
     )(inception_4a_3x3)
     inception_4a_3x3 = layers.Activation("relu")(inception_4a_3x3)
 
@@ -249,7 +249,7 @@ def OpenFace(
         32, (1, 1), strides=(1, 1), name="inception_4a_5x5_conv1"
     )(inception_3c)
     inception_4a_5x5 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_4a_5x5_bn1"
+        axis=-1, epsilon=0.00001, name="inception_4a_5x5_bn1"
     )(inception_4a_5x5)
     inception_4a_5x5 = layers.Activation("relu")(inception_4a_5x5)
     inception_4a_5x5 = layers.ZeroPadding2D(padding=(2, 2))(inception_4a_5x5)
@@ -257,7 +257,7 @@ def OpenFace(
         64, (5, 5), strides=(1, 1), name="inception_4a_5x5_conv" + "2"
     )(inception_4a_5x5)
     inception_4a_5x5 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_4a_5x5_bn" + "2"
+        axis=-1, epsilon=0.00001, name="inception_4a_5x5_bn" + "2"
     )(inception_4a_5x5)
     inception_4a_5x5 = layers.Activation("relu")(inception_4a_5x5)
 
@@ -276,7 +276,7 @@ def OpenFace(
         128, (1, 1), strides=(1, 1), name="inception_4a_pool_conv" + ""
     )(inception_4a_pool)
     inception_4a_pool = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_4a_pool_bn" + ""
+        axis=-1, epsilon=0.00001, name="inception_4a_pool_bn" + ""
     )(inception_4a_pool)
     inception_4a_pool = layers.Activation("relu")(inception_4a_pool)
     inception_4a_pool = layers.ZeroPadding2D(padding=(2, 2))(inception_4a_pool)
@@ -285,13 +285,13 @@ def OpenFace(
         256, (1, 1), strides=(1, 1), name="inception_4a_1x1_conv" + ""
     )(inception_3c)
     inception_4a_1x1 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_4a_1x1_bn" + ""
+        axis=-1, epsilon=0.00001, name="inception_4a_1x1_bn" + ""
     )(inception_4a_1x1)
     inception_4a_1x1 = layers.Activation("relu")(inception_4a_1x1)
 
     inception_4a = ops.concatenate(
         [inception_4a_3x3, inception_4a_5x5, inception_4a_pool, inception_4a_1x1],
-        axis=3,
+        axis=-1,
     )
 
     # inception4e
@@ -299,7 +299,7 @@ def OpenFace(
         160, (1, 1), strides=(1, 1), name="inception_4e_3x3_conv" + "1"
     )(inception_4a)
     inception_4e_3x3 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_4e_3x3_bn" + "1"
+        axis=-1, epsilon=0.00001, name="inception_4e_3x3_bn" + "1"
     )(inception_4e_3x3)
     inception_4e_3x3 = layers.Activation("relu")(inception_4e_3x3)
     inception_4e_3x3 = layers.ZeroPadding2D(padding=(1, 1))(inception_4e_3x3)
@@ -307,7 +307,7 @@ def OpenFace(
         256, (3, 3), strides=(2, 2), name="inception_4e_3x3_conv" + "2"
     )(inception_4e_3x3)
     inception_4e_3x3 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_4e_3x3_bn" + "2"
+        axis=-1, epsilon=0.00001, name="inception_4e_3x3_bn" + "2"
     )(inception_4e_3x3)
     inception_4e_3x3 = layers.Activation("relu")(inception_4e_3x3)
 
@@ -315,7 +315,7 @@ def OpenFace(
         64, (1, 1), strides=(1, 1), name="inception_4e_5x5_conv" + "1"
     )(inception_4a)
     inception_4e_5x5 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_4e_5x5_bn" + "1"
+        axis=-1, epsilon=0.00001, name="inception_4e_5x5_bn" + "1"
     )(inception_4e_5x5)
     inception_4e_5x5 = layers.Activation("relu")(inception_4e_5x5)
     inception_4e_5x5 = layers.ZeroPadding2D(padding=(2, 2))(inception_4e_5x5)
@@ -323,7 +323,7 @@ def OpenFace(
         128, (5, 5), strides=(2, 2), name="inception_4e_5x5_conv" + "2"
     )(inception_4e_5x5)
     inception_4e_5x5 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_4e_5x5_bn" + "2"
+        axis=-1, epsilon=0.00001, name="inception_4e_5x5_bn" + "2"
     )(inception_4e_5x5)
     inception_4e_5x5 = layers.Activation("relu")(inception_4e_5x5)
 
@@ -333,7 +333,7 @@ def OpenFace(
     )
 
     inception_4e = ops.concatenate(
-        [inception_4e_3x3, inception_4e_5x5, inception_4e_pool], axis=3
+        [inception_4e_3x3, inception_4e_5x5, inception_4e_pool], axis=-1
     )
 
     # inception5a
@@ -341,7 +341,7 @@ def OpenFace(
         96, (1, 1), strides=(1, 1), name="inception_5a_3x3_conv" + "1"
     )(inception_4e)
     inception_5a_3x3 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_5a_3x3_bn" + "1"
+        axis=-1, epsilon=0.00001, name="inception_5a_3x3_bn" + "1"
     )(inception_5a_3x3)
     inception_5a_3x3 = layers.Activation("relu")(inception_5a_3x3)
     inception_5a_3x3 = layers.ZeroPadding2D(padding=(1, 1))(inception_5a_3x3)
@@ -349,7 +349,7 @@ def OpenFace(
         384, (3, 3), strides=(1, 1), name="inception_5a_3x3_conv" + "2"
     )(inception_5a_3x3)
     inception_5a_3x3 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_5a_3x3_bn" + "2"
+        axis=-1, epsilon=0.00001, name="inception_5a_3x3_bn" + "2"
     )(inception_5a_3x3)
     inception_5a_3x3 = layers.Activation("relu")(inception_5a_3x3)
 
@@ -368,7 +368,7 @@ def OpenFace(
         96, (1, 1), strides=(1, 1), name="inception_5a_pool_conv" + ""
     )(inception_5a_pool)
     inception_5a_pool = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_5a_pool_bn" + ""
+        axis=-1, epsilon=0.00001, name="inception_5a_pool_bn" + ""
     )(inception_5a_pool)
     inception_5a_pool = layers.Activation("relu")(inception_5a_pool)
     inception_5a_pool = layers.ZeroPadding2D(padding=(1, 1))(inception_5a_pool)
@@ -377,12 +377,12 @@ def OpenFace(
         256, (1, 1), strides=(1, 1), name="inception_5a_1x1_conv" + ""
     )(inception_4e)
     inception_5a_1x1 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_5a_1x1_bn" + ""
+        axis=-1, epsilon=0.00001, name="inception_5a_1x1_bn" + ""
     )(inception_5a_1x1)
     inception_5a_1x1 = layers.Activation("relu")(inception_5a_1x1)
 
     inception_5a = ops.concatenate(
-        [inception_5a_3x3, inception_5a_pool, inception_5a_1x1], axis=3
+        [inception_5a_3x3, inception_5a_pool, inception_5a_1x1], axis=-1
     )
 
     # inception_5b
@@ -390,7 +390,7 @@ def OpenFace(
         96, (1, 1), strides=(1, 1), name="inception_5b_3x3_conv" + "1"
     )(inception_5a)
     inception_5b_3x3 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_5b_3x3_bn" + "1"
+        axis=-1, epsilon=0.00001, name="inception_5b_3x3_bn" + "1"
     )(inception_5b_3x3)
     inception_5b_3x3 = layers.Activation("relu")(inception_5b_3x3)
     inception_5b_3x3 = layers.ZeroPadding2D(padding=(1, 1))(inception_5b_3x3)
@@ -398,7 +398,7 @@ def OpenFace(
         384, (3, 3), strides=(1, 1), name="inception_5b_3x3_conv" + "2"
     )(inception_5b_3x3)
     inception_5b_3x3 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_5b_3x3_bn" + "2"
+        axis=-1, epsilon=0.00001, name="inception_5b_3x3_bn" + "2"
     )(inception_5b_3x3)
     inception_5b_3x3 = layers.Activation("relu")(inception_5b_3x3)
 
@@ -408,7 +408,7 @@ def OpenFace(
         96, (1, 1), strides=(1, 1), name="inception_5b_pool_conv" + ""
     )(inception_5b_pool)
     inception_5b_pool = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_5b_pool_bn" + ""
+        axis=-1, epsilon=0.00001, name="inception_5b_pool_bn" + ""
     )(inception_5b_pool)
     inception_5b_pool = layers.Activation("relu")(inception_5b_pool)
 
@@ -418,17 +418,17 @@ def OpenFace(
         256, (1, 1), strides=(1, 1), name="inception_5b_1x1_conv" + ""
     )(inception_5a)
     inception_5b_1x1 = layers.BatchNormalization(
-        axis=3, epsilon=0.00001, name="inception_5b_1x1_bn" + ""
+        axis=-1, epsilon=0.00001, name="inception_5b_1x1_bn" + ""
     )(inception_5b_1x1)
     inception_5b_1x1 = layers.Activation("relu")(inception_5b_1x1)
 
     inception_5b = ops.concatenate(
-        [inception_5b_3x3, inception_5b_pool, inception_5b_1x1], axis=3
+        [inception_5b_3x3, inception_5b_pool, inception_5b_1x1], axis=-1
     )
 
     av_pool = layers.AveragePooling2D(pool_size=(3, 3), strides=(1, 1))(inception_5b)
     reshape_layer = layers.Flatten()(av_pool)
-    dense_layer = layers.Dense(128, name="dense_layer")(reshape_layer)
+    dense_layer = layers.Dense(classes, name="dense_layer")(reshape_layer)
     norm_layer = layers.UnitNormalization(axis=1, name="norm_layer")(dense_layer)
 
     # Ensure that the model takes into account
