@@ -8,8 +8,8 @@ from auramask.models.arcface import ArcFace
 from auramask.models.facenet import FaceNet
 from auramask.models.deepid import DeepID
 from auramask.models.vggface import VggFace
-from auramask.models.openface import OpenFace
-from auramask.utils.preprocessing import rgb_to_bgr
+# from auramask.models.openface import OpenFace
+# from auramask.utils.preprocessing import rgb_to_bgr
 
 
 # TODO: Concrete function execution (https://medium.com/tinyclues-vision/optimizing-tensorflow-models-for-inference-d3636cf34034)
@@ -31,7 +31,7 @@ class FaceEmbedEnum(str, Enum):
         if self.name not in model_obj.keys():
             input = layers.Input((None, None, 3))
             x = layers.Rescaling(255, offset=0)(input)  # convert to [0, 255]
-            x = layers.Lambda(rgb_to_bgr)(x)
+            # x = layers.Lambda(rgb_to_bgr)(x)
 
             if self == FaceEmbedEnum.VGGFACE:
                 x = layers.Resizing(224, 224, name="vggface-resize")(x)
@@ -54,9 +54,9 @@ class FaceEmbedEnum(str, Enum):
                     55, 47, name="deepid-resize", pad_to_aspect_ratio=True, fill_value=0
                 )(x)
                 model = DeepID(input_tensor=x, preprocess=True, name=self.name)
-            elif self == FaceEmbedEnum.OPENFACE:
-                x = layers.Resizing(96, 96, name="openface-resize")(x)
-                model = OpenFace(input_tensor=x, preprocess=True, name=self.name)
+            # elif self == FaceEmbedEnum.OPENFACE:
+            #     x = layers.Resizing(96, 96, name="openface-resize")(x)
+            #     model = OpenFace(input_tensor=x, preprocess=True, name=self.name)
 
             model.trainable = False
             model_obj[self.name] = model
