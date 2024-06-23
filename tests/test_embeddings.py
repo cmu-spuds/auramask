@@ -50,7 +50,43 @@ def represent(
     return js["results"]
 
 
-def test_same_embed(obj: unittest.TestCase, img_path):
+def test_same_embed_batch(obj: unittest.TestCase, img_paths: list):
+    rs = layers.Rescaling(scale=1.0 / 255)
+    rsiz = layers.Resizing(
+        obj._image_shape[0], obj._image_shape[1], pad_to_aspect_ratio=True, fill_value=0
+    )
+
+    a = []
+    for img_path in img_paths:
+        file = utils.get_file(origin=img_path, cache_subdir="tst_imgs")
+        img = utils.load_img(file)
+        a.append(rsiz(utils.img_to_array(img, data_format="channels_last")))
+
+    a = ops.stack(a)
+
+    a = rs(rsiz(a))
+
+    my_embed = obj._embed_model(a, training=False)
+
+    df_embed = []
+    for img_path in img_paths:
+        resp = represent(
+            img_path,
+            model_name=obj._embed_model_name,
+            enforce_detection=False,
+            align=False,
+            detector_backend="skip",
+            normalization=obj._embed_model_norm,
+        )
+
+        df_embed.append(resp[0]["embedding"])
+
+    dist = cosine_distance(my_embed, df_embed, axis=-1)
+    np.testing.assert_allclose(dist, np.zeros_like(dist), atol=obj.atol, rtol=obj.rtol)
+    # obj.assertAlmostEqual(float(dist), 0.0, places=4)
+
+
+def test_same_embed(obj: unittest.TestCase, img_path: str):
     rs = layers.Rescaling(scale=1.0 / 255)
     rsiz = layers.Resizing(
         obj._image_shape[0], obj._image_shape[1], pad_to_aspect_ratio=True, fill_value=0
@@ -167,6 +203,9 @@ class TestArcFaceEmbedding(unittest.TestCase):
     def test_same_embed_vggface(self):
         test_same_embed(self, VGG_IMG)
 
+    def test_same_embed_batch(self):
+        test_same_embed_batch(self, [FDF_IMG, LFW_IMG, VGG_IMG])
+
     def test_diff_embed_lfw_fdf(self):
         test_diff_embed(self, LFW_IMG, FDF_IMG)
 
@@ -247,6 +286,9 @@ class TestVGGFaceEmbedding(unittest.TestCase):
 
     def test_same_embed_vggface(self):
         test_same_embed(self, VGG_IMG)
+
+    def test_same_embed_batch(self):
+        test_same_embed_batch(self, [FDF_IMG, LFW_IMG, VGG_IMG])
 
     def test_diff_embed_lfw_fdf(self):
         test_diff_embed(self, LFW_IMG, FDF_IMG)
@@ -343,6 +385,9 @@ class TestFaceNetEmbedding(unittest.TestCase):
     def test_diff_embed_lfw_fdf(self):
         test_diff_embed(self, LFW_IMG, FDF_IMG)
 
+    def test_same_embed_batch(self):
+        test_same_embed_batch(self, [FDF_IMG, LFW_IMG, VGG_IMG])
+
     def test_diff_embed_lfw_vgg(self):
         test_diff_embed(self, LFW_IMG, VGG_IMG)
 
@@ -374,6 +419,9 @@ class TestDeepIDEmbedding(unittest.TestCase):
 
     def test_same_embed_vggface(self):
         test_same_embed(self, VGG_IMG)
+
+    def test_same_embed_batch(self):
+        test_same_embed_batch(self, [FDF_IMG, LFW_IMG, VGG_IMG])
 
     def test_diff_embed_lfw_fdf(self):
         test_diff_embed(self, LFW_IMG, FDF_IMG)
@@ -409,6 +457,9 @@ class TestOpenFaceEmbedding(unittest.TestCase):
 
     def test_same_embed_vggface(self):
         test_same_embed(self, VGG_IMG)
+
+    def test_same_embed_batch(self):
+        test_same_embed_batch(self, [FDF_IMG, LFW_IMG, VGG_IMG])
 
     def test_diff_embed_lfw_fdf(self):
         test_diff_embed(self, LFW_IMG, FDF_IMG)

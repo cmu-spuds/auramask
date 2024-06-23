@@ -17,7 +17,7 @@ class FaceEmbedEnum(str, Enum):
     VGGFACE = "VGG-Face"
     FACENET = "Facenet"
     FACENET512 = "Facenet512"
-    OPENFACE = "OpenFace"
+    # OPENFACE = "OpenFace"   # TODO: nan quickly
     # DEEPFACE = "DeepFace"  # TODO: OOM errors
     DEEPID = "DeepID"
     ARCFACE = "ArcFace"
