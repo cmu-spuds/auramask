@@ -40,7 +40,7 @@ class AuramaskCallback(WandbEvalCallback):
         super().__init__(
             data_table_columns=data_table_columns, pred_table_columns=pred_table_columns
         )
-        self.x = validation_data
+        self.x = validation_data[:num_samples]
         self.log_freq = log_freq
         self.__cur_epoch = 0
 
@@ -94,13 +94,13 @@ class AuramaskCallback(WandbEvalCallback):
                         wandb.Image(
                             preprocessing.image.array_to_img(y_i * 255, scale=False)
                         )
-                        for y_i in y[:5]
+                        for y_i in y
                     ],
                     "mask": [
                         wandb.Image(
                             preprocessing.image.array_to_img(m_i * 255, scale=False)
                         )
-                        for m_i in mask[:5]
+                        for m_i in mask
                     ],
                 },
                 step=wandb.run.step,
