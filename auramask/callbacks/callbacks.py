@@ -48,7 +48,10 @@ class AuramaskCallback(WandbEvalCallback):
         wandb.log(
             {
                 "image": [
-                    wandb.Image(preprocessing.image.array_to_img(x_i)) for x_i in self.x
+                    wandb.Image(
+                        preprocessing.image.array_to_img(x_i * 255, scale=False)
+                    )
+                    for x_i in self.x
                 ],
             },
             step=0,
@@ -77,7 +80,9 @@ class AuramaskCallback(WandbEvalCallback):
             data = {}
             for i in range(0, mask.shape[-1], 3):
                 data["r%d" % (i / 3)] = [
-                    wandb.Image(preprocessing.image.array_to_img(m_i))
+                    wandb.Image(
+                        preprocessing.image.array_to_img(m_i * 255, scale=False)
+                    )
                     for m_i in mask[:, :, :, i : i + 3]
                 ]
 

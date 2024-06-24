@@ -22,7 +22,7 @@ class FaceEmbeddingLoss(Loss):
         self,
         f: FaceEmbedEnum,
         d: Callable = cosine_distance,
-        name="FaceEmbeddingLoss_",
+        name="FaceEmbeddingLoss",
         reduction="sum_over_batch_size",
         **kwargs,
     ):
@@ -44,9 +44,9 @@ class FaceEmbeddingLoss(Loss):
         y_true: KerasTensor,
         y_pred: KerasTensor,
     ) -> KerasTensor:
-        emb_t = ops.stop_gradient(self.f(y_true, training=False))
         emb_adv = self.f(y_pred, training=False)
-        return ops.negative(self.d(emb_t, emb_adv, -1))
+        distance = self.d(y_true, emb_adv, -1)
+        return ops.subtract(1, distance)
 
 
 class FaceEmbeddingThresholdLoss(FaceEmbeddingLoss):

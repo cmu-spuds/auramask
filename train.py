@@ -13,6 +13,7 @@ from auramask.callbacks.callbacks import init_callbacks
 
 from auramask.losses.perceptual import PerceptualLoss
 from auramask.losses.embeddistance import (
+    FaceEmbeddingLoss,
     FaceEmbeddingThresholdLoss,
 )
 from auramask.losses.aesthetic import AestheticLoss
@@ -105,6 +106,9 @@ def parse_args():
     parser.add_argument("--model-config", type=argparse.FileType("r"))
     parser.add_argument(
         "-F", type=FaceEmbedEnum, nargs="+", required=False, action=EnumAction
+    )
+    parser.add_argument(
+        "--reface", default=False, type=bool, action=argparse.BooleanOptionalAction
     )
     parser.add_argument("-p", "--rho", type=float, default=1.0)
     parser.add_argument("-a", "--alpha", type=float, default=2e-4)
@@ -270,11 +274,18 @@ def initialize_loss():
 
     is_not_rgb = hparams["color_space"].name.casefold() != "rgb"
     F = hparams.pop("F")
+    reface = hparams.pop("reface")
     rho = hparams.pop("rho")
     if F:
         for f in F:
-            losses.append(FaceEmbeddingThresholdLoss(f=f, threshold=f.get_threshold()))
-            weights.append(rho)
+            if not reface:  # Loss with thresholding
+                losses.append(
+                    FaceEmbeddingThresholdLoss(f=f, threshold=f.get_threshold())
+                )
+                weights.append(rho)
+            else:  # Loss as described by ReFace
+                losses.append(FaceEmbeddingLoss(f=f))
+                weights.append(1 / len(F))
             metrics.append(
                 PercentageOverThreshold(f=losses[-1].f, threshold=f.get_threshold())
             )
@@ -290,7 +301,7 @@ def initialize_loss():
         loss_in = set(hparams.pop("losses"))
         if len(loss_in) != len(lam) and len(lam) > 1:
             raise argparse.ArgumentError(
-                message="The length of lambda values must equal that of lpips argument"
+                message="The length of lambda values must equal that of losses argument"
             )
         elif len(lam) <= 1:
             w = lam[0] if len(lam) > 0 else 1.0
