@@ -70,7 +70,7 @@ class FaceEmbeddingThresholdLoss(FaceEmbeddingLoss):
     def call(self, y_true: KerasTensor, y_pred: KerasTensor) -> KerasTensor:
         emb_adv = self.f(y_pred, training=False)
         distance = self.d(y_true, emb_adv, -1)
-        dist_thresh = ops.subtract(self.threshold, distance)
+        dist_thresh = ops.subtract(self.threshold, distance) / self.threshold
         return ops.nn.leaky_relu(dist_thresh)
 
 
