@@ -71,7 +71,7 @@ class FaceEmbeddingThresholdLoss(FaceEmbeddingLoss):
         emb_adv = self.f(y_pred, training=False)
         distance = self.d(y_true, emb_adv, -1)
         dist_thresh = ops.subtract(self.threshold, distance) / self.threshold
-        return ops.nn.leaky_relu(dist_thresh)
+        return ops.nn.leaky_relu(dist_thresh, negative_slope=0.2 * self.threshold)
 
 
 class EmbeddingDistanceLoss(Loss):
