@@ -18,6 +18,7 @@ from auramask.losses.embeddistance import (
 )
 from auramask.losses.aesthetic import AestheticLoss
 from auramask.losses.ssim import GRAYSSIM, MSSSIMLoss, SSIMLoss, YUVSSIMLoss
+from auramask.losses.style import StyleLoss
 from auramask.losses.zero_dce import (
     ColorConstancyLoss,
     SpatialConsistencyLoss,
@@ -138,6 +139,7 @@ def parse_args():
             "illumination",
             "spatial",
             "aesthetic",
+            "style",
             "none",
         ],
         nargs="+",
@@ -347,6 +349,9 @@ def initialize_loss():
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "spatial":
                 tmp_loss = SpatialConsistencyLoss()
+                cs_transforms.append(is_not_rgb)
+            elif loss_i == "style":
+                tmp_loss = StyleLoss()
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "aesthetic":
                 tmp_loss = AestheticLoss(
