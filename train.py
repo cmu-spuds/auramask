@@ -11,14 +11,22 @@ import keras
 
 from auramask.callbacks.callbacks import init_callbacks
 
+from auramask.losses.content import ContentLoss
 from auramask.losses.perceptual import PerceptualLoss
 from auramask.losses.embeddistance import (
     FaceEmbeddingLoss,
     FaceEmbeddingThresholdLoss,
 )
 from auramask.losses.aesthetic import AestheticLoss
-from auramask.losses.ssim import GRAYSSIM, MSSSIMLoss, SSIMLoss, YUVSSIMLoss
-from auramask.losses.style import StyleLoss
+from auramask.losses.ssim import (
+    GRAYSSIM,
+    DSSIMObjective,
+    MSSSIMLoss,
+    SSIMLoss,
+    YUVSSIMLoss,
+)
+from auramask.losses.style import StyleLoss, StyleRefs
+from auramask.losses.variation import VariationLoss
 from auramask.losses.zero_dce import (
     ColorConstancyLoss,
     SpatialConsistencyLoss,
@@ -132,6 +140,7 @@ def parse_args():
             "ssim",
             "msssim",
             "gsssim",
+            "dsssim",
             "nima",
             "ffl",
             "exposure",
@@ -140,9 +149,18 @@ def parse_args():
             "spatial",
             "aesthetic",
             "style",
+            "content",
+            "variation",
             "none",
         ],
         nargs="+",
+    )
+    parser.add_argument(
+        "--style-ref",
+        type=StyleRefs,
+        action=EnumAction,
+        default=StyleRefs.STARRYNIGHT,
+        required=False,
     )
     parser.add_argument(
         "-S",
@@ -300,7 +318,7 @@ def initialize_loss():
 
     if "none" not in hparams["losses"]:
         lam = hparams.pop("lambda")
-        loss_in = set(hparams.pop("losses"))
+        loss_in = hparams.pop("losses")
         if len(loss_in) != len(lam) and len(lam) > 1:
             raise argparse.ArgumentError(
                 message="The length of lambda values must equal that of losses argument"
@@ -335,6 +353,9 @@ def initialize_loss():
             elif loss_i == "msssim":
                 tmp_loss = MSSSIMLoss()
                 cs_transforms.append(False)
+            elif loss_i == "dsssim":
+                tmp_loss = DSSIMObjective()
+                cs_transforms.append(False)
             elif loss_i == "nima":
                 tmp_loss = AestheticLoss(name="NIMA-T", kind="nima-tech")
                 cs_transforms.append(is_not_rgb)
@@ -351,7 +372,14 @@ def initialize_loss():
                 tmp_loss = SpatialConsistencyLoss()
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "style":
-                tmp_loss = StyleLoss()
+                style = hparams.pop("style_ref")
+                tmp_loss = StyleLoss(reference=style)
+                cs_transforms.append(is_not_rgb)
+            elif loss_i == "variation":
+                tmp_loss = VariationLoss()
+                cs_transforms.append(is_not_rgb)
+            elif loss_i == "content":
+                tmp_loss = ContentLoss()
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "aesthetic":
                 tmp_loss = AestheticLoss(

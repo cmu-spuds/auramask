@@ -56,12 +56,7 @@ class AuraMask(Model):
                 if conversion:
                     c = loss_convert.pop(0)
                 if isinstance(loss_i, Loss):
-                    if w > 0:
-                        self._custom_losses.append(
-                            (loss_i, m.Mean(name=loss_i.name), w, c)
-                        )
-                    else:
-                        del loss_i
+                    self._custom_losses.append((loss_i, m.Mean(name=loss_i.name), w, c))
                 else:
                     loss.append(loss_i)
                     if weighted:

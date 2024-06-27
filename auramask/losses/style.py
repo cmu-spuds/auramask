@@ -8,7 +8,8 @@ from auramask.utils.distance import cosine_distance
 
 class StyleRefs(enum.Enum):
     STARRYNIGHT = "https://keras.io/img/examples/generative/neural_style_transfer/neural_style_transfer_5_1.jpg"
-    ABSTRACT = "https://images.freecreatives.com/wp-content/uploads/2015/03/9a96e0bf43baa6c3b6ea7b8d3c9c7dba-d5qi6yc.jpg"
+    HOPE = "https://i.pinimg.com/236x/e7/b3/46/e7b346bc9b0dae896705516bb7258cb6--obama-poster-design-tutorials.jpg?nii=t"
+    DIM = "https://images.unsplash.com/photo-1719066373323-c3712474b2a4"
 
 
 def get_gram_matrix(x, norm_by_channels=False, flatten=False):
@@ -59,48 +60,52 @@ def get_gram_matrix(x, norm_by_channels=False, flatten=False):
     return gram
 
 
-def _total_variation_loss(x):
-    width_var = ops.square(x[:, :-1, :-1, :] - x[:, 1:, :-1, :])
-    height_var = ops.square(x[:, :-1, :-1, :] - x[:, :-1, 1:, :])
-    return ops.sum(ops.power(width_var + height_var, 1.25), axis=(1, 2))
-
-
 class StyleLoss(keras.Loss):
     def __init__(
         self,
         name="StyleLoss",
-        reference: StyleRefs = StyleRefs.ABSTRACT,
+        reference: StyleRefs = StyleRefs.DIM,
         distance: Callable = cosine_distance,
-        **kwargs,
-    ):
-        super().__init__(name=name, **kwargs)
-
-        inp = keras.layers.Input(shape=(None, None, 3))
-        x = keras.applications.vgg19.preprocess_input(inp)
-        base = keras.applications.VGG19(
-            weights="imagenet", include_top=False, input_tensor=x
-        )
-
-        self.reference = reference
-        self.distance = distance
-
-        # List of layers to use for the style loss.
-        self.style_layer_names = [
+        style_layers: list[str] = [
             "block1_conv1",
             "block2_conv1",
             "block3_conv1",
             "block4_conv1",
             "block5_conv1",
-        ]
+        ],
+        **kwargs,
+    ):
+        super().__init__(name=name, **kwargs)
+
+        self.reference = reference
+        self.distance = distance
+
+        global model_obj
+
+        if "model_obj" not in globals():
+            model_obj = {}
+
+        if "vgg19" not in model_obj.keys():
+            inp = keras.layers.Input(shape=(None, None, 3))
+            x = keras.applications.vgg19.preprocess_input(inp)
+            model = keras.applications.VGG19(
+                weights="imagenet", include_top=False, input_tensor=x
+            )
+            model.trainable = False
+            model_obj["vgg19"] = model
+
+        base = model_obj["vgg19"]
 
         outputs_dict = {}
         for layer in base.layers:
-            if layer.name in self.style_layer_names:
+            if layer.name in style_layers:
                 outputs_dict[layer.name] = layer.output
 
+        # Feature extractor
         self.feature_extractor = keras.Model(inputs=inp, outputs=outputs_dict)
         self.feature_extractor.trainable = False
 
+        # Style reference
         style_reference_image_path = keras.utils.get_file(
             "%s.jpg" % reference.name, reference.value, cache_subdir="style"
         )
@@ -112,12 +117,13 @@ class StyleLoss(keras.Loss):
 
         target = self.feature_extractor(img, training=False)
 
+        # Precompute gram matrix for style
         self.S = {}
-
-        for layer_name in self.style_layer_names:
+        for layer_name in style_layers:
             self.S[layer_name] = get_gram_matrix(
                 target[layer_name], norm_by_channels=True, flatten=True
             )
+        self.N = ops.convert_to_tensor(len(style_layers), "float32")
 
     def get_config(self):
         base_config = super().get_config()
@@ -134,12 +140,12 @@ class StyleLoss(keras.Loss):
         pred_features = self.feature_extractor(y_pred, training=False)
         loss = ops.zeros(shape=())
 
-        for layer_name in self.style_layer_names:
+        for layer_name, S in self.S.items():
             pred_layer_features = pred_features[layer_name]
             C = get_gram_matrix(
                 pred_layer_features, norm_by_channels=True, flatten=True
             )
-            sl = self.distance(self.S[layer_name], C)
-            loss += sl / len(self.style_layer_names)
+            sl = self.distance(S, C)
+            loss += sl / self.N
 
         return loss

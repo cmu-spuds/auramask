@@ -13,9 +13,9 @@ def ssim(
     channel_weights: list = [1.0, 1.0, 1.0],
 ):
     # Convert to tensor if needed.
-    img1 = ops.convert_to_tensor(img1, name="img1")
-    img2 = ops.convert_to_tensor(img2, name="img2")
-    channel_weights = ops.convert_to_tensor(channel_weights, name="c_weights")
+    img1 = ops.convert_to_tensor(img1)
+    img2 = ops.convert_to_tensor(img2)
+    channel_weights = ops.convert_to_tensor(channel_weights)
 
     # Need to convert the images to float32.  Scale max_val accordingly so that
     # SSIM is computed correctly.
