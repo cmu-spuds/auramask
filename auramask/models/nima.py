@@ -1,6 +1,6 @@
 import importlib
 from typing import Literal
-from keras import Model, ops, saving
+from keras import Model, ops, saving, utils
 from os import path
 
 
@@ -39,8 +39,10 @@ class NIMA(Model):
         self.pp = getattr(base_module, "preprocess_input")
         assert callable(self.pp)
 
-        mdl_path = path.join(
-            path.expanduser("~/compiled"), "nima_%s_%s.keras" % (kind, backbone)
+        mdl_path = utils.get_file(
+            origin="https://github.com/cmu-spuds/nima-models/releases/download/latest/nima_%s_%s.keras"
+            % (kind, backbone),
+            cache_subdir="models",
         )
 
         self.net = saving.load_model(mdl_path)
