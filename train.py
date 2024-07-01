@@ -436,7 +436,7 @@ def initialize_model():
     )
 
     losses, losses_w, losses_t, metrics = initialize_loss()
-    optimizer = opts.Adam(learning_rate=hparams["alpha"], clipvalue=0.5)
+    optimizer = opts.Adam(learning_rate=hparams["alpha"], clipnorm=1.0)
     model.compile(
         optimizer=optimizer,
         loss=losses,
