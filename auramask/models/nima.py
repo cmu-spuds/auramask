@@ -1,59 +1,64 @@
-import importlib
 from typing import Literal
-from keras import Model, ops, saving, utils
-from os import path
+from keras import layers, Model, applications, utils
 
 
-class NIMA(Model):
+def NIMA(
+    backbone: Literal["mobilenet"]
+    | Literal["nasnetmobile"]
+    | Literal["inceptionresnetv2"],
+    kind: Literal["aesthetic"] | Literal["technical"] = "aesthetic",
+    rescale: bool = True,
+):
     """_summary_
 
     Args:
         kind (str): Choice of "aesthetic" or "technical"
         backbone: Right now only "mobilenet"
     """
+    inp = layers.Input((None, None, 3))
 
-    def __init__(
-        self,
-        kind: Literal["aesthetic"] | Literal["technical"] = "aesthetic",
-        backbone: Literal["mobilenet"]
-        | Literal["nasnetmobile"]
-        | Literal["inceptionresnetv2"] = "mobilenet",
-        name="NIMA",
-        **kwargs,
-    ):
-        super().__init__(name=name, **kwargs)
-        self.backbone = backbone
-        self.kind = kind
+    if rescale:
+        inp = layers.Rescaling(scale=255, offset=0)(inp)
 
-        if backbone == "inceptionresnetv2":
-            base_module = importlib.import_module(
-                "keras.applications.inception_resnet_v2"
-            )
-        elif backbone == "mobilenet":
-            base_module = importlib.import_module("keras.applications.mobilenet")
-        elif backbone == "nasnetmobile":
-            base_module = importlib.import_module("keras.applications.nasnet")
-        else:
-            raise ValueError("Provided invalid backbone option %s", backbone)
-
-        self.pp = getattr(base_module, "preprocess_input")
-        assert callable(self.pp)
-
-        mdl_path = utils.get_file(
-            origin="https://github.com/cmu-spuds/nima-models/releases/download/latest/nima_%s_%s.keras"
-            % (kind, backbone),
-            cache_subdir="models",
+    if backbone == "inceptionresnetv2":
+        x = applications.inception_resnet_v2.preprocess_input(inp)
+        base_model = applications.InceptionResNetV2(
+            input_tensor=x, include_top=False, pooling="avg", weights=None
         )
+        weight_path = utils.get_file(
+            fname="nima_resnetv2.h5",
+            origin="https://github.com/titu1994/neural-image-assessment/releases/download/v0.5/inception_resnet_weights.h5",
+            cache_subdir="weights",
+        )
+    elif backbone == "mobilenet":
+        x = applications.mobilenet.preprocess_input(inp)
+        base_model = applications.mobilenet.MobileNet(
+            input_tensor=x, include_top=False, alpha=1, pooling="avg", weights=None
+        )
+        weight_path = utils.get_file(
+            fname="nima_mobilenet.h5",
+            origin="https://github.com/titu1994/neural-image-assessment/releases/download/v0.3/mobilenet_weights.h5",
+            cache_subdir="weights",
+        )
+    elif backbone == "nasnetmobile":
+        x = layers.Resizing(224, 224)(inp)
+        x = applications.nasnet.preprocess_input(x)
+        base_model = applications.nasnet.NASNetMobile(
+            input_tensor=x, include_top=False, pooling="avg", weights=None
+        )
+        weight_path = utils.get_file(
+            fname="nima_nasnet.h5",
+            origin="https://github.com/titu1994/neural-image-assessment/releases/download/v0.4/nasnet_weights.h5",
+            cache_subdir="weights",
+        )
+    else:
+        raise ValueError("Provided invalid backbone option %s", backbone)
 
-        self.net = saving.load_model(mdl_path)
-        # self.net = TFSMLayer(mdl_path, call_endpoint='serve')
+    x = layers.Dropout(0.75)(base_model.output)
+    x = layers.Dense(10, activation="softmax")(x)
 
-    def get_config(self):
-        return {"name": self.name, "kind": self.kind, "backbone": self.backbone}
+    model = Model(inp, x, name="NIMA-%s" % (backbone))
+    model.load_weights(weight_path)
+    model.trainable = False
 
-    def call(self, x):
-        x = ops.multiply(x, 255.0)
-        # tf.print("\nConverted: ", x.shape, x.dtype, tf.reduce_min(x), tf.reduce_max(x))
-        x = self.pp(x)
-        # tf.print("\nPreprocessed: ", x.shape, x.dtype, tf.reduce_min(x), tf.reduce_max(x))
-        return self.net(x)
+    return model

@@ -1,12 +1,10 @@
 from typing import Literal
-
 from keras import ops, KerasTensor, Loss
-
 from auramask.models.nima import NIMA
 
 
 def _normalize_labels(labels: KerasTensor) -> KerasTensor:
-    normed = labels / ops.reduce_sum(labels)
+    normed = labels / ops.sum(labels)
     return normed
 
 
@@ -22,25 +20,14 @@ class AestheticLoss(Loss):
         | Literal["nasnetmobile"]
         | Literal["inceptionresnetv2"] = "mobilenet",
         kind: Literal["nima-aes"] | Literal["nima-tech"] | Literal["vila"] = "nima-aes",
-        model: NIMA | None = None,
         name="AestheticLoss",
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
-        if model:
-            self.model = model
-        else:
-            if kind == "nima-aes":
-                self.model = NIMA(backbone=backbone, kind="aesthetic")
-                for layer in self.model.layers:
-                    layer.trainable = False
-                    layer._name = "%s/%s" % (name, layer.name)
-            elif kind == "nima-tech":
-                self.model = NIMA(backbone=backbone, kind="technical")
-                for layer in self.model.layers:
-                    layer.trainable = False
-                    layer._name = "%s/%s" % (name, layer.name)
-        self.model.trainable = False
+        if kind == "nima-aes":
+            self.model = NIMA(backbone=backbone, kind="aesthetic")
+        elif kind == "nima-tech":
+            self.model = NIMA(backbone=backbone, kind="technical")
 
     def get_config(self):
         return {"name": self.name, "model": self.model.name, "kind": self.model.kind}
