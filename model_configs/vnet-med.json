@@ -1,0 +1,11 @@
+{
+  "filter_num": [32, 64, 128, 256, 512],
+  "n_labels": 3,
+  "res_num_ini": 1,
+  "res_num_max": 5,
+  "activation": "PReLU",
+  "output_activation": "Softmax", 
+  "batch_norm": true,
+  "pool": false, 
+  "unpool": false
+}
