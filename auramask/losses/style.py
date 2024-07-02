@@ -1,15 +1,9 @@
 from typing import Callable
 import keras
 from keras import ops, layers
-import enum
 
 from auramask.utils.distance import cosine_distance
-
-
-class StyleRefs(enum.Enum):
-    STARRYNIGHT = "https://keras.io/img/examples/generative/neural_style_transfer/neural_style_transfer_5_1.jpg"
-    HOPE = "https://i.pinimg.com/236x/e7/b3/46/e7b346bc9b0dae896705516bb7258cb6--obama-poster-design-tutorials.jpg?nii=t"
-    DIM = "https://images.unsplash.com/photo-1719066373323-c3712474b2a4"
+from auramask.utils.stylerefs import StyleRefs
 
 
 def get_gram_matrix(x, norm_by_channels=False, flatten=False):
@@ -106,14 +100,7 @@ class StyleLoss(keras.Loss):
         self.feature_extractor.trainable = False
 
         # Style reference
-        style_reference_image_path = keras.utils.get_file(
-            "%s.jpg" % reference.name, reference.value, cache_subdir="style"
-        )
-        img = keras.utils.load_img(
-            style_reference_image_path, target_size=(256, 256), keep_aspect_ratio=True
-        )
-        img = keras.utils.img_to_array(img)
-        img = keras.ops.expand_dims(img, axis=0)
+        img = reference.get_img()
 
         target = self.feature_extractor(img, training=False)
 
@@ -129,7 +116,7 @@ class StyleLoss(keras.Loss):
         base_config = super().get_config()
         config = {
             "reference": self.reference.name,
-            "reference_url": self.reference.value,
+            "reference_url": self.reference.value["url"],
             "distance": self.distance.__name__,
         }
         return {**base_config, **config}

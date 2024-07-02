@@ -13,7 +13,7 @@ from wandb.integration.keras import (
     WandbEvalCallback,
 )
 from wandb.integration.keras.callbacks.model_checkpoint import SaveStrategy
-from keras import preprocessing
+from keras import preprocessing, ops
 
 
 def get_model_summary(model):
@@ -78,12 +78,13 @@ class AuramaskCallback(WandbEvalCallback):
 
         if mask.shape[-1] > 3 and mask.shape[-1] % 3 == 0:
             data = {}
-            for i in range(0, mask.shape[-1], 3):
-                data["r%d" % (i / 3)] = [
+            r = ops.split(mask, 8, axis=-1)
+            for i, r_n in enumerate(r):
+                data["r%d" % i] = [
                     wandb.Image(
                         preprocessing.image.array_to_img(m_i * 255, scale=False)
                     )
-                    for m_i in mask[:, :, :, i : i + 3]
+                    for m_i in r_n
                 ]
 
             data["image"] = [
@@ -260,6 +261,7 @@ def init_callbacks(hparams: dict, sample, logdir, note: str = ""):
         tmp_hparams["color_space"].name if tmp_hparams["color_space"] else "rgb"
     )
     tmp_hparams["input"] = str(tmp_hparams["input"])
+    tmp_hparams["task_id"] = str(getenv("SLURM_JOB_ID", None))
 
     callbacks = []
     if getenv("WANDB_MODE") != "offline":

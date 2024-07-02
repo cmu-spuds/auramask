@@ -75,24 +75,31 @@ def build_dce_net(
     else:
         inputs = img_input
 
-    return Model(inputs=inputs, outputs=x_r, name=name)
+    return Model(
+        inputs=inputs,
+        outputs=[
+            x_r,
+        ],
+        name=name,
+    )
 
 
 def get_enhanced_image(output, data):
-    r1 = output[:, :, :, :3]
-    r2 = output[:, :, :, 3:6]
-    r3 = output[:, :, :, 6:9]
-    r4 = output[:, :, :, 9:12]
-    r5 = output[:, :, :, 12:15]
-    r6 = output[:, :, :, 15:18]
-    r7 = output[:, :, :, 18:21]
-    r8 = output[:, :, :, 21:24]
-    x = data + r1 * (ops.square(data) - data)
-    x = x + r2 * (ops.square(x) - x)
-    x = x + r3 * (ops.square(x) - x)
-    enhanced_image = x + r4 * (ops.square(x) - x)
-    x = enhanced_image + r5 * (ops.square(enhanced_image) - enhanced_image)
-    x = x + r6 * (ops.square(x) - x)
-    x = x + r7 * (ops.square(x) - x)
-    enhanced_image = x + r8 * (ops.square(x) - x)
+    r = ops.split(output, 8, -1)
+    # r1 = output[:, :, :, :3]
+    # r2 = output[:, :, :, 3:6]
+    # r3 = output[:, :, :, 6:9]
+    # r4 = output[:, :, :, 9:12]
+    # r5 = output[:, :, :, 12:15]
+    # r6 = output[:, :, :, 15:18]
+    # r7 = output[:, :, :, 18:21]
+    # r8 = output[:, :, :, 21:24]
+    x = data + r[0] * (ops.square(data) - data)
+    x = x + r[1] * (ops.square(x) - x)
+    x = x + r[2] * (ops.square(x) - x)
+    enhanced_image = x + r[3] * (ops.square(x) - x)
+    x = enhanced_image + r[4] * (ops.square(enhanced_image) - enhanced_image)
+    x = x + r[5] * (ops.square(x) - x)
+    x = x + r[6] * (ops.square(x) - x)
+    enhanced_image = x + r[7] * (ops.square(x) - x)
     return enhanced_image, output
