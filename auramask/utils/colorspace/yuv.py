@@ -66,10 +66,7 @@ def _rgb_to_yuv(image, data_format: str = "channels_last"):
         >>> input = torch.rand(2, 3, 4, 5)
         >>> output = rgb_to_yuv(input)  # 2x3x4x5
     """
-    # if not isinstance(image, KerasTensor):
-    #     raise TypeError(f"Input type is not a KerasTensor. Got {type(image)}")
-
-    ndims = len(ops.shape(image))
+    ndims = ops.ndim(image)
 
     if data_format == "channels_last":
         c_axis = ndims - 1

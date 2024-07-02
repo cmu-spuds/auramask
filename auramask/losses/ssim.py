@@ -71,7 +71,27 @@ class DSSIMObjective(Loss):
         self.c1 = (self.k1 * self.max_value) ** 2
         self.c2 = (self.k2 * self.max_value) ** 2
         self.dim_ordering = K.image_data_format()
-        self.backend = K.backend()
+
+    def extract_image_patches(
+        self, x, ksizes, ssizes, padding="VALID", data_format="channels_last"
+    ):
+        kernel = [1, ksizes[0], ksizes[1], 1]
+        strides = [1, ssizes[0], ssizes[1], 1]
+        if data_format == "channels_first":
+            x = ops.transpose(x, (0, 2, 3, 1))
+        bs_i, w_i, h_i, ch_i = ops.shape(x)
+        patches = ops.image.extract_patches(x, kernel, strides, 1, padding=padding)
+        bs, w, h, ch = ops.shape(patches)
+        patches = ops.reshape(
+            ops.transpose(
+                ops.reshape(patches, [-1, w, h, ops.floor_divide(ch, ch_i), ch_i]),
+                [0, 1, 2, 4, 3],
+            ),
+            [-1, w, h, ch_i, ksizes[0], ksizes[1]],
+        )
+        if data_format == "channels_last":
+            patches = ops.transpose(patches, [0, 1, 2, 4, 5, 3])
+        return patches
 
     def __call__(self, y_true, y_pred):
         # There are additional parameters for this function
@@ -83,11 +103,11 @@ class DSSIMObjective(Loss):
         y_true = ops.reshape(y_true, [-1] + list(ops.shape(y_pred)[1:]))
         y_pred = ops.reshape(y_pred, [-1] + list(ops.shape(y_pred)[1:]))
 
-        patches_pred = ops.image.extract_patches(
+        patches_pred = self.extract_image_patches(
             y_pred, kernel, kernel, padding="valid", data_format=self.dim_ordering
         )
 
-        patches_true = ops.image.extract_patches(
+        patches_true = self.extract_image_patches(
             y_true, kernel, kernel, padding="valid", data_format=self.dim_ordering
         )
 
@@ -144,7 +164,9 @@ class SSIMLoss(Loss):
         }
 
     def call(self, y_true, y_pred):
-        loss = ssim(
+        from tensorflow import image
+
+        loss = image.ssim(
             y_true,
             y_pred,
             max_val=self.mv,
@@ -152,9 +174,8 @@ class SSIMLoss(Loss):
             filter_sigma=self.filter_sigma,
             k1=self.k1,
             k2=self.k2,
-            channel_weights=[1.0, 1.0, 1.0],
         )
-        return 1 - loss
+        return (1 - loss) / 2.0
 
 
 # Default values obtained by Wang et al.
@@ -178,7 +199,10 @@ class MSSSIMLoss(SSIMLoss):
             k1=self.k1,
             k2=self.k2,
         )
-        return 1 - loss
+
+        print(loss)
+
+        return (1 - loss) / 2.0
 
 
 class GRAYSSIM(SSIMLoss):
@@ -199,15 +223,18 @@ class GRAYSSIM(SSIMLoss):
 
         y_t_gs = ops.mean(y_true, 3, keepdims=True)
         y_p_gs = ops.mean(y_pred, 3, keepdims=True)
-        return 1 - image.ssim(
-            y_t_gs,
-            y_p_gs,
-            max_val=self.mv,
-            filter_size=self.fz,
-            filter_sigma=self.filter_sigma,
-            k1=self.k1,
-            k2=self.k2,
-        )
+        return (
+            1
+            - image.ssim(
+                y_t_gs,
+                y_p_gs,
+                max_val=self.mv,
+                filter_size=self.fz,
+                filter_sigma=self.filter_sigma,
+                k1=self.k1,
+                k2=self.k2,
+            )
+        ) / 2.0
 
 
 class YUVSSIMLoss(SSIMLoss):
@@ -243,7 +270,7 @@ class YUVSSIMLoss(SSIMLoss):
             ],  # Weights as described in https://doi.org/10.48550/arXiv.2101.06354
         )
 
-        return 1 - loss
+        return (1 - loss) / 2.0
 
 
 # class HSVSSIMLoss(SSIMLoss):

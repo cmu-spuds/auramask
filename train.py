@@ -140,7 +140,6 @@ def parse_args():
             "ssim",
             "msssim",
             "gsssim",
-            "dsssim",
             "nima",
             "ffl",
             "exposure",

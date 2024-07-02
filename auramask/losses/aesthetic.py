@@ -30,7 +30,7 @@ class AestheticLoss(Loss):
             self.model = NIMA(backbone=backbone, kind="technical")
 
     def get_config(self):
-        return {"name": self.name, "model": self.model.name, "kind": self.model.kind}
+        return {"name": self.name, "model": self.model.name}
 
     def call(self, y_true: KerasTensor, y_pred: KerasTensor):
         del y_true

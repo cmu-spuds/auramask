@@ -44,13 +44,12 @@ class RGBtoHSV(ColorConversion):
 
 
 def _rgb_to_hsv(image, eps: float = 1e-6, data_format: str = "channels_last"):
-    if not isinstance(image, KerasTensor):
-        raise TypeError(f"Input type is not a KerasTensor. Got {type(image)}")
+    ndims = ops.ndim(image)
 
     if data_format == "channels_last":
-        c_axis = -1
+        c_axis = ndims - 1
     else:
-        c_axis = -3
+        c_axis = ndims - 3
 
     if len(image.shape) < 3 or image.shape[c_axis] != 3:
         if c_axis == -1:
@@ -63,7 +62,7 @@ def _rgb_to_hsv(image, eps: float = 1e-6, data_format: str = "channels_last"):
             )
 
     max_rgb, argmax_rgb = ops.max(image, c_axis)
-    min_rgb, _ = ops.min(image, c_axis)
+    min_rgb = ops.min(image, c_axis)
     deltac = max_rgb - min_rgb
 
     v = max_rgb
