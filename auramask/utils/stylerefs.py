@@ -58,6 +58,11 @@ class StyleRefs(enum.Enum):
         "url": "https://uploads5.wikiart.org/00217/images/charles-gibbons/gibbons-2007-vernazza.jpg",
         "cid": "QmZ1BRxUx4xRFkEkJZUVEH6XCfSxxwrbHPghUNubn8JKqi",
     }
+    BORISKUSTODIEV_0 = {
+        "source": "ipfs",
+        "url": "https://www.wikiart.org/en/boris-kustodiev/meeting-easter-day-1917",
+        "cid": "QmP9Hij1GZNTHfmEaHVwk3mYdfe5RQYWdmKyxeKSmbbj7z",
+    }
 
     def get_img(self):
         if self.value["source"] == "url":
