@@ -4,13 +4,14 @@ from auramask.models.nima import NIMA
 
 
 def _normalize_labels(labels: KerasTensor) -> KerasTensor:
-    normed = labels / ops.sum(labels)
+    normed = labels / ops.sum(labels, axis=1, keepdims=True)
     return normed
 
 
 def calc_mean_score(score_dist) -> KerasTensor:
     score_dist = _normalize_labels(score_dist)
-    return ops.sum((score_dist * ops.arange(1, 11, dtype="float32")))
+    pred_score = ops.sum(score_dist * ops.arange(1, 11, dtype="float32"), axis=1)
+    return pred_score
 
 
 class AestheticLoss(Loss):
@@ -18,7 +19,7 @@ class AestheticLoss(Loss):
         self,
         backbone: Literal["mobilenet"]
         | Literal["nasnetmobile"]
-        | Literal["inceptionresnetv2"] = "mobilenet",
+        | Literal["inceptionresnetv2"] = "nasnetmobile",
         kind: Literal["nima-aes"] | Literal["nima-tech"] | Literal["vila"] = "nima-aes",
         name="AestheticLoss",
         **kwargs,
@@ -35,6 +36,6 @@ class AestheticLoss(Loss):
     def call(self, y_true: KerasTensor, y_pred: KerasTensor):
         del y_true
         mean = self.model(y_pred)
-        mean = ops.vectorized_map(calc_mean_score, mean)
+        mean = calc_mean_score(mean)
         mean = 1 - ops.divide(mean, 10.0)  # Convert to [0, 1]
         return mean
