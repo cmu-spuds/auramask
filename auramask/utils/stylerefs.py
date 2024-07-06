@@ -63,6 +63,41 @@ class StyleRefs(enum.Enum):
         "url": "https://www.wikiart.org/en/boris-kustodiev/meeting-easter-day-1917",
         "cid": "QmP9Hij1GZNTHfmEaHVwk3mYdfe5RQYWdmKyxeKSmbbj7z",
     }
+    WARHOL_0 = {
+        "source": "ipfs",
+        "url": "https://ipfs.io/ipfs/QmbDpzEHJexz99ko6fJY9YgysniKBsfjPLRedc5Yj3uGxT?filename=warhol.jpg",
+        "cid": "QmbDpzEHJexz99ko6fJY9YgysniKBsfjPLRedc5Yj3uGxT",
+    }
+    CHE_0 = {
+        "source": "ipfs",
+        "url": "https://ipfs.io/ipfs/QmUgSxHqtT54c6qnnFHRJvahT9yGP2s86fiW7hCFPnWtL8?filename=che-1.jpg",
+        "cid": "QmUgSxHqtT54c6qnnFHRJvahT9yGP2s86fiW7hCFPnWtL8",
+    }
+    CHE_1 = {
+        "source": "ipfs",
+        "url": "https://ipfs.io/ipfs/QmPz4rwRCrVLEwmKgtFDiCMWiuyMLBmPYn37kDUGNzk3o6?filename=che-2.jpg",
+        "cid": "QmPz4rwRCrVLEwmKgtFDiCMWiuyMLBmPYn37kDUGNzk3o6",
+    }
+    CHE_2 = {
+        "source": "ipfs",
+        "url": "https://ipfs.io/ipfs/QmSLH67ipyESm2d2717ea23983xcV5m7fP3XXRiFZdN7Pa?filename=che-3.jpg",
+        "cid": "QmSLH67ipyESm2d2717ea23983xcV5m7fP3XXRiFZdN7Pa",
+    }
+    HARING_0 = {
+        "source": "ipfs",
+        "url": "https://ipfs.io/ipfs/QmannyGdwCEN8cD51FJNA5V6DGbeH6dPSwyVh8bfSp7Coc?filename=keith-haring.jpg",
+        "cid": "QmannyGdwCEN8cD51FJNA5V6DGbeH6dPSwyVh8bfSp7Coc",
+    }
+    HARING_1 = {
+        "source": "ipfs",
+        "url": "https://ipfs.io/ipfs/QmQWhEqoRNzazemE3xH3Cq5Xx9uQbzZmMHZBcJnNZx6HSD?filename=keith-dog.jpg",
+        "cid": "QmQWhEqoRNzazemE3xH3Cq5Xx9uQbzZmMHZBcJnNZx6HSD",
+    }
+    HARING_2 = {
+        "source": "ipfs",
+        "url": "https://ipfs.io/ipfs/QmXkEcjg4xiSq9LtimBsCVxRtixy88kJWxQ7f2pXa4UPAZ?filename=keith-man.jpg",
+        "cid": "QmXkEcjg4xiSq9LtimBsCVxRtixy88kJWxQ7f2pXa4UPAZ",
+    }
 
     def get_img(self):
         if self.value["source"] == "url":
