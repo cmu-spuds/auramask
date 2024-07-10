@@ -98,6 +98,16 @@ class StyleRefs(enum.Enum):
         "url": "https://ipfs.io/ipfs/QmXkEcjg4xiSq9LtimBsCVxRtixy88kJWxQ7f2pXa4UPAZ?filename=keith-man.jpg",
         "cid": "QmXkEcjg4xiSq9LtimBsCVxRtixy88kJWxQ7f2pXa4UPAZ",
     }
+    HARING_3 = {
+        "source": "ipfs",
+        "url": "https://media.kjzz.org/s3fs-public/styles/juicebox_large/public/keith-haring-painting-full-20200624.jpg?itok=HCFAAiJd",
+        "cid": "QmaXEmiGHKrJ6GZSUvUhjJjCWXTA3ru93G58goREiovucF",
+    }
+    HARING_4 = {
+        "source": "ipfs",
+        "url": "https://www.itl.cat/pngfile/big/128-1285387_keith-haring-2-keith-haring-wallpaper6-madonna-into.jpg",
+        "cid": "Qma3i63Ngg8gWkxa1BhtmtJJvWHZBU5zWg9LgTiHdZLX9p",
+    }
 
     def get_img(self):
         if self.value["source"] == "url":
