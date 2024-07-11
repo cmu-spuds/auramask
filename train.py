@@ -405,7 +405,7 @@ def initialize_model():
     eps = hparams["epsilon"]
     base_model: backbones.BaseModels = hparams.pop("model_backbone")
 
-    if base_model == backbones.BaseModels.ZERODCE:
+    if base_model in [backbones.BaseModels.ZERODCE, backbones.BaseModels.RESZERODCE]:
         postproc = get_enhanced_image
         preproc = None
     else:

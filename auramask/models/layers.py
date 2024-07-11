@@ -12,7 +12,7 @@ class ResBlock(layers.Layer):
         kernel_initializer="HeNormal",
         **kwargs,
     ):
-        super().__init__(name, **kwargs)
+        super().__init__(name=name, **kwargs)
         self.conv1 = layers.Conv2D(
             n_filters,
             kernel,
@@ -29,9 +29,9 @@ class ResBlock(layers.Layer):
         )
         self.ladd = layers.Add()
 
-    def call(self, inputs, training):
-        x = self.conv1(inputs)
-        x = self.conv2(x)
+    def call(self, inputs, training=False):
+        x = self.conv1(inputs, training=training)
+        x = self.conv2(x, training=training)
         x = self.ladd([input, x])
         return x
 

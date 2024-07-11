@@ -86,14 +86,6 @@ def build_dce_net(
 
 def get_enhanced_image(output, data):
     r = ops.split(output, 8, -1)
-    # r1 = output[:, :, :, :3]
-    # r2 = output[:, :, :, 3:6]
-    # r3 = output[:, :, :, 6:9]
-    # r4 = output[:, :, :, 9:12]
-    # r5 = output[:, :, :, 12:15]
-    # r6 = output[:, :, :, 15:18]
-    # r7 = output[:, :, :, 18:21]
-    # r8 = output[:, :, :, 21:24]
     x = data + r[0] * (ops.square(data) - data)
     x = x + r[1] * (ops.square(x) - x)
     x = x + r[2] * (ops.square(x) - x)
