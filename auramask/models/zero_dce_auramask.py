@@ -13,6 +13,8 @@ def build_res_dce_net(
     padding="same",
     block_count: int | list[int] = 2,
     block_depth=2,
+    kernel_regularizer=None,
+    batch_norm=False,
     name="res-zero-dce",
 ):
     if input_tensor is None:
@@ -26,17 +28,24 @@ def build_res_dce_net(
     if isinstance(block_count, int):
         block_count = [block_count] * 7
 
+    if batch_norm:
+        img_input = layers.BatchNormalization(epsilon=1e-5)(img_input)
+
     conv1 = ResBlock2D(
         filters=filters,
         kernel_size=kernel_size,
         padding=padding,
         strides=strides,
         activation=layer_activations,
+        kernel_regularizer=kernel_regularizer,
         basic_block_count=block_count[0],
         basic_block_depth=block_depth,
     )(img_input)
 
     # print(conv1)
+
+    if batch_norm:
+        conv1 = layers.BatchNormalization(epsilon=1e-5)(conv1)
 
     conv2 = ResBlock2D(
         filters=filters,
@@ -44,11 +53,14 @@ def build_res_dce_net(
         padding=padding,
         strides=strides,
         activation=layer_activations,
+        kernel_regularizer=kernel_regularizer,
         basic_block_count=block_count[1],
         basic_block_depth=block_depth,
     )(conv1)
 
     # print(conv2)
+    if batch_norm:
+        conv2 = layers.BatchNormalization(epsilon=1e-5)(conv2)
 
     conv3 = ResBlock2D(
         filters=filters,
@@ -56,11 +68,14 @@ def build_res_dce_net(
         padding=padding,
         strides=strides,
         activation=layer_activations,
+        kernel_regularizer=kernel_regularizer,
         basic_block_count=block_count[2],
         basic_block_depth=block_depth,
     )(conv2)
 
     # print(conv3)
+    if batch_norm:
+        conv3 = layers.BatchNormalization(epsilon=1e-5)(conv3)
 
     conv4 = ResBlock2D(
         filters=filters,
@@ -68,10 +83,13 @@ def build_res_dce_net(
         padding=padding,
         strides=strides,
         activation=layer_activations,
+        kernel_regularizer=kernel_regularizer,
         basic_block_count=block_count[3],
         basic_block_depth=block_depth,
     )(conv3)
 
+    if batch_norm:
+        conv4 = layers.BatchNormalization(epsilon=1e-5)(conv4)
     # print(conv4)
 
     int_con1 = layers.Concatenate(axis=-1)([conv4, conv3])
@@ -81,10 +99,13 @@ def build_res_dce_net(
         padding=padding,
         strides=strides,
         activation=layer_activations,
+        kernel_regularizer=kernel_regularizer,
         basic_block_count=block_count[4],
         basic_block_depth=block_depth,
     )(int_con1)
 
+    if batch_norm:
+        int_con1 = layers.BatchNormalization(epsilon=1e-5)(conv5)
     # print(conv5)
 
     int_con2 = layers.Concatenate(axis=-1)([conv5, conv2])
@@ -94,10 +115,13 @@ def build_res_dce_net(
         strides=strides,
         padding=padding,
         activation=layer_activations,
+        kernel_regularizer=kernel_regularizer,
         basic_block_count=block_count[5],
         basic_block_depth=block_depth,
     )(int_con2)
 
+    if batch_norm:
+        conv6 = layers.BatchNormalization(epsilon=1e-5)(conv6)
     # print(conv6)
 
     int_con3 = layers.Concatenate(axis=-1)([conv6, conv1])
@@ -107,6 +131,7 @@ def build_res_dce_net(
         strides=strides,
         padding=padding,
         activation=None,
+        kernel_regularizer=kernel_regularizer,
         basic_block_count=block_count[6],
         basic_block_depth=block_depth,
     )(int_con3)
