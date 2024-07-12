@@ -4,6 +4,6 @@
     "kernel_size": [3,3],
     "strides": [1,1],
     "padding": "same",
-    "block_count": [6, 3, 2, 1, 1, 1, 1],
+    "block_count": [1, 2, 3, 5, 1, 1, 1],
     "block_depth": 2
 }
