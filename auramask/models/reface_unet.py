@@ -19,8 +19,6 @@ def _reface_unet_base(
             )
         )
 
-    res_num_list = E + D
-
     X_skip = []
 
     X = input_tensor
@@ -33,33 +31,31 @@ def _reface_unet_base(
         X = ResBlock2D(
             f,
             basic_block_depth=2,
-            basic_block_count=res_num_list[i],
+            basic_block_count=E[i],
             kernel_regularizer=kernel_reg,
             activation=activation,
             name="{}_down_{}".format(name, i),
         )(X)
         X_skip.append(X)
 
+    X = X_skip.pop()
+
     X_skip = X_skip[::-1]
     filter_num = filter_num[::-1]
-    res_num_list = res_num_list[::-1]
 
     # Upsampling Levels
     for i, f in enumerate(filter_num):
+        if batch_norm:
+            X = layers.BatchNormalization(axis=3, name="{}_up_{}_bn".format(name, i))(X)
         X = ResBlock2DTranspose(
             filter_num[i],
             basic_block_depth=2,
-            basic_block_count=res_num_list[i],
+            basic_block_count=D[i],
             kernel_regularizer=kernel_reg,
             name="{}_up_{}".format(name, i),
         )(X)
-        if batch_norm:
-            X = layers.BatchNormalization(axis=3, name="{}_up_{}_bn".format(name, i))(X)
         X = layers.concatenate(
-            [
-                X,
-            ]
-            + [X_skip[i]],
+            [X, X_skip[i]],
             axis=-1,
             name="{}_up_{}_concat".format(name, i),
         )
