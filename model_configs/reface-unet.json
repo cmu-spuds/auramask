@@ -3,8 +3,8 @@
     "E": [1, 1, 2, 3, 5],
     "D": [1, 1, 1, 1, 1],
     "n_labels": 3,
-    "activation":"ReLU",
+    "activation":"relu",
+    "output_activation": null,
     "batch_norm":true,
-    "pool":false,
-    "unpool":false
+    "kernel_reg": "l2"
 }

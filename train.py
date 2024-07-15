@@ -117,7 +117,7 @@ def parse_args():
         "-F", type=FaceEmbedEnum, nargs="+", required=False, action=EnumAction
     )
     parser.add_argument(
-        "--reface", default=False, type=bool, action=argparse.BooleanOptionalAction
+        "--threshold", default=True, type=bool, action=argparse.BooleanOptionalAction
     )
     parser.add_argument("-p", "--rho", type=float, default=1.0)
     parser.add_argument("-a", "--alpha", type=float, default=2e-4)
@@ -293,11 +293,11 @@ def initialize_loss():
 
     is_not_rgb = hparams["color_space"].name.casefold() != "rgb"
     F = hparams.pop("F")
-    reface = hparams.pop("reface")
+    threshold = hparams.pop("threshold")
     rho = hparams.pop("rho")
     if F:
         for f in F:
-            if not reface:  # Loss with thresholding
+            if threshold:  # Loss with thresholding
                 losses.append(
                     FaceEmbeddingThresholdLoss(f=f, threshold=f.get_threshold())
                 )
