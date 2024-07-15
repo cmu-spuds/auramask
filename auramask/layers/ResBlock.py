@@ -384,7 +384,8 @@ class ResBasicBlock3D(ResBasicBlockND):
 
 
 class ResBasicBlockNDTranspose(ResBasicBlockND):
-    def conv_layer_type(self):
+    @property
+    def conv_layer_type(self) -> Type[ConvND]:
         conv_layer_types = [
             None,
             Conv1DTranspose,
@@ -815,7 +816,6 @@ class ResBlockNDTranspose(ResBlockND):
                 padding=self.padding,
                 data_format=self.data_format,
                 dilation_rate=self.dilation_rate,
-                activation=self.activation,
                 kernel_regularizer=self.kernel_regularizer,
                 bias_regularizer=self.bias_regularizer,
                 activity_regularizer=self.activity_regularizer,

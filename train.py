@@ -304,7 +304,7 @@ def initialize_loss():
                 weights.append(rho)
             else:  # Loss as described by ReFace
                 losses.append(FaceEmbeddingLoss(f=f))
-                weights.append(1 / len(F))
+                weights.append(rho / len(F))
             metrics.append(
                 PercentageOverThreshold(f=losses[-1].f, threshold=f.get_threshold())
             )
