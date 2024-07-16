@@ -40,7 +40,6 @@ def _reface_unet_base(
 
     X = X_skip.pop()
 
-    X_skip = X_skip[::-1]
     filter_num = filter_num[::-1]
 
     # Upsampling Levels
