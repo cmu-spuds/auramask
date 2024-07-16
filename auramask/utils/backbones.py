@@ -16,6 +16,7 @@ class BaseModels(Enum):
     UNET = partial(unet_models.unet_2d, input_size=input_shape)
     R2UNET = partial(unet_models.r2_unet_2d, input_size=input_shape)
     ATTUNET = partial(unet_models.att_unet_2d, input_size=input_shape)
+    VNET = partial(unet_models.vnet_2d, input_size=input_shape)
     ZERODCE = partial(zero_dce.build_dce_net, input_shape=input_shape)
     RESZERODCE = partial(zero_dce_auramask.build_res_dce_net, input_shape=input_shape)
     REFACE = partial(reface_unet.reface_unet, input_shape=input_shape)
