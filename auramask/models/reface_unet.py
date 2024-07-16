@@ -54,11 +54,13 @@ def _reface_unet_base(
             kernel_regularizer=kernel_reg,
             name="{}_up_{}".format(name, i),
         )(X)
-        X = layers.concatenate(
-            [X, X_skip[i]],
-            axis=-1,
-            name="{}_up_{}_concat".format(name, i),
-        )
+        if len(X_skip) > 0:
+            skip_conn = X_skip.pop()
+            X = layers.concatenate(
+                [X, skip_conn],
+                axis=-1,
+                name="{}_up_{}_concat".format(name, i),
+            )
 
     return X
 
