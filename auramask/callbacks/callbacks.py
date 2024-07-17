@@ -182,6 +182,11 @@ class AuramaskCheckpoint(k_callbacks.ModelCheckpoint):
         self.__freq = save_freq
         self.__cur_epoch = 0
 
+    def on_train_begin(self, logs=None):
+        super().on_train_begin(logs)
+        if self.model.name == "AuraMask":
+            self.set_model(self.model.model)
+
     def on_epoch_end(
         self, epoch: int, logs: Dict[SaveStrategy, float] | None = None
     ) -> None:
