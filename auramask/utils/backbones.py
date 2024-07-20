@@ -1,9 +1,9 @@
 from enum import Enum
 from functools import partial
 from types import NoneType, FunctionType
-from keras import Model, Input, backend
+from keras import Input, backend
 from keras_unet_collection import models as unet_models
-from auramask.models import zero_dce, reface_unet, zero_dce_auramask
+from auramask.models import zero_dce, reface_unet, zero_dce_auramask, auramask
 
 input_shape = (
     (None, None, 3)
@@ -51,6 +51,6 @@ class BaseModels(Enum):
             name = self.name.lower()
 
         # Create model for training
-        backbone: Model = Model(inputs=inputs, outputs=x, name=name)
+        model = auramask.AuraMask(inputs=inputs, outputs=x, name=name)
 
-        return backbone
+        return model

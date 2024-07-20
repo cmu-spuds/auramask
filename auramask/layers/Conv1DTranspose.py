@@ -1,7 +1,16 @@
-from keras import layers, activations, initializers, regularizers, constraints, ops
+from keras import (
+    layers,
+    activations,
+    initializers,
+    regularizers,
+    constraints,
+    ops,
+    saving,
+)
 from typing import Union, List, Tuple, Optional, Any
 
 
+@saving.register_keras_serializable("auramask.layers.Conv1DTranspose")
 class Conv1DTranspose(layers.Conv2DTranspose):
     def __init__(
         self,

@@ -37,7 +37,6 @@ from auramask.losses.zero_dce import (
 from auramask.metrics.embeddistance import PercentageOverThreshold
 
 from auramask.models.face_embeddings import FaceEmbedEnum
-from auramask.models.auramask import AuraMask
 from auramask.models.zero_dce import get_enhanced_image
 
 from auramask.utils import backbones
@@ -221,7 +220,7 @@ def load_data():
             batch_size=hparams["batch"],
             collate_fn=DatasetEnum.data_collater,
             collate_fn_args={"args": {"w": w, "h": h, "crop": True}},
-            prefetch=True,
+            prefetch=False,
             shuffle=True,
             drop_remainder=True,
         )
@@ -422,16 +421,11 @@ def initialize_model():
 
     model_config: dict = hparams["model_config"]
     hparams["model"] = base_model.name.lower()
-    base_model = base_model.build_backbone(
+    model = base_model.build_backbone(
         model_config=model_config,
         preprocess=preproc,
         activation_fn=activations.tanh,
         post_processing=postproc,
-    )
-
-    model = AuraMask(
-        backbone=base_model,
-        colorspace=hparams["color_space"].value,
     )
 
     losses, losses_w, losses_t, metrics = initialize_loss()
@@ -471,36 +465,36 @@ def main():
     note = hparams.pop("note")
     verbose = hparams.pop("verbose")
 
+    if not log:
+        os.environ["WANDB_MODE"] = "offline"
+
+    if note:
+        note = input("Note for Run:")
+    else:
+        note = ""
+    if not logdir:
+        logdir = Path(
+            os.path.join(
+                os.path.curdir,
+                "logs",
+                datetime.now().strftime("%m-%d"),
+                hparams["seed"],
+            )
+        )
+    else:
+        logdir = Path(os.path.join(logdir))
+    logdir.mkdir(parents=True, exist_ok=True)
+    logdir = str(logdir)
+
+    set_seed()
     # Load the training and validation data
     t_ds, v_ds = load_data()
 
-    # Initialize the model with the input hyperparameters
     model = initialize_model()
 
-    if log:
-        if note:
-            note = input("Note for Run:")
-        else:
-            note = ""
-        if not logdir:
-            logdir = Path(
-                os.path.join(
-                    "logs",
-                    datetime.now().strftime("%m-%d"),
-                    datetime.now().strftime("%H.%M"),
-                )
-            )
-        else:
-            logdir = Path(os.path.join(logdir))
-        logdir.mkdir(parents=True, exist_ok=True)
-        logdir = str(logdir)
-        v = get_sample_data(v_ds)
-        model(v)
-        callbacks = init_callbacks(hparams, v, logdir, note)
-    else:
-        callbacks = None
-
-    set_seed()
+    v = get_sample_data(v_ds)
+    model(v)
+    callbacks = init_callbacks(hparams, v, logdir, note)
 
     training_history = model.fit(
         t_ds,

@@ -1,6 +1,5 @@
-from typing import Any, Callable
+from typing import Any
 from keras import ops, backend, Model, Loss, metrics as m
-
 from auramask.losses.embeddistance import FaceEmbeddingLoss
 from auramask.losses.zero_dce import IlluminationSmoothnessLoss
 from auramask.metrics.embeddistance import PercentageOverThreshold
@@ -9,24 +8,22 @@ from auramask.metrics.embeddistance import PercentageOverThreshold
 class AuraMask(Model):
     def __init__(
         self,
-        backbone: Model,
-        colorspace: tuple[Callable, Callable] = None,
-        name="AuraMask",
+        *args,
         **kwargs,
+        # colorspace: tuple[Callable, Callable] = None,
     ):
-        super().__init__(name=name, **kwargs)
         self._custom_losses = []
-        self.colorspace = colorspace
-        self.model = backbone
+        # self.colorspace = colorspace
+        super().__init__(*args, **kwargs)
 
     def call(self, inputs, training=False):
-        if not training:
-            inputs = self.colorspace[0](inputs)
+        # if not training:
+        #     inputs = self.colorspace[0](inputs)
 
-        out, mask = self.model(inputs)
+        out, mask = super().call(inputs, training)
 
-        if not training:
-            out = self.colorspace[1](out)
+        # if not training:
+        #     out = self.colorspace[1](out)
 
         return out, mask
 
@@ -76,19 +73,20 @@ class AuraMask(Model):
 
     def compute_loss(self, x=None, y=None, y_pred=None, sample_weight=None):
         del sample_weight
-        x_rgb, x_mod = x
+        _, x_mod = x
         y_pred, mask = y_pred
         tloss = 0  # tracked total loss
-        y_pred_rgb = self.colorspace[1](
-            y_pred
-        )  # computed rgb representation (with gradient passthrough only for hsv_to_rgb
+        # y_pred_rgb = self.colorspace[1](
+        #     y_pred
+        # )  # computed rgb representation (with gradient passthrough only for hsv_to_rgb
 
         idx = 0
 
         for loss, metric, l_w, l_c in self._custom_losses:
             if isinstance(loss, FaceEmbeddingLoss):
                 tmp_y, tmp_pred = (
-                    (y[0][idx], y_pred_rgb) if l_c is True else (y[0][idx], y_pred)
+                    (y[0][idx], y_pred)
+                    # (y[0][idx], y_pred_rgb) if l_c is True else (y[0][idx], y_pred)
                 )
                 idx += 1
             elif isinstance(loss, IlluminationSmoothnessLoss):
@@ -96,7 +94,8 @@ class AuraMask(Model):
                 tmp_y = None
             else:
                 tmp_y, tmp_pred = (
-                    (x_rgb, y_pred_rgb) if l_c is True else (x_mod, y_pred)
+                    (x_mod, y_pred)
+                    # (x_rgb, y_pred_rgb) if l_c is True else (x_mod, y_pred)
                 )
             sim_loss = loss(tmp_y, tmp_pred)
             metric.update_state(sim_loss)
@@ -109,16 +108,16 @@ class AuraMask(Model):
 
     def compute_metrics(self, x, y, y_pred, sample_weight):
         del sample_weight
-        y_pred_rgb = self.colorspace[1](y_pred)
+        # y_pred_rgb = self.colorspace[1](y_pred)
 
         idx = 0
 
         for metric in self._metrics:
             if isinstance(metric, PercentageOverThreshold):
-                metric.update_state(y[0][idx], y_pred_rgb)
+                metric.update_state(y[0][idx], y_pred)
                 idx += 1
             else:
-                metric.update_state(x, y_pred_rgb)
+                metric.update_state(x, y_pred)
         return self.get_metrics_result()
 
     def get_metrics_result(self):
@@ -149,7 +148,7 @@ class AuraMask(Model):
         X_mod = ops.copy(X)
 
         with GradientTape() as tape:
-            X_mod = self.colorspace[0](X_mod)  # Convert to chosen colorspace
+            # X_mod = self.colorspace[0](X_mod)  # Convert to chosen colorspace
             y_pred, mask = self(X_mod, training=True)  # Forward pass with
             loss = self.compute_loss(
                 x=(X, X_mod), y=y, y_pred=(y_pred, mask)
@@ -175,11 +174,11 @@ class AuraMask(Model):
 
         y_pred, mask = self(X, training=False)
 
-        y_pred = self.colorspace[0](y_pred)
+        # y_pred = self.colorspace[0](y_pred)
 
         X_mod = ops.copy(X)
 
-        X_mod = self.colorspace[0](X)  # Convert to chosen colorspace
+        # X_mod = self.colorspace[0](X)  # Convert to chosen colorspace
 
         # Updates stateful loss metrics.
         loss = self.compute_loss(x=(X, X_mod), y=y, y_pred=(y_pred, mask))

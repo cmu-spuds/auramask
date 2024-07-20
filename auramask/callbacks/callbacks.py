@@ -28,6 +28,60 @@ def get_model_summary(model):
     return summary_string
 
 
+# class AuramaskBackupAndRestore(callbacks.BackupAndRestore):
+# def __init__(self, backup_dir, save_freq="epoch", delete_checkpoint=True):
+#     super().__init__(backup_dir, save_freq, delete_checkpoint)
+#     self._optimizer_state_path = file_utils.join(
+#         backup_dir, "optimizer_state.pkl"
+#     )
+
+# def on_train_begin(self, logs=None):
+#     """Get training state from temporary file and restore it."""
+#     if not self.model.built:
+#         raise ValueError(
+#             "To use the BackupAndRestore callback, "
+#             "you model must be built before you call `fit()`. "
+#             f"Model {self.model} is unbuilt. You can build it "
+#             "beforehand by calling it on a batch of data."
+#         )
+#     if file_utils.exists(self._weights_path):
+#         if (
+#             self.model.optimizer is not None
+#             and not self.model.optimizer.built
+#         ):
+#             # Make sure optimizer weights exist before loading.
+#             self.model.optimizer.build(self.model.trainable_variables)
+#         self.model.model.load_weights(self._weights_path)
+#     if file_utils.exists(self._optimizer_state_path):
+#         opt_weights = pickle.load(self._optimizer_state_path)
+#         self.model.optimizer.set_weights(opt_weights)
+#         print("Optimizer", self.model.optimizer)
+
+# def _save_model(self):
+# """Saves the model.
+
+# Args:
+#     epoch: the epoch this iteration is in.
+#     batch: the batch this iteration is in. `None` if the `save_freq`
+#         is set to `"epoch"`.
+#     logs: the `logs` dict passed in to `on_batch_end` or `on_epoch_end`.
+# """
+# # Create host directory if it doesn't exist.
+# if not file_utils.exists(self.backup_dir):
+#     file_utils.makedirs(self.backup_dir)
+# self.model.model.save_weights(filepath=self._weights_path, overwrite=True)
+# with file_utils.File(self._training_metadata_path, "w") as f:
+#     training_metadata = {
+#         "epoch": self._current_epoch,
+#         "batch": self._last_batch_seen,
+#     }
+#     f.write(json.dumps(training_metadata))
+# import keras
+# keras.optimizers.Adam().save_own_variables()
+# print("Optimizer", self.model.optimizer)
+# pickle.dump(self.model.optimizer, file=self._optimizer_state_path)
+
+
 class AuramaskCallback(WandbEvalCallback):
     def __init__(
         self,
@@ -45,37 +99,31 @@ class AuramaskCallback(WandbEvalCallback):
         self.__cur_epoch = 0
 
     def on_train_begin(self, logs: Dict[SaveStrategy, float] | None = None) -> None:
-        wandb.log(
-            {
-                "image": [
-                    wandb.Image(
-                        preprocessing.image.array_to_img(x_i * 255, scale=False)
-                    )
-                    for x_i in self.x
-                ],
-            },
-            step=0,
-        )
-        return super().on_train_begin(logs)
+        if wandb.run.step > 1:
+            pass
+        else:
+            wandb.log(
+                {
+                    "image": [
+                        wandb.Image(
+                            preprocessing.image.array_to_img(x_i * 255, scale=False)
+                        )
+                        for x_i in self.x
+                    ],
+                },
+                step=0,
+            )
+        # return super().on_train_begin(logs)
 
     def on_epoch_end(
         self, epoch: int, logs: Dict[SaveStrategy, float] | None = None
     ) -> None:
         if epoch % self.log_freq == 0:
-            super().on_epoch_end(epoch, logs)
+            self.save_results()
         self.__cur_epoch = epoch
 
-    def add_ground_truth(self, logs: Dict[str, float] | None = None) -> None:
-        pass
-        # for idx, (orig, embeds, names) in enumerate(zip(self.x, self.y)):
-        #     self.data_table.add_data(idx, wandb.Image(orig), wandb.Table(data=embeds[idx]))         #TODO: save all pre-computed embeddings to table y: ((N_EMBEDS), (N_NAMES))
-
-    def add_model_predictions(
-        self, epoch: int, logs: Dict[str, float] | None = None
-    ) -> None:
+    def save_results(self):
         y, mask = self.model(self.x, training=False)
-        table_idxs = self.data_table_ref.get_index()
-
         if mask.shape[-1] > 3 and mask.shape[-1] % 3 == 0:
             data = {}
             r = ops.split(mask, 8, axis=-1)
@@ -112,18 +160,18 @@ class AuramaskCallback(WandbEvalCallback):
                 step=wandb.run.step,
             )
 
-            for idx in table_idxs:
-                pred = y[idx]
-                m = mask[idx]
-                self.pred_table.add_data(
-                    epoch,
-                    self.data_table_ref.data[idx][0],
-                    wandb.Image(pred),
-                    wandb.Image(m),
-                )
+    def add_ground_truth(self, logs: Dict[str, float] | None = None) -> None:
+        pass
+        # for idx, (orig, embeds, names) in enumerate(zip(self.x, self.y)):
+        #     self.data_table.add_data(idx, wandb.Image(orig), wandb.Table(data=embeds[idx]))         #TODO: save all pre-computed embeddings to table y: ((N_EMBEDS), (N_NAMES))
+
+    def add_model_predictions(
+        self, epoch: int, logs: Dict[str, float] | None = None
+    ) -> None:
+        pass
 
     def on_train_end(self, logs: Dict[str, float] | None = None) -> None:
-        super().on_epoch_end(self.__cur_epoch, logs=logs)
+        self.on_epoch_end(self.__cur_epoch, logs=logs)
 
 
 class AuramaskCheckpoint(k_callbacks.ModelCheckpoint):
@@ -140,7 +188,12 @@ class AuramaskCheckpoint(k_callbacks.ModelCheckpoint):
         initial_value_threshold: float | None = None,
         **kwargs: Any,
     ) -> None:
-        filepath = os.path.join(filepath, "{epoch:02d}-{val_loss:.2f}.keras")
+        # self._bk_filepath = filepath
+        if save_weights_only:
+            filepath = os.path.join(filepath, "{epoch:02d}-{val_loss:.2f}.weights.h5")
+        else:
+            filepath = os.path.join(filepath, "{epoch:02d}-{val_loss:.2f}.keras")
+
         if freq_mode == "epoch":
             super().__init__(
                 filepath,
@@ -184,13 +237,15 @@ class AuramaskCheckpoint(k_callbacks.ModelCheckpoint):
 
     def on_train_begin(self, logs=None):
         super().on_train_begin(logs)
-        if self.model.name == "AuraMask":
-            self.set_model(self.model.model)
+        # if self.model.name == "AuraMask":
+        #     self.train_wrapper = self.model
+        #     self.set_model(self.model.model)
 
     def on_epoch_end(
         self, epoch: int, logs: Dict[SaveStrategy, float] | None = None
     ) -> None:
         if self.save_freq == "epoch":
+            # self.train_wrapper.save(os.path.join(self._bk_filepath, "training_state.keras"), overwrite=True)
             if epoch > 0 and epoch % self.__freq == 0:
                 self._on_epoch_end(epoch, logs)
         self.__cur_epoch = epoch
@@ -269,38 +324,38 @@ def init_callbacks(hparams: dict, sample, logdir, note: str = ""):
     tmp_hparams["task_id"] = str(getenv("SLURM_JOB_ID", None))
 
     callbacks = []
-    if getenv("WANDB_MODE") != "offline":
-        wandb.init(
-            project="auramask",
-            id=getenv("WANDB_RUN_ID", None),
-            dir=logdir,
-            config=tmp_hparams,
-            name=getenv("SLURM_JOB_NAME", None),
-            notes=note,
-            resume="allow",
-        )
+    wandb.init(
+        project="auramask",
+        id=getenv("WANDB_RUN_ID", None),
+        dir=logdir,
+        config=tmp_hparams,
+        name=getenv("SLURM_JOB_NAME", None),
+        notes=note,
+        resume="allow",
+    )
 
-        callbacks.append(
-            k_callbacks.BackupAndRestore(backup_dir=path.join(logdir, "backup"))
-        )
+    callbacks.append(
+        k_callbacks.BackupAndRestore(backup_dir=path.join(logdir, "backup"))
+    )
 
-        if checkpoint:
-            callbacks.append(
-                AuramaskCheckpoint(
-                    filepath=path.join(logdir, "checkpoints"),
-                    freq_mode="epoch",
-                    save_weights_only=False,
-                    save_freq=int(getenv("AURAMASK_CHECKPOINT_FREQ", 100)),
-                )
-            )
-        callbacks.append(WandbMetricsLogger(log_freq="epoch"))
+    if checkpoint:
         callbacks.append(
-            AuramaskCallback(
-                validation_data=sample,
-                data_table_columns=["idx", "orig", "aug"],
-                pred_table_columns=["epoch", "idx", "pred", "mask"],
-                log_freq=int(getenv("AURAMASK_LOG_FREQ", 5)),
+            AuramaskCheckpoint(
+                filepath=path.join(logdir, "checkpoints"),
+                freq_mode="epoch",
+                save_weights_only=True,
+                save_freq=int(getenv("AURAMASK_CHECKPOINT_FREQ", 100)),
             )
         )
+
+    callbacks.append(WandbMetricsLogger(log_freq="epoch"))
+    callbacks.append(
+        AuramaskCallback(
+            validation_data=sample,
+            data_table_columns=["idx", "orig", "aug"],
+            pred_table_columns=["epoch", "idx", "pred", "mask"],
+            log_freq=int(getenv("AURAMASK_LOG_FREQ", 5)),
+        )
+    )
     # callbacks.append(LearningRateScheduler())
     return callbacks
