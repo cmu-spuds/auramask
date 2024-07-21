@@ -171,7 +171,7 @@ class AuramaskCallback(WandbEvalCallback):
         pass
 
     def on_train_end(self, logs: Dict[str, float] | None = None) -> None:
-        self.on_epoch_end(self.__cur_epoch, logs=logs)
+        self.save_results()
 
 
 class AuramaskCheckpoint(k_callbacks.ModelCheckpoint):

@@ -8,5 +8,5 @@
     "block_depth": 2,
     "kernel_regularizer": "l2",
     "batch_norm": true,
-    "unet": false
+    "unet": true
 }

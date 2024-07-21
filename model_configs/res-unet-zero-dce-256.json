@@ -1,5 +1,5 @@
 {
-    "filters": 128,
+    "filters": 256,
     "layer_activations": "relu",
     "kernel_size": [3,3],
     "strides": [1,1],
@@ -8,5 +8,5 @@
     "block_depth": 2,
     "kernel_regularizer": "l2",
     "batch_norm": true,
-    "unet": false
+    "unet": true
 }
