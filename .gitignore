@@ -167,3 +167,4 @@ datasets/
 logs/
 artifacts/
 ./models/
+.ruff_cache/

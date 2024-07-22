@@ -28,60 +28,6 @@ def get_model_summary(model):
     return summary_string
 
 
-# class AuramaskBackupAndRestore(callbacks.BackupAndRestore):
-# def __init__(self, backup_dir, save_freq="epoch", delete_checkpoint=True):
-#     super().__init__(backup_dir, save_freq, delete_checkpoint)
-#     self._optimizer_state_path = file_utils.join(
-#         backup_dir, "optimizer_state.pkl"
-#     )
-
-# def on_train_begin(self, logs=None):
-#     """Get training state from temporary file and restore it."""
-#     if not self.model.built:
-#         raise ValueError(
-#             "To use the BackupAndRestore callback, "
-#             "you model must be built before you call `fit()`. "
-#             f"Model {self.model} is unbuilt. You can build it "
-#             "beforehand by calling it on a batch of data."
-#         )
-#     if file_utils.exists(self._weights_path):
-#         if (
-#             self.model.optimizer is not None
-#             and not self.model.optimizer.built
-#         ):
-#             # Make sure optimizer weights exist before loading.
-#             self.model.optimizer.build(self.model.trainable_variables)
-#         self.model.model.load_weights(self._weights_path)
-#     if file_utils.exists(self._optimizer_state_path):
-#         opt_weights = pickle.load(self._optimizer_state_path)
-#         self.model.optimizer.set_weights(opt_weights)
-#         print("Optimizer", self.model.optimizer)
-
-# def _save_model(self):
-# """Saves the model.
-
-# Args:
-#     epoch: the epoch this iteration is in.
-#     batch: the batch this iteration is in. `None` if the `save_freq`
-#         is set to `"epoch"`.
-#     logs: the `logs` dict passed in to `on_batch_end` or `on_epoch_end`.
-# """
-# # Create host directory if it doesn't exist.
-# if not file_utils.exists(self.backup_dir):
-#     file_utils.makedirs(self.backup_dir)
-# self.model.model.save_weights(filepath=self._weights_path, overwrite=True)
-# with file_utils.File(self._training_metadata_path, "w") as f:
-#     training_metadata = {
-#         "epoch": self._current_epoch,
-#         "batch": self._last_batch_seen,
-#     }
-#     f.write(json.dumps(training_metadata))
-# import keras
-# keras.optimizers.Adam().save_own_variables()
-# print("Optimizer", self.model.optimizer)
-# pickle.dump(self.model.optimizer, file=self._optimizer_state_path)
-
-
 class AuramaskCallback(WandbEvalCallback):
     def __init__(
         self,

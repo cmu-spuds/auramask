@@ -39,139 +39,101 @@ def build_res_dce_net(
     if batch_norm:
         img_input = layers.BatchNormalization(epsilon=1e-5)(img_input)
 
-    conv1 = ResBlock2D(
+    x = ResBlock2D(
         filters=filters[0],
         kernel_size=kernel_size,
         padding=padding,
-        strides=strides,
+        strides=(1, 1),
         activation=layer_activations,
         kernel_regularizer=kernel_regularizer,
         basic_block_count=block_count[0],
         basic_block_depth=block_depth,
+        name="conv_{}_down".format(0),
     )(img_input)
-
-    # print(conv1)
-
     if batch_norm:
-        conv1 = layers.BatchNormalization(epsilon=1e-5)(conv1)
+        x = layers.BatchNormalization(epsilon=1e-5, name="conv_{}_down_bn".format(0))(x)
 
-    conv2 = ResBlock2D(
-        filters=filters[1],
-        kernel_size=kernel_size,
+    x_skip = [x]
+
+    depth = len(filters)
+
+    for i in range(1, depth):
+        x = ResBlock2D(
+            filters=filters[i],
+            kernel_size=kernel_size,
+            padding=padding,
+            strides=strides,
+            activation=layer_activations,
+            kernel_regularizer=kernel_regularizer,
+            basic_block_count=block_count[i],
+            basic_block_depth=block_depth,
+            name="conv_{}_down".format(i),
+        )(x)
+        if batch_norm:
+            x = layers.BatchNormalization(
+                epsilon=1e-5, name="conv_{}_down_bn".format(i)
+            )(x)
+        x_skip.append(x)
+
+    if unet:
+        x = x_skip.pop()
+
+    filters = filters[::-1]
+
+    for i in range(0, depth):
+        print(block_count[depth + i])
+        if unet and i != 0:
+            x = ResBlock2DTranspose(
+                filters=filters[i],
+                kernel_size=kernel_size,
+                padding=padding,
+                strides=strides,
+                activation=layer_activations,
+                kernel_regularizer=kernel_regularizer,
+                basic_block_count=block_count[depth + i],
+                basic_block_depth=block_depth,
+                name="convt_{}_up".format(depth - i),
+            )(x)
+            if batch_norm:
+                x = layers.BatchNormalization(
+                    epsilon=1e-5, name="convt_{}_up_bn".format(depth - i)
+                )(x)
+            x = layers.Concatenate(
+                axis=-1, name="convt_{}_up_concat".format(depth - i)
+            )([x, x_skip.pop()])
+            x = ResBlock2D(
+                filters=filters[i],
+                basic_block_depth=2,
+                activation="relu",
+                name="convt_{}_up_post_concat_conv".format(depth - i),
+            )(x)
+        elif unet and i == 0:
+            continue
+        else:
+            x = ResBlock2D(
+                filters=filters[i],
+                kernel_size=kernel_size,
+                padding=padding,
+                strides=strides,
+                activation=layer_activations,
+                kernel_regularizer=kernel_regularizer,
+                basic_block_count=block_count[depth + i],
+                basic_block_depth=block_depth,
+                name="convt_{}_up".format(i),
+            )(x)
+            if batch_norm:
+                x = layers.BatchNormalization(
+                    epsilon=1e-5, name="convt_{}_up_bn".format(i)
+                )(x)
+            x = layers.Concatenate(axis=-1)([x, x_skip.pop()])
+
+    x_r = ResBlock2D(
+        24,
+        activation=None,
         padding=padding,
-        strides=strides,
-        activation=layer_activations,
-        kernel_regularizer=kernel_regularizer,
-        basic_block_count=block_count[1],
-        basic_block_depth=block_depth,
-    )(conv1)
-
-    # print(conv2)
-    if batch_norm:
-        conv2 = layers.BatchNormalization(epsilon=1e-5)(conv2)
-
-    conv3 = ResBlock2D(
-        filters=filters[2],
-        kernel_size=kernel_size,
-        padding=padding,
-        strides=strides,
-        activation=layer_activations,
-        kernel_regularizer=kernel_regularizer,
-        basic_block_count=block_count[2],
-        basic_block_depth=block_depth,
-    )(conv2)
-
-    # print(conv3)
-    if batch_norm:
-        conv3 = layers.BatchNormalization(epsilon=1e-5)(conv3)
-
-    if unet:
-        conv4 = ResBlock2DTranspose(
-            filters=filters[2],
-            kernel_size=kernel_size,
-            padding=padding,
-            strides=strides,
-            activation=layer_activations,
-            kernel_regularizer=kernel_regularizer,
-            basic_block_count=block_count[3],
-            basic_block_depth=block_depth,
-        )(conv3)
-    else:
-        conv4 = ResBlock2D(
-            filters=filters[2],
-            kernel_size=kernel_size,
-            padding=padding,
-            strides=strides,
-            activation=layer_activations,
-            kernel_regularizer=kernel_regularizer,
-            basic_block_count=block_count[3],
-            basic_block_depth=block_depth,
-        )(conv3)
-
-    if batch_norm:
-        conv4 = layers.BatchNormalization(epsilon=1e-5)(conv4)
-    # print(conv4)
-
-    int_con1 = layers.Concatenate(axis=-1)([conv4, conv3])
-    if unet:
-        conv5 = ResBlock2DTranspose(
-            filters=filters[1],
-            kernel_size=kernel_size,
-            padding=padding,
-            strides=strides,
-            activation=layer_activations,
-            kernel_regularizer=kernel_regularizer,
-            basic_block_count=block_count[4],
-            basic_block_depth=block_depth,
-        )(int_con1)
-    else:
-        conv5 = ResBlock2D(
-            filters=filters[1],
-            kernel_size=kernel_size,
-            padding=padding,
-            strides=strides,
-            activation=layer_activations,
-            kernel_regularizer=kernel_regularizer,
-            basic_block_count=block_count[4],
-            basic_block_depth=block_depth,
-        )(int_con1)
-
-    if batch_norm:
-        int_con1 = layers.BatchNormalization(epsilon=1e-5)(conv5)
-    # print(conv5)
-
-    int_con2 = layers.Concatenate(axis=-1)([conv5, conv2])
-    if unet:
-        conv6 = ResBlock2DTranspose(
-            filters=filters[0],
-            kernel_size=kernel_size,
-            strides=strides,
-            padding=padding,
-            activation=layer_activations,
-            kernel_regularizer=kernel_regularizer,
-            basic_block_count=block_count[5],
-            basic_block_depth=block_depth,
-        )(int_con2)
-    else:
-        conv6 = ResBlock2D(
-            filters=filters[0],
-            kernel_size=kernel_size,
-            strides=strides,
-            padding=padding,
-            activation=layer_activations,
-            kernel_regularizer=kernel_regularizer,
-            basic_block_count=block_count[5],
-            basic_block_depth=block_depth,
-        )(int_con2)
-
-    if batch_norm:
-        conv6 = layers.BatchNormalization(epsilon=1e-5)(conv6)
-    # print(conv6)
-
-    int_con3 = layers.Concatenate(axis=-1)([conv6, conv1])
-    x_r = layers.Conv2D(
-        24, kernel_size, strides=strides, activation=None, padding=padding
-    )(int_con3)
+        basic_block_depth=1,
+        basic_block_count=1,
+    )(x)
 
     # Ensure that the model takes into account
     # any potential predecessors of `input_tensor`.

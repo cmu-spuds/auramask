@@ -493,6 +493,7 @@ def main():
 
     v = get_sample_data(v_ds)
     model(v)
+
     callbacks = init_callbacks(hparams, v, logdir, note)
 
     training_history = model.fit(
