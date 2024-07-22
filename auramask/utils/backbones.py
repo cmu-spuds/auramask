@@ -1,42 +1,48 @@
 from enum import Enum
-from functools import partial
 from types import NoneType, FunctionType
 from keras import Input, backend
+from keras.src.applications.imagenet_utils import obtain_input_shape
 from keras_unet_collection import models as unet_models
 from auramask.models import zero_dce, reface_unet, zero_dce_auramask, auramask
 
-input_shape = (
-    (None, None, 3)
-    if backend.image_data_format() == "channels_last"
-    else (3, None, None)
-)
-
 
 class BaseModels(Enum):
-    UNET = partial(unet_models.unet_2d, input_size=input_shape)
-    R2UNET = partial(unet_models.r2_unet_2d, input_size=input_shape)
-    ATTUNET = partial(unet_models.att_unet_2d, input_size=input_shape)
-    VNET = partial(unet_models.vnet_2d, input_size=input_shape)
-    ZERODCE = partial(zero_dce.build_dce_net, input_shape=input_shape)
-    RESZERODCE = partial(zero_dce_auramask.build_res_dce_net, input_shape=input_shape)
-    REFACE = partial(reface_unet.reface_unet, input_shape=input_shape)
+    UNET = (unet_models.unet_2d, False)
+    R2UNET = (unet_models.r2_unet_2d, False)
+    ATTUNET = (unet_models.att_unet_2d, False)
+    VNET = (unet_models.vnet_2d, False)
+    ZERODCE = (zero_dce.build_dce_net, True)
+    RESZERODCE = (zero_dce_auramask.build_res_dce_net, True)
+    REFACE = (reface_unet.reface_unet, True)
 
     def build_backbone(
         self,
         model_config: dict,
         name: str = None,
+        input_shape: tuple = (224, 224, 3),
         preprocess: FunctionType | NoneType = None,
         activation_fn: FunctionType | NoneType = None,
         post_processing: FunctionType | NoneType = None,
     ):
+        input_shape = obtain_input_shape(
+            input_shape,
+            default_size=224,
+            min_size=127,
+            data_format=backend.image_data_format(),
+            require_flatten=False,
+        )
+
         inputs = Input(shape=input_shape)
 
         # Integrated preprocessing (e.g., color transform, scaling, normalizing)
         if preprocess:
             inputs = preprocess(inputs)
 
-        # Get model using config dict
-        x = self.value(**model_config)(inputs)[0]
+        if self.value[1]:
+            x = self.value[0](input_tensor=inputs, **model_config).output[0]
+        else:
+            # Get model using config dict
+            x = self.value[0](input_size=input_shape, **model_config)(inputs)[0]
 
         # Use activation function if not defined by builder
         if activation_fn:

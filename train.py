@@ -495,6 +495,10 @@ def main():
     model(v)
     callbacks = init_callbacks(hparams, v, logdir, note)
 
+    print(model.summary(expand_nested=True))
+
+    exit()
+
     training_history = model.fit(
         t_ds,
         callbacks=callbacks,
