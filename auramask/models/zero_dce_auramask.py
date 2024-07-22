@@ -27,7 +27,7 @@ def build_res_dce_net(
             img_input = input_tensor
 
     if isinstance(block_count, int):
-        block_count = [block_count] * 7
+        block_count = [block_count] * 6
 
     if unet and isinstance(filters, int):
         filters = [filters * (2**i) for i in range(3)]
@@ -169,15 +169,8 @@ def build_res_dce_net(
     # print(conv6)
 
     int_con3 = layers.Concatenate(axis=-1)([conv6, conv1])
-    x_r = ResBlock2D(
-        filters=24,
-        kernel_size=kernel_size,
-        strides=strides,
-        padding=padding,
-        activation=None,
-        kernel_regularizer=kernel_regularizer,
-        basic_block_count=block_count[6],
-        basic_block_depth=block_depth,
+    x_r = layers.Conv2D(
+        24, kernel_size, strides=strides, activation=None, padding=padding
     )(int_con3)
 
     # Ensure that the model takes into account
