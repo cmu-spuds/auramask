@@ -446,7 +446,6 @@ def set_seed():
     seed = hparams["seed"]
     seed = int(hashlib.sha256(seed.encode("utf-8")).hexdigest(), 16) % 10**8
     utils.set_random_seed(seed)
-    hparams["seed"] = seed
 
 
 def get_sample_data(ds):
