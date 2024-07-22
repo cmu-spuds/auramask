@@ -81,7 +81,6 @@ def build_res_dce_net(
     filters = filters[::-1]
 
     for i in range(0, depth):
-        print(block_count[depth + i])
         if unet and i != 0:
             x = ResBlock2DTranspose(
                 filters=filters[i],
