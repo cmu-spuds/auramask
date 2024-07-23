@@ -426,8 +426,6 @@ def initialize_model():
     cfg_mod = ast.literal_eval(os.getenv("AURAMASK_CONFIG", "{}"))
     model_config.update(cfg_mod)
 
-    print(model_config)
-    exit()
     hparams["model"] = base_model.name.lower()
     model = base_model.build_backbone(
         model_config=model_config,
