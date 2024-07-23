@@ -423,7 +423,10 @@ def initialize_model():
     model_config: dict = hparams["model_config"]
 
     # Allows modifying the config at calling with the AURAMASK_CONFIG environment variable
-    cfg_mod = ast.literal_eval(os.getenv("AURAMASK_CONFIG", "{}"))
+    cfg_mod: dict = ast.literal_eval(os.getenv("AURAMASK_CONFIG", "{}"))
+    for key, val in cfg_mod.items():
+        if isinstance(val, str) and val.lower() in ["true", "false"]:
+            cfg_mod[key] = True if val.lower() == "true" else False
     model_config.update(cfg_mod)
 
     hparams["model"] = base_model.name.lower()
