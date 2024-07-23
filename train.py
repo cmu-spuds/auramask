@@ -2,6 +2,7 @@ import argparse
 import enum
 import hashlib
 import os
+import ast
 from pathlib import Path
 from random import choice
 from string import ascii_uppercase
@@ -420,6 +421,13 @@ def initialize_model():
             return [out, x]
 
     model_config: dict = hparams["model_config"]
+
+    # Allows modifying the config at calling with the AURAMASK_CONFIG environment variable
+    cfg_mod = ast.literal_eval(os.getenv("AURAMASK_CONFIG", "{}"))
+    model_config.update(cfg_mod)
+
+    print(model_config)
+    exit()
     hparams["model"] = base_model.name.lower()
     model = base_model.build_backbone(
         model_config=model_config,

@@ -1,4 +1,5 @@
 from types import FunctionType, NoneType
+from typing import Literal
 from keras import layers, Model, backend, utils, KerasTensor
 from auramask.layers.ResBlock import ResBlock2D, ResBlock2DTranspose
 
@@ -8,8 +9,14 @@ def build_res_dce_net(
     input_tensor: KerasTensor | NoneType = None,
     filters: int | list = 32,
     layer_activations: str | FunctionType = "relu",
+    pooling: bool | Literal["max"] | Literal["avg"] = False,
+    unpooling: bool
+    | Literal["nearest"]
+    | Literal["bilinear"]
+    | Literal["bicubic"]
+    | Literal["lanczos3"]
+    | Literal["lanczos5"] = False,
     kernel_size=(3, 3),
-    strides=(1, 1),
     padding="same",
     block_count: int | list[int] = 2,
     block_depth=2,
@@ -48,16 +55,26 @@ def build_res_dce_net(
         kernel_regularizer=kernel_regularizer,
         basic_block_count=block_count[0],
         basic_block_depth=block_depth,
-        name="conv_{}_down".format(0),
+        name="down_{}_conv".format(0),
     )(img_input)
     if batch_norm:
-        x = layers.BatchNormalization(epsilon=1e-5, name="conv_{}_down_bn".format(0))(x)
+        x = layers.BatchNormalization(epsilon=1e-5, name="down_{}_bn".format(0))(x)
 
     x_skip = [x]
 
     depth = len(filters)
 
     for i in range(1, depth):
+        strides = (1, 1)
+        if not pooling:
+            strides = (2, 2)
+        elif pooling == "max" or pooling is True:
+            x = layers.MaxPool2D(name="down_{}_maxpool".format(i))(x)
+        elif pooling == "avg":
+            x = layers.AveragePooling2D(2, name="down_{}_avgpool".format(i))(x)
+        else:
+            raise Exception("Invalid pooling argument: {}".format(pooling))
+
         x = ResBlock2D(
             filters=filters[i],
             kernel_size=kernel_size,
@@ -67,12 +84,11 @@ def build_res_dce_net(
             kernel_regularizer=kernel_regularizer,
             basic_block_count=block_count[i],
             basic_block_depth=block_depth,
-            name="conv_{}_down".format(i),
+            name="down_{}_conv".format(i),
         )(x)
+
         if batch_norm:
-            x = layers.BatchNormalization(
-                epsilon=1e-5, name="conv_{}_down_bn".format(i)
-            )(x)
+            x = layers.BatchNormalization(epsilon=1e-5, name="down_{}_bn".format(i))(x)
         x_skip.append(x)
 
     if unet:
@@ -82,29 +98,45 @@ def build_res_dce_net(
 
     for i in range(0, depth):
         if unet and i != 0:
-            x = ResBlock2DTranspose(
-                filters=filters[i],
-                kernel_size=kernel_size,
-                padding=padding,
-                strides=strides,
-                activation=layer_activations,
-                kernel_regularizer=kernel_regularizer,
-                basic_block_count=block_count[depth + i],
-                basic_block_depth=block_depth,
-                name="convt_{}_up".format(depth - i),
-            )(x)
+            stride = (1, 1)
+            if not unpooling:
+                stride = (2, 2)
+                x = ResBlock2DTranspose(
+                    filters=filters[i],
+                    kernel_size=kernel_size,
+                    padding=padding,
+                    strides=stride,
+                    activation=layer_activations,
+                    kernel_regularizer=kernel_regularizer,
+                    basic_block_count=block_count[depth + i],
+                    basic_block_depth=block_depth,
+                    name="up_{}_convt".format(depth - i),
+                )(x)
+            elif unpooling or unpooling == "bilinear":
+                interp = unpooling if isinstance(unpooling, str) else "bilinear"
+                x = layers.UpSampling2D(
+                    size=(2, 2),
+                    interpolation=interp,
+                    name="up_{}_unpool".format(depth - i),
+                )(x)
+            else:
+                raise Exception("Invalid unpooling argument: {}".format(unpooling))
+
             if batch_norm:
                 x = layers.BatchNormalization(
-                    epsilon=1e-5, name="convt_{}_up_bn".format(depth - i)
+                    epsilon=1e-5, name="up_{}_bn".format(depth - i)
                 )(x)
-            x = layers.Concatenate(
-                axis=-1, name="convt_{}_up_concat".format(depth - i)
-            )([x, x_skip.pop()])
+            x = layers.Concatenate(axis=-1, name="up_{}_concat".format(depth - i))(
+                [x, x_skip.pop()]
+            )
             x = ResBlock2D(
                 filters=filters[i],
-                basic_block_depth=2,
-                activation="relu",
-                name="convt_{}_up_post_concat_conv".format(depth - i),
+                kernel_size=kernel_size,
+                basic_block_depth=2 if unpooling is False else block_depth,
+                basic_block_count=1 if unpooling is False else block_count[depth + i],
+                kernel_regularizer=kernel_regularizer,
+                activation=layer_activations,
+                name="up_{}_conv".format(depth - i),
             )(x)
         elif unet and i == 0:
             continue
@@ -132,6 +164,7 @@ def build_res_dce_net(
         padding=padding,
         basic_block_depth=1,
         basic_block_count=1,
+        kernel_regularizer=kernel_regularizer,
     )(x)
 
     # Ensure that the model takes into account
