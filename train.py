@@ -435,6 +435,7 @@ def initialize_model():
         preprocess=preproc,
         activation_fn=activations.tanh,
         post_processing=postproc,
+        name=hparams["model"],
     )
 
     losses, losses_w, losses_t, metrics = initialize_loss()

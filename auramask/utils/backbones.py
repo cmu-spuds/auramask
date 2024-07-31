@@ -32,7 +32,7 @@ class BaseModels(Enum):
             require_flatten=False,
         )
 
-        inputs = Input(shape=input_shape)
+        inputs = Input(shape=input_shape, name="{}_input".format(name))
 
         # Integrated preprocessing (e.g., color transform, scaling, normalizing)
         if preprocess:
