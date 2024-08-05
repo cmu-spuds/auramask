@@ -3,6 +3,7 @@ from os import PathLike, getenv, path
 import os
 import string
 from typing import Any, Dict, List, Literal, Optional
+import numpy as np
 
 import wandb
 from wandb.sdk.lib import telemetry
@@ -118,6 +119,23 @@ class AuramaskCallback(WandbEvalCallback):
 
     def on_train_end(self, logs: Dict[str, float] | None = None) -> None:
         self.save_results()
+
+
+class AuramaskStopOnNaN(k_callbacks.TerminateOnNaN):
+    def __init__(self):
+        super().__init__()
+
+    def on_batch_end(self, batch, logs=None):
+        logs = logs or {}
+        loss = logs.get("loss")
+        if loss is not None:
+            if np.isnan(loss) or np.isinf(loss):
+                wandb.alert(
+                    title="NaN Termination",
+                    text="NaN value detected in one or more of the losses",
+                    level=wandb.AlertLevel.ERROR,
+                )
+                self.model.stop_training = True
 
 
 class AuramaskCheckpoint(k_callbacks.ModelCheckpoint):
@@ -303,6 +321,6 @@ def init_callbacks(hparams: dict, sample, logdir, note: str = ""):
             log_freq=int(getenv("AURAMASK_LOG_FREQ", 5)),
         )
     )
-    callbacks.append(k_callbacks.TerminateOnNaN())
+    callbacks.append(AuramaskStopOnNaN())
     # callbacks.append(LearningRateScheduler())
     return callbacks
