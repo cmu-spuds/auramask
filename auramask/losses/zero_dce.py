@@ -124,9 +124,6 @@ class IlluminationSmoothnessLoss(Loss):
         w_x = ops.shape(y_pred)[2]
         count_h = (ops.shape(y_pred)[2] - 1) * ops.shape(y_pred)[1]
         count_w = ops.shape(y_pred)[2] * (ops.shape(y_pred)[3] - 1)
-        # dy, dx = tf.image.image_gradients(y_pred)
-        # h_tv = tf.abs((y_pred[:, 1:, :, :] - y_pred[:, : h - 1, :, :]))
-        # w_tv = tf.abs((y_pred[:, :, 1:, :] - y_pred[:, :, : w - 1, :]))
         h_tv = ops.sum(ops.square((y_pred[:, 1:, :, :] - y_pred[:, : h_x - 1, :, :])))
         w_tv = ops.sum(ops.square((y_pred[:, :, 1:, :] - y_pred[:, :, : w_x - 1, :])))
         batch_size = ops.cast(batch_size, dtype="float32")

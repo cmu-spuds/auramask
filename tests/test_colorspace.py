@@ -83,7 +83,6 @@ class ColorTransformMethods(unittest.TestCase):
             atol=self.atol,
             rtol=self.rtol,
         )
-        # testing.assert_allclose(tf_to_, tf.subtract(to_, [0.,0.5,0.5]))
 
     def test_to_and_from_yuv(self):
         processed_ = ColorSpaceEnum.YUV.value[0](self._test_img)

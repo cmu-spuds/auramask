@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 import argparse
 import enum
 import hashlib
@@ -7,6 +8,8 @@ from pathlib import Path
 from random import choice
 from string import ascii_uppercase
 from datetime import datetime
+
+os.environ["KERAS_BACKEND"] = "tensorflow"
 
 import keras
 
@@ -46,7 +49,7 @@ from auramask.utils.datasets import DatasetEnum
 
 from keras import optimizers as opts, losses as ls, activations, ops, utils
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"
+# os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"
 
 # Global hparams object
 hparams: dict = {}
@@ -206,7 +209,9 @@ def parse_args():
 
 def load_data():
     ds: DatasetEnum = hparams["dataset"]
-    t_ds, v_ds = ds.fetch_dataset(hparams["training"], hparams["validation"])
+    t_ds, v_ds = ds.fetch_dataset(
+        hparams["training"], hparams["validation"], "tensorflow"
+    )
 
     w, h = hparams["input"]
 
@@ -215,69 +220,114 @@ def load_data():
         {"augs_per_image": 1, "rate": 0.2, "magnitude": 0.5},
     )
 
-    t_ds = (
-        t_ds.to_tf_dataset(
-            columns=ds.value[2],
-            batch_size=hparams["batch"],
-            collate_fn=DatasetEnum.data_collater,
-            collate_fn_args={"args": {"w": w, "h": h, "crop": True}},
-            prefetch=False,
+    if keras.backend.backend() == "tensorflow":
+        keras.backend.set_image_data_format("channels_last")
+        t_ds = (
+            t_ds.to_tf_dataset(
+                columns=ds.value[2],
+                batch_size=hparams["batch"],
+                collate_fn=DatasetEnum.data_collater,
+                collate_fn_args={"args": {"w": w, "h": h, "crop": True}},
+                prefetch=False,
+                shuffle=True,
+                drop_remainder=True,
+            )
+            .map(
+                lambda x: DatasetEnum.data_augmenter(
+                    x, augmenters["geom"], augmenters["aug"]
+                ),
+                num_parallel_calls=-1,
+            )
+            .map(
+                lambda x, y: (
+                    x,
+                    DatasetEnum.compute_embeddings(y, hparams["F"]),
+                ),
+                num_parallel_calls=-1,
+            )
+            .repeat()
+            .prefetch(-1)
+        )
+
+        v_ds = (
+            v_ds.to_tf_dataset(
+                columns=ds.value[2],
+                batch_size=hparams["batch"],
+                collate_fn=DatasetEnum.data_collater,
+                collate_fn_args={"args": {"w": w, "h": h, "crop": True}},
+                prefetch=True,
+                drop_remainder=True,
+            )
+            .map(
+                lambda x: (
+                    x,
+                    DatasetEnum.compute_embeddings(x, hparams["F"]),
+                ),
+                num_parallel_calls=-1,
+            )
+            .cache()
+            .prefetch(-1)
+        )
+
+        # import tensorflow_datasets as tfds
+
+        # for example in v_ds.take(1):
+        #     print(example[1][0])
+        #     print(example[1][1])
+        #     # print(tf.reduce_mean(example, axis=[-1,-2,-3]), tf.math.reduce_std(example, axis=[-1,-2,-3]))
+        #     # print(tf.reduce_max(example, axis=[-1,-2,-3]), tf.reduce_min(example, axis=[-1,-2,-3]))
+
+        # for example in t_ds.take(1):
+        #     print(example[1][0])
+        #     print(example[1][1])
+
+        # tfds.benchmark(v_ds)
+        # tfds.benchmark(t_ds)
+
+        # exit()
+    elif keras.backend.backend() == "torch":
+        keras.backend.set_image_data_format("channels_last")
+        F = hparams["F"]
+        from torch.utils.data import DataLoader
+
+        def transform(x):
+            x = DatasetEnum.data_collater(x, {"w": w, "h": h, "crop": True})
+            x, y = DatasetEnum.data_augmenter(
+                x["image"], augmenters["geom"], augmenters["aug"]
+            )
+            return (x, DatasetEnum.compute_embeddings(y, F))
+
+        t_ds = t_ds.select_columns("image")
+        t_ds = DataLoader(
+            t_ds.with_format("torch"),
+            hparams["batch"],
             shuffle=True,
-            drop_remainder=True,
+            collate_fn=transform,
         )
-        .map(
-            lambda x: DatasetEnum.data_augmenter(
-                x, augmenters["geom"], augmenters["aug"]
-            ),
-            num_parallel_calls=-1,
+
+        def v_transform(x):
+            x = DatasetEnum.data_collater(x, {"w": w, "h": h, "crop": True})["image"]
+            return (x, DatasetEnum.compute_embeddings(x, F))
+
+        v_ds = v_ds.select_columns("image")
+        v_ds = DataLoader(
+            v_ds.with_format("torch"),
+            hparams["batch"],
+            shuffle=False,
+            collate_fn=v_transform,
         )
-        .map(
-            lambda x, y: (
-                x,
-                DatasetEnum.compute_embeddings(y, hparams["F"]),
-            ),
-            num_parallel_calls=-1,
-        )
-        .repeat()
-        .prefetch(-1)
-    )
 
-    v_ds = (
-        v_ds.to_tf_dataset(
-            columns=ds.value[2],
-            batch_size=hparams["batch"],
-            collate_fn=DatasetEnum.data_collater,
-            collate_fn_args={"args": {"w": w, "h": h, "crop": True}},
-            prefetch=True,
-            drop_remainder=True,
-        )
-        .map(
-            lambda x: (
-                x,
-                DatasetEnum.compute_embeddings(x, hparams["F"]),
-            ),
-            num_parallel_calls=-1,
-        )
-        .cache()
-        .prefetch(-1)
-    )
+        for v in v_ds:
+            print(v[1][0])
+            print(ops.shape(v[0]))
+            print(ops.shape(v[1][0]))
+            break
 
-    # import tensorflow_datasets as tfds
-
-    # for example in v_ds.take(1):
-    #     print(example[1][0])
-    #     print(example[1][1])
-    #     # print(tf.reduce_mean(example, axis=[-1,-2,-3]), tf.math.reduce_std(example, axis=[-1,-2,-3]))
-    #     # print(tf.reduce_max(example, axis=[-1,-2,-3]), tf.reduce_min(example, axis=[-1,-2,-3]))
-
-    # for example in t_ds.take(1):
-    #     print(example[1][0])
-    #     print(example[1][1])
-
-    # tfds.benchmark(v_ds)
-    # tfds.benchmark(t_ds)
-
-    # exit()
+        for t in t_ds:
+            print(ops.shape(t[0]))
+            print(ops.shape(t[1][0]))
+            break
+        exit()
 
     hparams["dataset"] = ds.name.lower()
 
@@ -432,6 +482,9 @@ def initialize_model():
     hparams["model"] = base_model.name.lower()
     model = base_model.build_backbone(
         model_config=model_config,
+        input_shape=(224, 224, 3)
+        if keras.backend.image_data_format() == "channels_last"
+        else (3, 224, 224),
         preprocess=preproc,
         activation_fn=activations.tanh,
         post_processing=postproc,
@@ -459,8 +512,13 @@ def set_seed():
 
 
 def get_sample_data(ds):
-    for x in ds.take(1):
-        inp = x[0][:8]
+    if keras.backend.backend() == "tensorflow":
+        for x in ds.take(1):
+            inp = x[0][:8]
+    else:
+        for batch in ds:
+            inp = batch[0][:8]
+
     return inp
 
 
@@ -505,6 +563,9 @@ def main():
     model(v)
 
     callbacks = init_callbacks(hparams, v, logdir, note)
+
+    print(t_ds)
+    print(v_ds)
 
     training_history = model.fit(
         t_ds,

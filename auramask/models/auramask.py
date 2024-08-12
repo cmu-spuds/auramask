@@ -76,18 +76,12 @@ class AuraMask(Model):
         _, x_mod = x
         y_pred, mask = y_pred
         tloss = 0  # tracked total loss
-        # y_pred_rgb = self.colorspace[1](
-        #     y_pred
-        # )  # computed rgb representation (with gradient passthrough only for hsv_to_rgb
 
         idx = 0
 
         for loss, metric, l_w, l_c in self._custom_losses:
             if isinstance(loss, FaceEmbeddingLoss):
-                tmp_y, tmp_pred = (
-                    (y[0][idx], y_pred)
-                    # (y[0][idx], y_pred_rgb) if l_c is True else (y[0][idx], y_pred)
-                )
+                tmp_y, tmp_pred = (y[idx], y_pred)
                 idx += 1
             elif isinstance(loss, IlluminationSmoothnessLoss):
                 tmp_pred = mask
@@ -114,7 +108,7 @@ class AuraMask(Model):
 
         for metric in self._metrics:
             if isinstance(metric, PercentageOverThreshold):
-                metric.update_state(y[0][idx], y_pred)
+                metric.update_state(y[idx], y_pred)
                 idx += 1
             else:
                 metric.update_state(x, y_pred)
@@ -142,7 +136,7 @@ class AuraMask(Model):
         from tensorflow import GradientTape
 
         X, y = (
-            data  # X is input image data, y is pre-computed set of embeddings ((N Embeddings), (N Names))
+            data  # X is input image data, y is pre-computed set of N embeddings (N x batch x Embeddings)
         )
 
         X_mod = ops.copy(X)
@@ -167,6 +161,30 @@ class AuraMask(Model):
         metrics["loss"] = loss
         return metrics
 
+    def _torch_train_step(self, data):
+        import torch
+
+        X, y = data
+
+        X_mod = ops.copy(X)
+
+        self.zero_grad()
+
+        y_pred, mask = self(X_mod, training=True)
+        loss = self.compute_loss(x=(X, X_mod), y=y, y_pred=(y_pred, mask))
+
+        loss.backward()
+
+        trainable_weights = [v for v in self.trainable_weights]
+        gradients = [v.value.grad for v in trainable_weights]
+
+        with torch.no_grad():
+            self.optimizer.apply(gradients, trainable_weights)
+
+        metrics = self.compute_metrics(x=X, y=y, y_pred=y_pred, sample_weight=None)
+        metrics["loss"] = loss
+        return metrics
+
     def test_step(self, data):
         X, y = (
             data  # X is input image data, y is pre-computed set of embeddings ((N Embeddings), (N Names))
@@ -174,11 +192,7 @@ class AuraMask(Model):
 
         y_pred, mask = self(X, training=False)
 
-        # y_pred = self.colorspace[0](y_pred)
-
         X_mod = ops.copy(X)
-
-        # X_mod = self.colorspace[0](X)  # Convert to chosen colorspace
 
         # Updates stateful loss metrics.
         loss = self.compute_loss(x=(X, X_mod), y=y, y_pred=(y_pred, mask))

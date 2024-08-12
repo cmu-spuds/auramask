@@ -2,6 +2,9 @@ from keras_cv import layers as clayers
 
 from keras import layers, backend
 
+if backend.backend() == "torch":
+    pass
+
 
 def rgb_to_bgr(x):
     if backend.image_data_format() == "channels_first":
@@ -13,6 +16,14 @@ def rgb_to_bgr(x):
     else:
         # 'RGB'->'BGR'
         x = x[..., ::-1]
+    return x
+
+
+def torch_formatting(x):
+    if backend.backend() == "torch":
+        from keras import ops
+
+        x = ops.moveaxis(x, 1, 3)
     return x
 
 
@@ -31,8 +42,9 @@ def gen_image_loading_layers(w: int, h: int, crop: bool = True) -> clayers.Augme
     if crop:
         return clayers.Augmenter(
             [
-                clayers.Resizing(w, h, crop_to_aspect_ratio=True),
-                clayers.Rescaling(scale=1.0 / 255, offset=0),
+                layers.Lambda(torch_formatting),
+                layers.Resizing(h, w, crop_to_aspect_ratio=True),
+                layers.Rescaling(scale=1.0 / 255, offset=0),
                 layers.CenterCrop(int(w * 0.875), int(h * 0.875)),
             ]
         )
@@ -51,21 +63,24 @@ def gen_geometric_aug_layers(
     Returns:
         Augmenter: keras_cv.layers.Augmenter
     """
-    return clayers.Augmenter(
-        [
-            clayers.RandomAugmentationPipeline(
-                [
-                    RandomRotatePairs(factor=0.5),
-                    clayers.RandomFlip(mode="horizontal_and_vertical"),
-                    clayers.RandomTranslation(
-                        height_factor=0.2, width_factor=0.3, fill_mode="nearest"
-                    ),
-                ],
-                augmentations_per_image=augs_per_image,
-                rate=rate,
-            ),
-        ]
-    )
+    if backend.backend() == "tensorflow":
+        return clayers.Augmenter(
+            [
+                clayers.RandomAugmentationPipeline(
+                    [
+                        RandomRotatePairs(factor=0.5),
+                        clayers.RandomFlip(mode="horizontal_and_vertical"),
+                        clayers.RandomTranslation(
+                            height_factor=0.2, width_factor=0.3, fill_mode="nearest"
+                        ),
+                    ],
+                    augmentations_per_image=augs_per_image,
+                    rate=rate,
+                ),
+            ]
+        )
+    elif backend.backend() == "torch":
+        return lambda x: x
 
 
 def gen_non_geometric_aug_layers(
@@ -82,17 +97,20 @@ def gen_non_geometric_aug_layers(
     Returns:
         Augmenter: keras_cv.layers.Augmenter
     """
-    return clayers.Augmenter(
-        [
-            clayers.RandAugment(
-                value_range=(0, 1),
-                augmentations_per_image=augs_per_image,
-                magnitude=magnitude,
-                geometric=False,
-                rate=rate,
-            ),
-        ]
-    )
+    if backend.backend() == "tensorflow":
+        return clayers.Augmenter(
+            [
+                clayers.RandAugment(
+                    value_range=(0, 1),
+                    augmentations_per_image=augs_per_image,
+                    magnitude=magnitude,
+                    geometric=False,
+                    rate=rate,
+                ),
+            ]
+        )
+    elif backend.backend() == "torch":
+        return lambda x: x
 
 
 class RandomRotatePairs(clayers.RandomRotation):

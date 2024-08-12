@@ -46,6 +46,8 @@ def reface_unet(
     ----------
         model: a keras model.
     """
+    channel_axis = 1 if backend.image_data_format() == "channels_first" else 3
+
     if input_tensor is None:
         img_input = layers.Input(shape=input_shape, name="{}_input".format(name))
     else:
@@ -69,9 +71,9 @@ def reface_unet(
 
     for i, f in enumerate(filter_num):
         if batch_norm:
-            X = layers.BatchNormalization(axis=3, name="{}_down_{}_bn".format(name, i))(
-                X
-            )
+            X = layers.BatchNormalization(
+                axis=channel_axis, name="{}_down_{}_bn".format(name, i)
+            )(X)
         X = ResBlock2D(
             f,
             basic_block_depth=2,
@@ -89,7 +91,9 @@ def reface_unet(
     # Upsampling Levels
     for i, f in enumerate(filter_num):
         if batch_norm:
-            X = layers.BatchNormalization(axis=3, name="{}_up_{}_bn".format(name, i))(X)
+            X = layers.BatchNormalization(
+                axis=channel_axis, name="{}_up_{}_bn".format(name, i)
+            )(X)
         X = ResBlock2DTranspose(
             filter_num[i],
             basic_block_depth=2,
@@ -101,7 +105,7 @@ def reface_unet(
             skip_conn = X_skip.pop()
             X = layers.concatenate(
                 [X, skip_conn],
-                axis=-1,
+                axis=channel_axis,
                 name="{}_up_{}_concat".format(name, i),
             )
 

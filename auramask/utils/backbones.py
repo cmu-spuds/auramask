@@ -18,8 +18,8 @@ class BaseModels(Enum):
     def build_backbone(
         self,
         model_config: dict,
+        input_shape: tuple,
         name: str = None,
-        input_shape: tuple = (224, 224, 3),
         preprocess: FunctionType | NoneType = None,
         activation_fn: FunctionType | NoneType = None,
         post_processing: FunctionType | NoneType = None,

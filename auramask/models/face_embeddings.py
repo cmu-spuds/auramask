@@ -2,7 +2,7 @@ from enum import Enum
 from typing import Literal
 
 # from deepface.modules.verification import find_threshold
-from keras import layers
+from keras import layers, backend
 
 from auramask.models.arcface import ArcFace
 from auramask.models.facenet import FaceNet
@@ -29,7 +29,10 @@ class FaceEmbedEnum(str, Enum):
             model_obj = {}
 
         if self.name not in model_obj.keys():
-            input = layers.Input((None, None, 3))
+            if backend.image_data_format() == "channels_last":
+                input = layers.Input((None, None, 3))
+            else:
+                input = layers.Input((3, None, None))
             x = layers.Rescaling(255, offset=0)(input)  # convert to [0, 255]
             # x = layers.Lambda(rgb_to_bgr)(x)
 

@@ -15,7 +15,12 @@ def preprocess_input(x):
 
 
 def ResNet(
-    stack_fn, model_name="resnet", input_tensor=None, input_shape=None, **kwargs
+    stack_fn,
+    model_name="resnet",
+    input_tensor=None,
+    input_shape=None,
+    image_data_format=None,
+    **kwargs,
 ):
     """Instantiates the ResNet
 
@@ -34,15 +39,20 @@ def ResNet(
     Returns:
       A `keras.Model` instance.
     """
+    if not image_data_format:
+        image_data_format = backend.image_data_format()
+
     # Determine proper input shape
     input_shape = obtain_input_shape(
         input_shape,
         default_size=112,
         min_size=32,
-        data_format=backend.image_data_format(),
+        data_format=image_data_format,
         require_flatten=True,
         weights="imagenet",
     )
+
+    shared_axes = [1, 2] if image_data_format == "channels_last" else [2, 3]
 
     if input_tensor is None:
         img_input = layers.Input(shape=input_shape)
@@ -52,7 +62,7 @@ def ResNet(
         else:
             img_input = input_tensor
 
-    bn_axis = 3 if backend.image_data_format() == "channels_last" else 1
+    bn_axis = 3 if image_data_format == "channels_last" else 1
 
     x = layers.ZeroPadding2D(padding=1, name="conv1_pad")(img_input)
     x = layers.Conv2D(
@@ -66,7 +76,7 @@ def ResNet(
     x = layers.BatchNormalization(
         axis=bn_axis, epsilon=2e-5, momentum=0.9, name="conv1_bn"
     )(x)
-    x = layers.PReLU(shared_axes=[1, 2], name="conv1_prelu")(x)
+    x = layers.PReLU(shared_axes=shared_axes, name="conv1_prelu")(x)
     x = stack_fn(x)
 
     return x
@@ -101,6 +111,7 @@ def ArcFace(
     classifier_activation="softmax",
     preprocess=False,
     name="ArcFace",
+    image_data_format=None,
 ):
     if not (weights in {"deepface", None} or os.path.exists(weights)):
         raise ValueError(
@@ -118,12 +129,15 @@ def ArcFace(
             f"Received: `classes={classes}.`"
         )
 
+    if not image_data_format:
+        image_data_format = backend.image_data_format()
+
     # Determine proper input shape
     input_shape = obtain_input_shape(
         input_shape,
         default_size=112,
         min_size=75,
-        data_format=backend.image_data_format(),
+        data_format=image_data_format,
         require_flatten=include_top,
         weights="imagenet" if weights == "deepface" else weights,
     )
@@ -175,8 +189,17 @@ def ArcFace(
     return model
 
 
-def block1(x, filters, kernel_size=3, stride=1, conv_shortcut=True, name=None):
-    bn_axis = -1 if backend.image_data_format() == "channels_last" else -3
+def block1(
+    x,
+    filters,
+    kernel_size=3,
+    stride=1,
+    conv_shortcut=True,
+    name=None,
+    image_data_format=backend.image_data_format(),
+):
+    bn_axis = 3 if image_data_format == "channels_last" else 1
+    shared_axes = [1, 2] if image_data_format == "channels_last" else [2, 3]
 
     if conv_shortcut:
         shortcut = layers.Conv2D(
@@ -208,7 +231,7 @@ def block1(x, filters, kernel_size=3, stride=1, conv_shortcut=True, name=None):
     x = layers.BatchNormalization(
         axis=bn_axis, epsilon=2e-5, momentum=0.9, name=name + "_2_bn"
     )(x)
-    x = layers.PReLU(shared_axes=[1, 2], name=name + "_1_prelu")(x)
+    x = layers.PReLU(shared_axes=shared_axes, name=name + "_1_prelu")(x)
 
     x = layers.ZeroPadding2D(padding=1, name=name + "_2_pad")(x)
     x = layers.Conv2D(
