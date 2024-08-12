@@ -63,8 +63,10 @@ class FaceEmbedEnum(str, Enum):
 
             model.trainable = False
             model_obj[self.name] = model
+        else:
+            model = model_obj[self.name]
 
-        return model_obj[self.name]
+        return model
 
     def get_threshold(
         self,

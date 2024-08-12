@@ -1,4 +1,4 @@
-from keras import Model, utils, layers, backend
+from keras import Model, utils, layers, backend, ops
 import os
 
 WEIGHTS_PATH = (
@@ -8,7 +8,8 @@ WEIGHTS_PATH = (
 
 
 def preprocess_input(x):
-    return layers.Rescaling(scale=1.0 / 255, offset=0)(x)
+    return ops.divide(x, 255)
+    # return layers.Rescaling(scale=1.0 / 255, offset=0)(x)
 
 
 def DeepID(

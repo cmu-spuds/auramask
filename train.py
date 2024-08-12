@@ -317,17 +317,17 @@ def load_data():
             collate_fn=v_transform,
         )
 
-        for v in v_ds:
-            print(v[1][0])
-            print(ops.shape(v[0]))
-            print(ops.shape(v[1][0]))
-            break
+        # for v in v_ds:
+        #     print(v[1][0])
+        #     print(ops.shape(v[0]))
+        #     print(ops.shape(v[1][0]))
+        #     break
 
-        for t in t_ds:
-            print(ops.shape(t[0]))
-            print(ops.shape(t[1][0]))
-            break
-        exit()
+        # for t in t_ds:
+        #     print(ops.shape(t[0]))
+        #     print(ops.shape(t[1][0]))
+        #     break
+        # exit()
 
     hparams["dataset"] = ds.name.lower()
 
@@ -563,9 +563,6 @@ def main():
     model(v)
 
     callbacks = init_callbacks(hparams, v, logdir, note)
-
-    print(t_ds)
-    print(v_ds)
 
     training_history = model.fit(
         t_ds,
