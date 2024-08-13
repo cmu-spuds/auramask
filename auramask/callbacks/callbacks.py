@@ -75,8 +75,8 @@ class AuramaskCallback(WandbEvalCallback):
     def save_results(self):
         if backend.backend() == "torch":
             y, mask = self.model(self.x, training=False)
-            y = y.detach().cpu()
-            mask = mask.detach().cpu()
+            y = ops.convert_to_numpy(y)
+            mask = ops.convert_to_numpy(y)
         else:
             y, mask = self.model(self.x, training=False)
         if mask.shape[-1] > 3 and mask.shape[-1] % 3 == 0:
