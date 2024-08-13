@@ -59,8 +59,6 @@ class DatasetEnum(Enum):
 
     @staticmethod
     def data_collater(features, args: LoaderConfig):
-        # import tensorflow as tf
-        # import torch
         import numpy as np
 
         loader = preprocessing.gen_image_loading_layers(**args)

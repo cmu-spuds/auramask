@@ -1,5 +1,13 @@
 from keras import Model, utils, layers, backend, ops
-from tensorflow import nn
+
+if backend.backend() == "tensorflow":
+    from tensorflow import nn
+
+    lrn = nn.lrn
+elif backend.backend() == "torch":
+    from torch import nn
+
+    lrn = nn.LocalResponseNorm(5, alpha=1e-4, beta=0.75)
 import os
 
 WEIGHTS_PATH = (
@@ -55,7 +63,7 @@ def OpenFace(
     x = layers.Activation("relu")(x)
     x = layers.ZeroPadding2D(padding=(1, 1))(x)
     x = layers.MaxPooling2D(pool_size=3, strides=2)(x)
-    x = layers.Lambda(lambda x: nn.lrn(x, alpha=1e-4, beta=0.75), name="lrn_1")(x)
+    x = layers.Lambda(lambda x: lrn(x, alpha=1e-4, beta=0.75), name="lrn_1")(x)
     x = layers.Conv2D(64, (1, 1), name="conv2")(x)
     x = layers.BatchNormalization(axis=-1, epsilon=0.00001, name="bn2")(x)
     x = layers.Activation("relu")(x)
@@ -63,7 +71,7 @@ def OpenFace(
     x = layers.Conv2D(192, (3, 3), name="conv3")(x)
     x = layers.BatchNormalization(axis=-1, epsilon=0.00001, name="bn3")(x)
     x = layers.Activation("relu")(x)
-    x = layers.Lambda(lambda x: nn.lrn(x, alpha=1e-4, beta=0.75), name="lrn_2")(
+    x = layers.Lambda(lambda x: lrn(x, alpha=1e-4, beta=0.75), name="lrn_2")(
         x
     )  # x is equal added
     x = layers.ZeroPadding2D(padding=(1, 1))(x)
