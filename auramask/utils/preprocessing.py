@@ -64,6 +64,7 @@ def gen_geometric_aug_layers(
         Augmenter: keras_cv.layers.Augmenter
     """
     if backend.backend() == "tensorflow":
+        return lambda x: x
         return clayers.Augmenter(
             [
                 clayers.RandomAugmentationPipeline(
@@ -98,6 +99,7 @@ def gen_non_geometric_aug_layers(
         Augmenter: keras_cv.layers.Augmenter
     """
     if backend.backend() == "tensorflow":
+        return lambda x: x
         return clayers.Augmenter(
             [
                 clayers.RandAugment(

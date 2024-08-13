@@ -73,7 +73,6 @@ class AuraMask(Model):
 
     def compute_loss(self, x=None, y=None, y_pred=None, sample_weight=None):
         del sample_weight
-        _, x_mod = x
         y_pred, mask = y_pred
         tloss = 0  # tracked total loss
 
@@ -88,7 +87,7 @@ class AuraMask(Model):
                 tmp_y = None
             else:
                 tmp_y, tmp_pred = (
-                    (x_mod, y_pred)
+                    (x, y_pred)
                     # (x_rgb, y_pred_rgb) if l_c is True else (x_mod, y_pred)
                 )
             sim_loss = loss(tmp_y, tmp_pred)
@@ -102,8 +101,8 @@ class AuraMask(Model):
 
     def compute_metrics(self, x, y, y_pred, sample_weight):
         del sample_weight
-        # y_pred_rgb = self.colorspace[1](y_pred)
 
+        y_pred, mask = y_pred
         idx = 0
 
         for metric in self._metrics:
@@ -143,10 +142,8 @@ class AuraMask(Model):
 
         with GradientTape() as tape:
             # X_mod = self.colorspace[0](X_mod)  # Convert to chosen colorspace
-            y_pred, mask = self(X_mod, training=True)  # Forward pass with
-            loss = self.compute_loss(
-                x=(X, X_mod), y=y, y_pred=(y_pred, mask)
-            )  # Compute loss
+            y_pred = self(X_mod, training=True)  # Forward pass with
+            loss = self.compute_loss(x=X_mod, y=y, y_pred=y_pred)  # Compute loss
 
         # Compute Gradients
         trainable_vars = self.trainable_variables
@@ -170,8 +167,8 @@ class AuraMask(Model):
 
         self.zero_grad()
 
-        y_pred, mask = self(X_mod, training=True)
-        loss = self.compute_loss(x=(X, X_mod), y=y, y_pred=(y_pred, mask))
+        y_pred = self(X_mod, training=True)
+        loss = self.compute_loss(x=X_mod, y=y, y_pred=y_pred)
 
         loss.backward()
 
@@ -190,12 +187,12 @@ class AuraMask(Model):
             data  # X is input image data, y is pre-computed set of embeddings ((N Embeddings), (N Names))
         )
 
-        y_pred, mask = self(X, training=False)
+        y_pred = self(X, training=False)
 
         X_mod = ops.copy(X)
 
         # Updates stateful loss metrics.
-        loss = self.compute_loss(x=(X, X_mod), y=y, y_pred=(y_pred, mask))
+        loss = self.compute_loss(x=X_mod, y=y, y_pred=y_pred)
         metrics = self.compute_metrics(x=X, y=y, y_pred=y_pred, sample_weight=None)
         metrics["loss"] = loss
         return metrics

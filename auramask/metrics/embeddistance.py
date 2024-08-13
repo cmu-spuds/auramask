@@ -38,10 +38,10 @@ class CosineDistance(metrics.Mean):
 
 
 class PercentageOverThreshold(metrics.Mean):
-    def __init__(self, f: FaceEmbedEnum | Model, name="PoT_", threshold=0.5, **kwargs):
+    def __init__(self, f: FaceEmbedEnum, name="PoT_", threshold=0.5, **kwargs):
         if isinstance(f, FaceEmbedEnum):
             super().__init__(name=name + f.value, **kwargs)
-            self.f = f.get_model()
+            self.f = f
         else:
             super().__init__(name=name + f.name, **kwargs)
             self.f = f
@@ -54,7 +54,7 @@ class PercentageOverThreshold(metrics.Mean):
         return {**base_config, **config}
 
     def update_state(self, y_true, y_pred, sample_weight=None):
-        emb_adv = self.f(y_pred, training=False)
+        emb_adv = self.f.get_model()(y_pred, training=False)
         dist = cosine_distance(y_true, emb_adv, -1)
         accuracy = ops.cast(
             ops.less_equal(dist, self.threshold), dtype=backend.floatx()

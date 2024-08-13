@@ -9,7 +9,7 @@ from random import choice
 from string import ascii_uppercase
 from datetime import datetime
 
-os.environ["KERAS_BACKEND"] = "tensorflow"
+os.environ["KERAS_BACKEND"] = "torch"
 
 import keras
 
@@ -38,7 +38,6 @@ from auramask.losses.zero_dce import (
     IlluminationSmoothnessLoss,
 )
 
-from auramask.metrics.embeddistance import PercentageOverThreshold
 
 from auramask.models.face_embeddings import FaceEmbedEnum
 from auramask.models.zero_dce import get_enhanced_image
@@ -53,6 +52,8 @@ from keras import optimizers as opts, losses as ls, activations, ops, utils
 
 # Global hparams object
 hparams: dict = {}
+
+keras.config.disable_traceback_filtering()
 
 
 # Path checking and creation if appropriate
@@ -355,9 +356,9 @@ def initialize_loss():
             else:  # Loss as described by ReFace
                 losses.append(FaceEmbeddingLoss(f=f))
                 weights.append(rho / len(F))
-            metrics.append(
-                PercentageOverThreshold(f=losses[-1].f, threshold=f.get_threshold())
-            )
+            # metrics.append(
+            #     PercentageOverThreshold(f=f, threshold=f.get_threshold())
+            # )
             loss_config[losses[-1].name] = losses[-1].get_config() | {
                 "weight": weights[-1]
             }
@@ -518,6 +519,7 @@ def get_sample_data(ds):
     else:
         for batch in ds:
             inp = batch[0][:8]
+            break
 
     return inp
 

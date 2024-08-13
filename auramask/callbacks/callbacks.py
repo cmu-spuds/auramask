@@ -14,7 +14,7 @@ from wandb.integration.keras import (
     WandbEvalCallback,
 )
 from wandb.integration.keras.callbacks.model_checkpoint import SaveStrategy
-from keras import preprocessing, ops
+from keras import preprocessing, ops, backend
 
 
 def get_model_summary(model):
@@ -41,7 +41,10 @@ class AuramaskCallback(WandbEvalCallback):
         super().__init__(
             data_table_columns=data_table_columns, pred_table_columns=pred_table_columns
         )
-        self.x = validation_data[:num_samples]
+        if backend.backend() == "torch":
+            self.x = validation_data[:num_samples].detach().cpu()
+        else:
+            self.x = validation_data[:num_samples]
         self.log_freq = log_freq
         self.__cur_epoch = 0
 
@@ -70,7 +73,12 @@ class AuramaskCallback(WandbEvalCallback):
         self.__cur_epoch = epoch
 
     def save_results(self):
-        y, mask = self.model(self.x, training=False)
+        if backend.backend() == "torch":
+            y, mask = self.model(self.x, training=False)
+            y = y.detach().cpu()
+            mask = mask.detach().cpu()
+        else:
+            y, mask = self.model(self.x, training=False)
         if mask.shape[-1] > 3 and mask.shape[-1] % 3 == 0:
             data = {}
             r = ops.split(mask, 8, axis=-1)
