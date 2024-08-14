@@ -133,6 +133,6 @@ class StyleLoss(keras.Loss):
                 pred_layer_features, norm_by_channels=True, flatten=True
             )
             sl = self.distance(S, C)
-            loss += sl / self.N
+            loss = ops.add(loss, ops.true_divide(sl, self.N))
 
         return loss
