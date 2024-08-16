@@ -1,5 +1,5 @@
 import unittest
-from keras import ops, random
+from keras import ops, random, backend as K
 
 from numpy import testing
 
@@ -15,8 +15,8 @@ class TestColorConstancyLoss(unittest.TestCase):
 
     def test_call_method(self):
         # Create dummy tensors for y_true and y_pred
-        y_true = random.uniform((4, 64, 64, 3), minval=0, maxval=255, dtype="float32")
-        y_pred = random.uniform((4, 64, 64, 3), minval=0, maxval=255, dtype="float32")
+        y_true = random.uniform((4, 64, 64, 3), minval=0, maxval=255, dtype=K.floatx())
+        y_pred = random.uniform((4, 64, 64, 3), minval=0, maxval=255, dtype=K.floatx())
 
         # Compute the loss
         result = self.loss.call(y_true, y_pred)
@@ -33,15 +33,15 @@ class TestColorConstancyLoss(unittest.TestCase):
         # Define a test case with known values for deterministic output
         y_true = ops.convert_to_tensor(
             [[[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]]],
-            dtype="float32",
+            dtype=K.floatx(),
         )
 
         y_pred = ops.convert_to_tensor(
             [[[[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]], [[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]]]],
-            dtype="float32",
+            dtype=K.floatx(),
         )
 
-        expected_loss = ops.convert_to_tensor([[[[2.4494898]]]], dtype="float32")
+        expected_loss = ops.convert_to_tensor([[[[2.4494898]]]], dtype=K.floatx())
 
         result = self.loss.call(y_true, y_pred)
 
@@ -61,8 +61,8 @@ class TestExposureControlLoss(unittest.TestCase):
 
     def test_call_method(self):
         # Create dummy tensors for y_true and y_pred
-        y_true = random.uniform((4, 64, 64, 3), minval=0, maxval=255, dtype="float32")
-        y_pred = random.uniform((4, 64, 64, 3), minval=0, maxval=255, dtype="float32")
+        y_true = random.uniform((4, 64, 64, 3), minval=0, maxval=255, dtype=K.floatx())
+        y_pred = random.uniform((4, 64, 64, 3), minval=0, maxval=255, dtype=K.floatx())
 
         # Compute the loss
         result = self.loss.call(y_true, y_pred)
@@ -86,16 +86,16 @@ class TestExposureControlLoss(unittest.TestCase):
         # Define a test case with known values for deterministic output
         y_true = ops.convert_to_tensor(
             [[[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]]],
-            dtype="float32",
+            dtype=K.floatx(),
         )
 
         y_pred = ops.convert_to_tensor(
             [[[[0.5, 0.5, 0.5], [0.5, 0.5, 0.5]], [[0.5, 0.5, 0.5], [0.5, 0.5, 0.5]]]],
-            dtype="float32",
+            dtype=K.floatx(),
         )
 
         expected_loss = ops.convert_to_tensor(
-            [[[[0.01]]]], dtype="float32"
+            [[[[0.01]]]], dtype=K.floatx()
         )  # (0.5 - 0.6)^2
 
         result = self.loss.call(y_true, y_pred)
@@ -115,8 +115,8 @@ class TestIlluminationSmoothnessLoss(unittest.TestCase):
 
     def test_call_method(self):
         # Create dummy tensors for y_true and y_pred
-        y_true = random.uniform((4, 64, 64, 3), minval=0, maxval=255, dtype="float32")
-        y_pred = random.uniform((4, 64, 64, 3), minval=0, maxval=255, dtype="float32")
+        y_true = random.uniform((4, 64, 64, 3), minval=0, maxval=255, dtype=K.floatx())
+        y_pred = random.uniform((4, 64, 64, 3), minval=0, maxval=255, dtype=K.floatx())
 
         # Compute the loss
         result = self.loss.call(y_true, y_pred)
@@ -132,16 +132,16 @@ class TestIlluminationSmoothnessLoss(unittest.TestCase):
         # Define a test case with known values for deterministic output
         y_true = ops.convert_to_tensor(
             [[[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]]],
-            dtype="float32",
+            dtype=K.floatx(),
         )
 
         y_pred = ops.convert_to_tensor(
             [[[[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]], [[0.7, 0.8, 0.9], [1.0, 1.1, 1.2]]]],
-            dtype="float32",
+            dtype=K.floatx(),
         )
 
         expected_loss = ops.convert_to_tensor(
-            0.29, dtype="float32"
+            0.29, dtype=K.floatx()
         )  # Manually calculated
 
         result = self.loss.call(y_true, y_pred)

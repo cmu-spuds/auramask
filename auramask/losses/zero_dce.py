@@ -1,4 +1,4 @@
-from keras import Loss, ops, Variable, KerasTensor
+from keras import Loss, ops, Variable, KerasTensor, backend as K
 # Implementations pulled from https://github.com/keras-team/keras-io/blob/master/examples/vision/zero_dce.py
 
 """
@@ -33,15 +33,19 @@ class ColorConstancyLoss(Loss):
         super().__init__(name=name, **kwargs)
 
     def call(self, y_true, y_pred):
+        del y_true
         mean_rgb = ops.mean(y_pred, axis=(1, 2), keepdims=True)
         mean_red, mean_green, mean_blue = ops.split(mean_rgb, 3, axis=3)
         difference_red_green = ops.subtract(mean_red, mean_green)
         difference_red_blue = ops.subtract(mean_red, mean_blue)
         difference_green_blue = ops.subtract(mean_blue, mean_green)
         sum_of_squares = ops.sqrt(
-            ops.square(difference_red_green)
-            + ops.square(difference_red_blue)
-            + ops.square(difference_green_blue)
+            ops.add(
+                ops.add(
+                    ops.square(difference_red_green), ops.square(difference_red_blue)
+                ),
+                ops.square(difference_green_blue),
+            )
         )
         return sum_of_squares
 
@@ -83,6 +87,7 @@ class ExposureControlLoss(Loss):
         It measures the distance between the average intensity value of a local region
         and a preset well-exposedness level (set to `0.6`).
         """
+        del y_true
         x = ops.mean(y_pred, axis=-1, keepdims=True)
         mean = ops.nn.average_pool(
             x, pool_size=self.window_size, strides=self.window_size, padding="valid"
@@ -124,15 +129,18 @@ class IlluminationSmoothnessLoss(Loss):
         w_x = ops.shape(y_pred)[2]
         count_h = (ops.shape(y_pred)[2] - 1) * ops.shape(y_pred)[1]
         count_w = ops.shape(y_pred)[2] * (ops.shape(y_pred)[3] - 1)
-        # dy, dx = tf.image.image_gradients(y_pred)
-        # h_tv = tf.abs((y_pred[:, 1:, :, :] - y_pred[:, : h - 1, :, :]))
-        # w_tv = tf.abs((y_pred[:, :, 1:, :] - y_pred[:, :, : w - 1, :]))
         h_tv = ops.sum(ops.square((y_pred[:, 1:, :, :] - y_pred[:, : h_x - 1, :, :])))
         w_tv = ops.sum(ops.square((y_pred[:, :, 1:, :] - y_pred[:, :, : w_x - 1, :])))
-        batch_size = ops.cast(batch_size, dtype="float32")
-        count_h = ops.cast(count_h, dtype="float32")
-        count_w = ops.cast(count_w, dtype="float32")
-        return 2 * (h_tv / count_h + w_tv / count_w) / batch_size
+        batch_size = ops.cast(batch_size, dtype=K.floatx())
+        count_h = ops.cast(count_h, dtype=K.floatx())
+        count_w = ops.cast(count_w, dtype=K.floatx())
+        return ops.multiply(
+            2,
+            ops.divide(
+                ops.add(ops.divide(h_tv, count_h), ops.divide(w_tv, count_w)),
+                batch_size,
+            ),
+        )
 
 
 class SpatialConsistencyLoss(Loss):
@@ -147,16 +155,16 @@ class SpatialConsistencyLoss(Loss):
         super().__init__(name=name, **kwargs)
 
         self.left_kernel = Variable(
-            [[[[0, 0, 0]], [[-1, 1, 0]], [[0, 0, 0]]]], dtype="float32"
+            [[[[0, 0, 0]], [[-1, 1, 0]], [[0, 0, 0]]]], dtype=K.floatx()
         )
         self.right_kernel = Variable(
-            [[[[0, 0, 0]], [[0, 1, -1]], [[0, 0, 0]]]], dtype="float32"
+            [[[[0, 0, 0]], [[0, 1, -1]], [[0, 0, 0]]]], dtype=K.floatx()
         )
         self.up_kernel = Variable(
-            [[[[0, -1, 0]], [[0, 1, 0]], [[0, 0, 0]]]], dtype="float32"
+            [[[[0, -1, 0]], [[0, 1, 0]], [[0, 0, 0]]]], dtype=K.floatx()
         )
         self.down_kernel = Variable(
-            [[[[0, 0, 0]], [[0, 1, 0]], [[0, -1, 0]]]], dtype="float32"
+            [[[[0, 0, 0]], [[0, 1, 0]], [[0, -1, 0]]]], dtype=K.floatx()
         )
 
     def call(self, y_true: KerasTensor, y_pred: KerasTensor) -> KerasTensor:
@@ -172,49 +180,49 @@ class SpatialConsistencyLoss(Loss):
         d_original_left = ops.nn.conv(
             original_pool,
             self.left_kernel,
-            strides=[1, 1, 1, 1],
+            strides=1,
             padding="SAME",
         )
         d_original_right = ops.nn.conv(
             original_pool,
             self.right_kernel,
-            strides=[1, 1, 1, 1],
+            strides=1,
             padding="SAME",
         )
         d_original_up = ops.nn.conv(
-            original_pool, self.up_kernel, strides=[1, 1, 1, 1], padding="SAME"
+            original_pool, self.up_kernel, strides=1, padding="SAME"
         )
         d_original_down = ops.nn.conv(
             original_pool,
             self.down_kernel,
-            strides=[1, 1, 1, 1],
+            strides=1,
             padding="SAME",
         )
 
         d_enhanced_left = ops.nn.conv(
             enhanced_pool,
             self.left_kernel,
-            strides=[1, 1, 1, 1],
+            strides=1,
             padding="SAME",
         )
         d_enhanced_right = ops.nn.conv(
             enhanced_pool,
             self.right_kernel,
-            strides=[1, 1, 1, 1],
+            strides=1,
             padding="SAME",
         )
         d_enhanced_up = ops.nn.conv(
-            enhanced_pool, self.up_kernel, strides=[1, 1, 1, 1], padding="SAME"
+            enhanced_pool, self.up_kernel, strides=1, padding="SAME"
         )
         d_enhanced_down = ops.nn.conv(
             enhanced_pool,
             self.down_kernel,
-            strides=[1, 1, 1, 1],
+            strides=1,
             padding="SAME",
         )
 
-        d_left = ops.square(d_original_left - d_enhanced_left)
-        d_right = ops.square(d_original_right - d_enhanced_right)
-        d_up = ops.square(d_original_up - d_enhanced_up)
-        d_down = ops.square(d_original_down - d_enhanced_down)
-        return d_left + d_right + d_up + d_down
+        d_left = ops.square(ops.subtract(d_original_left, d_enhanced_left))
+        d_right = ops.square(ops.subtract(d_original_right, d_enhanced_right))
+        d_up = ops.square(ops.subtract(d_original_up, d_enhanced_up))
+        d_down = ops.square(ops.subtract(d_original_down, d_enhanced_down))
+        return ops.add(ops.add(d_left, d_right), ops.add(d_up, d_down))

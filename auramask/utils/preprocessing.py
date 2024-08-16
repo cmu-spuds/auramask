@@ -1,3 +1,4 @@
+from typing import Callable
 from keras_cv import layers as clayers
 
 from keras import layers, backend
@@ -16,8 +17,16 @@ def rgb_to_bgr(x):
     return x
 
 
+def torch_formatting(x):
+    if backend.backend() == "torch":
+        from keras import ops
+
+        x = ops.moveaxis(x, 1, 3)
+    return x
+
+
 # TODO: the w and h refer to the resampled and not center-cropped. Could be misleading to some users.
-def gen_image_loading_layers(w: int, h: int, crop: bool = True) -> clayers.Augmenter:
+def gen_image_loading_layers(w: int, h: int, crop: bool = True) -> Callable:
     """Generate an image processing augmentation pipeline that converts the image to a [0,1] scale, resizes to w, h and center crops to 224, 224
 
     Args:
@@ -31,16 +40,15 @@ def gen_image_loading_layers(w: int, h: int, crop: bool = True) -> clayers.Augme
     if crop:
         return clayers.Augmenter(
             [
-                clayers.Resizing(w, h, crop_to_aspect_ratio=True),
-                clayers.Rescaling(scale=1.0 / 255, offset=0),
+                layers.Lambda(torch_formatting),
+                layers.Resizing(h, w, crop_to_aspect_ratio=True),
+                layers.Rescaling(scale=1.0 / 255, offset=0),
                 layers.CenterCrop(int(w * 0.875), int(h * 0.875)),
             ]
         )
 
 
-def gen_geometric_aug_layers(
-    augs_per_image: int, rate: float = 10 / 11
-) -> clayers.Augmenter:
+def gen_geometric_aug_layers(augs_per_image: int, rate: float = 10 / 11) -> Callable:
     """Generate an image processing augmentation pipeline that applies geometric modifications
     to the input images.
 
@@ -51,26 +59,17 @@ def gen_geometric_aug_layers(
     Returns:
         Augmenter: keras_cv.layers.Augmenter
     """
+    return lambda x: x
     return clayers.Augmenter(
         [
-            clayers.RandomAugmentationPipeline(
-                [
-                    RandomRotatePairs(factor=0.5),
-                    clayers.RandomFlip(mode="horizontal_and_vertical"),
-                    clayers.RandomTranslation(
-                        height_factor=0.2, width_factor=0.3, fill_mode="nearest"
-                    ),
-                ],
-                augmentations_per_image=augs_per_image,
-                rate=rate,
-            ),
+            layers.RandomFlip(),
         ]
     )
 
 
 def gen_non_geometric_aug_layers(
     augs_per_image: int, rate: float = 10 / 11, magnitude: float = 0.2
-) -> clayers.Augmenter:
+) -> Callable:
     """Generate an image processing augmentation pipeline that applies non-geometric modifications
     to the input images.
 
@@ -82,15 +81,11 @@ def gen_non_geometric_aug_layers(
     Returns:
         Augmenter: keras_cv.layers.Augmenter
     """
+    return lambda x: x
     return clayers.Augmenter(
         [
-            clayers.RandAugment(
-                value_range=(0, 1),
-                augmentations_per_image=augs_per_image,
-                magnitude=magnitude,
-                geometric=False,
-                rate=rate,
-            ),
+            layers.RandomBrightness((-0.5, 0.5), value_range=(0.0, 1.0)),
+            layers.RandomContrast(0.5),
         ]
     )
 

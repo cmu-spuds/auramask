@@ -1,8 +1,17 @@
-from keras import layers, activations, regularizers, constraints, initializers, saving
+from keras import (
+    layers,
+    activations,
+    regularizers,
+    constraints,
+    initializers,
+    saving,
+    backend as K,
+)
 from typing import Tuple, List, Union, AnyStr, Callable, Dict, Optional, Type
 from keras.src.utils.argument_validation import standardize_padding, standardize_tuple
 from keras.src.backend import standardize_data_format
 from keras.src.ops.operation_utils import compute_conv_output_shape
+from keras.src.backend.common.backend_utils import compute_conv_transpose_output_shape
 from auramask.layers import Conv1DTranspose
 
 ConvND = Union[layers.Conv1D, layers.Conv2D, layers.Conv3D]
@@ -16,7 +25,7 @@ def get_conv_layer_type(rank: int) -> Type[ConvND]:
 
 
 # region Residual scalars (Multiplier/Bias)
-@saving.register_keras_serializable("auramask.layers.Resblock")
+@saving.register_keras_serializable("auramask.layers.ResBlock")
 class ResidualMultiplier(layers.Layer):
     def __init__(self, initial_value: float, **kwargs):
         super(ResidualMultiplier, self).__init__(**kwargs)
@@ -27,7 +36,7 @@ class ResidualMultiplier(layers.Layer):
         self.multiplier = self.add_weight(
             name="multiplier",
             shape=[],
-            dtype="float32",
+            dtype=K.floatx(),
             initializer=initializers.Constant(value=self.initial_value),
         )
 
@@ -46,7 +55,7 @@ class ResidualMultiplier(layers.Layer):
         return config
 
 
-@saving.register_keras_serializable("auramask.layers.Resblock")
+@saving.register_keras_serializable("auramask.layers.ResBlock")
 class ResidualBias(layers.Layer):
     def __init__(self, **kwargs):
         super(ResidualBias, self).__init__(**kwargs)
@@ -54,7 +63,7 @@ class ResidualBias(layers.Layer):
 
     def build(self, input_shape):
         self.bias = self.add_weight(
-            name="bias", shape=[], dtype="float32", initializer=initializers.Zeros()
+            name="bias", shape=[], dtype=K.floatx(), initializer=initializers.Zeros()
         )
 
     def call(self, inputs, **kwargs):
@@ -77,7 +86,7 @@ def normalize_padding(padding: str) -> str:
 
 
 # region Basic blocks
-@saving.register_keras_serializable("auramask.layers.Resblock")
+@saving.register_keras_serializable("auramask.layers.ResBlock")
 class ResBasicBlockND(layers.Layer):
     def __init__(
         self,
@@ -261,7 +270,7 @@ class ResBasicBlockND(layers.Layer):
 
 
 # region ResBasicBlock - 1D/2D/3D
-@saving.register_keras_serializable("auramask.layers.Resblock")
+@saving.register_keras_serializable("auramask.layers.ResBlock")
 class ResBasicBlock1D(ResBasicBlockND):
     def __init__(
         self,
@@ -304,7 +313,7 @@ class ResBasicBlock1D(ResBasicBlockND):
         return config
 
 
-@saving.register_keras_serializable("auramask.layers.Resblock")
+@saving.register_keras_serializable("auramask.layers.ResBlock")
 class ResBasicBlock2D(ResBasicBlockND):
     def __init__(
         self,
@@ -345,7 +354,7 @@ class ResBasicBlock2D(ResBasicBlockND):
         return config
 
 
-@saving.register_keras_serializable("auramask.layers.Resblock")
+@saving.register_keras_serializable("auramask.layers.ResBlock")
 class ResBasicBlock3D(ResBasicBlockND):
     def __init__(
         self,
@@ -389,7 +398,7 @@ class ResBasicBlock3D(ResBasicBlockND):
 # endregion
 
 
-@saving.register_keras_serializable("auramask.layers.Resblock")
+@saving.register_keras_serializable("auramask.layers.ResBlock")
 class ResBasicBlockNDTranspose(ResBasicBlockND):
     @property
     def conv_layer_type(self) -> Type[ConvND]:
@@ -403,10 +412,10 @@ class ResBasicBlockNDTranspose(ResBasicBlockND):
 
     # noinspection DuplicatedCode
     def compute_output_shape(self, input_shape):
-        return compute_conv_output_shape(
-            input_shape,
-            self.filters,
-            self.kernel_size,
+        return compute_conv_transpose_output_shape(
+            input_shape=input_shape,
+            kernel_size=self.kernel_size,
+            filters=self.filters,
             strides=self.strides,
             padding=self.padding,
             data_format=self.data_format,
@@ -415,7 +424,7 @@ class ResBasicBlockNDTranspose(ResBasicBlockND):
 
 
 # region ResBasicBlock - 1D/2D/3D
-@saving.register_keras_serializable("auramask.layers.Resblock")
+@saving.register_keras_serializable("auramask.layers.ResBlock")
 class ResBasicBlock1DTranspose(ResBasicBlockNDTranspose):
     def __init__(
         self,
@@ -457,7 +466,7 @@ class ResBasicBlock1DTranspose(ResBasicBlockNDTranspose):
         return config
 
 
-@saving.register_keras_serializable("auramask.layers.Resblock")
+@saving.register_keras_serializable("auramask.layers.ResBlock")
 class ResBasicBlock2DTranspose(ResBasicBlockNDTranspose):
     def __init__(
         self,
@@ -497,7 +506,7 @@ class ResBasicBlock2DTranspose(ResBasicBlockNDTranspose):
         return config
 
 
-@saving.register_keras_serializable("auramask.layers.Resblock")
+@saving.register_keras_serializable("auramask.layers.ResBlock")
 class ResBasicBlock3DTranspose(ResBasicBlockNDTranspose):
     def __init__(
         self,
@@ -543,7 +552,7 @@ class ResBasicBlock3DTranspose(ResBasicBlockNDTranspose):
 # region ResBlocks
 
 
-@saving.register_keras_serializable("auramask.layers.Resblock")
+@saving.register_keras_serializable("auramask.layers.ResBlock")
 class ResBlockND(layers.Layer):
     def __init__(
         self,
@@ -686,7 +695,7 @@ class ResBlockND(layers.Layer):
         pass
 
 
-@saving.register_keras_serializable("auramask.layers.Resblock")
+@saving.register_keras_serializable("auramask.layers.ResBlock")
 class ResBlock1D(ResBlockND):
     def __init__(
         self,
@@ -731,7 +740,7 @@ class ResBlock1D(ResBlockND):
         return config
 
 
-@saving.register_keras_serializable("auramask.layers.Resblock")
+@saving.register_keras_serializable("auramask.layers.ResBlock")
 class ResBlock2D(ResBlockND):
     def __init__(
         self,
@@ -774,7 +783,7 @@ class ResBlock2D(ResBlockND):
         return config
 
 
-@saving.register_keras_serializable("auramask.layers.Resblock")
+@saving.register_keras_serializable("auramask.layers.ResBlock")
 class ResBlock3D(ResBlockND):
     def __init__(
         self,
@@ -817,7 +826,7 @@ class ResBlock3D(ResBlockND):
         return config
 
 
-@saving.register_keras_serializable("auramask.layers.Resblock")
+@saving.register_keras_serializable("auramask.layers.ResBlock")
 class ResBlockNDTranspose(ResBlockND):
     def init_layers(self):
         for i in range(self.basic_block_count):
@@ -841,10 +850,10 @@ class ResBlockNDTranspose(ResBlockND):
 
     # noinspection DuplicatedCode
     def compute_output_shape(self, input_shape):
-        return compute_conv_output_shape(
-            input_shape,
-            self.filters,
-            self.kernel_size,
+        return compute_conv_transpose_output_shape(
+            input_shape=input_shape,
+            kernel_size=self.kernel_size,
+            filters=self.filters,
             strides=self.strides,
             padding=self.padding,
             data_format=self.data_format,
@@ -852,7 +861,7 @@ class ResBlockNDTranspose(ResBlockND):
         )
 
 
-@saving.register_keras_serializable("auramask.layers.Resblock")
+@saving.register_keras_serializable("auramask.layers.ResBlock")
 class ResBlock1DTranspose(ResBlockNDTranspose):
     def __init__(
         self,
@@ -895,7 +904,7 @@ class ResBlock1DTranspose(ResBlockNDTranspose):
         return config
 
 
-@saving.register_keras_serializable("auramask.layers.Resblock")
+@saving.register_keras_serializable("auramask.layers.ResBlock")
 class ResBlock2DTranspose(ResBlockNDTranspose):
     def __init__(
         self,
@@ -938,7 +947,7 @@ class ResBlock2DTranspose(ResBlockNDTranspose):
         return config
 
 
-@saving.register_keras_serializable("auramask.layers.Resblock")
+@saving.register_keras_serializable("auramask.layers.ResBlock")
 class ResBlock3DTranspose(ResBlockNDTranspose):
     def __init__(
         self,

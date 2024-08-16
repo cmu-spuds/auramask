@@ -2,11 +2,12 @@
     "filters": 128,
     "layer_activations": "relu",
     "kernel_size": [3,3],
-    "strides": [1,1],
     "padding": "same",
     "block_count": [2, 3, 5, 1, 1, 1],
     "block_depth": 2,
     "kernel_regularizer": "l2",
     "batch_norm": true,
-    "unet": true
+    "unet": true,
+    "pooling": false,
+    "unpooling": false
 }

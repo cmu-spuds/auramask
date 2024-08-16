@@ -5,5 +5,7 @@ tensorflow[and-cuda]
 keras
 keras_cv
 wandb
+torch
+torchvision
 ruff
 pre-commit

@@ -18,8 +18,8 @@ class BaseModels(Enum):
     def build_backbone(
         self,
         model_config: dict,
+        input_shape: tuple,
         name: str = None,
-        input_shape: tuple = (224, 224, 3),
         preprocess: FunctionType | NoneType = None,
         activation_fn: FunctionType | NoneType = None,
         post_processing: FunctionType | NoneType = None,
@@ -32,7 +32,7 @@ class BaseModels(Enum):
             require_flatten=False,
         )
 
-        inputs = Input(shape=input_shape)
+        inputs = Input(shape=input_shape, name="{}_input".format(name))
 
         # Integrated preprocessing (e.g., color transform, scaling, normalizing)
         if preprocess:

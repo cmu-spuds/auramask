@@ -6,6 +6,6 @@
     "activation":"ReLU",
     "output_activation": null,
     "batch_norm": true,
-    "pool":"max",
-    "unpool":"nearest"
+    "pool": false,
+    "unpool":false
 }

@@ -4,6 +4,7 @@ from datasets import load_dataset
 from auramask.models.face_embeddings import FaceEmbedEnum
 from auramask.utils import preprocessing
 from os import cpu_count
+from keras import ops
 
 
 class DatasetEnum(Enum):
@@ -13,7 +14,7 @@ class DatasetEnum(Enum):
     FDF = ("logasja/FDF", "fdf", ["image"])
     VGGFACE2 = ("logasja/VGGFace2", "256", ["image"])
 
-    def fetch_dataset(self, t_split: str, v_split: str, ds_format="tf"):
+    def fetch_dataset(self, t_split: str, v_split: str, ds_format="tensorflow"):
         dataset, name, _ = self.value
         t_ds = load_dataset(
             dataset,
@@ -58,42 +59,38 @@ class DatasetEnum(Enum):
 
     @staticmethod
     def data_collater(features, args: LoaderConfig):
-        import tensorflow as tf
         import numpy as np
 
-        with tf.device("CPU"):
-            loader = preprocessing.gen_image_loading_layers(**args)
+        loader = preprocessing.gen_image_loading_layers(**args)
 
-            if isinstance(features, dict):  # case batch_size=None: nothing to collate
-                batch = features
-            elif isinstance(features, tf.Tensor):
-                batch = {"image": loader(features)}
-            else:
-                first = features[0]
-                batch = {}
-                for k, v in first.items():
-                    if isinstance(v, np.ndarray):
-                        batch[k] = loader(
-                            tf.stack([tf.convert_to_tensor(f[k]) for f in features])
-                        )
-                    elif isinstance(v, tf.Tensor):
-                        batch[k] = loader(tf.stack([f[k] for f in features]))
-                    else:
-                        batch[k] = np.array([f[k] for f in features])
-            del loader
+        if isinstance(features, dict):  # case batch_size=None: nothing to collate
+            batch = features
+        elif ops.is_tensor(features):
+            batch = {"image": loader(features)}
+        else:
+            first = features[0]
+            batch = {}
+            for k, v in first.items():
+                if isinstance(v, np.ndarray):
+                    batch[k] = loader(
+                        ops.stack([ops.convert_to_tensor(f[k]) for f in features])
+                    )
+                elif ops.is_tensor(v):
+                    batch[k] = loader(ops.stack([f[k] for f in features]))
+                else:
+                    batch[k] = np.array([f[k] for f in features])
+        del loader
         return batch
 
     @staticmethod
     def compute_embeddings(img_batch, embedding_models: list[FaceEmbedEnum]) -> dict:
         features = []
-        names = []
         if embedding_models:
             for model in embedding_models:
                 embed = model.get_model()(img_batch)
                 features.append(embed)
-                names.append(model.name)
 
-        return (tuple(features), list(names))
+        return tuple(features)
 
     @staticmethod
     def data_augmenter(examples, geom, aug):

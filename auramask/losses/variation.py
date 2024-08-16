@@ -49,5 +49,5 @@ class VariationLoss(Loss):
 
         # Calculate the total variation by taking the absolute value of the
         # pixel-differences and summing over the appropriate axis.
-        tot_var = (pixel_dif1 + pixel_dif2) / 2.0
+        tot_var = ops.divide(ops.add(pixel_dif1, pixel_dif2), 2.0)
         return tot_var

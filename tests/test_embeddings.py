@@ -1,14 +1,19 @@
+# ruff: noqa: E402
+
 # To test run docker `docker run -p 5005:5000 serengil/deepface`
+import os
+
+os.environ["KERAS_BACKEND"] = "torch"
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
 import unittest
-from keras import utils, ops, KerasTensor, layers
+from keras import utils, ops, KerasTensor, layers, config, backend
 from PIL import Image
 
 import requests
 import cv2
 
 import numpy as np
-import os
 
 from auramask.losses.embeddistance import cosine_distance
 from auramask.models.arcface import ArcFace
@@ -19,7 +24,8 @@ from auramask.models.openface import OpenFace
 from auramask.models.vggface import VggFace
 from auramask.utils.preprocessing import rgb_to_bgr
 
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
+config.disable_traceback_filtering()
+backend.set_image_data_format("channels_last")
 
 FDF_IMG = "https://github.com/cmu-spuds/auramask/blob/0c9e679bfeb532b8998955da8064c51064768483/tests/tst_imgs/fdf.jpg?raw=True"
 LFW_IMG = "https://github.com/cmu-spuds/auramask/blob/0c9e679bfeb532b8998955da8064c51064768483/tests/tst_imgs/lfw.jpg?raw=True"
@@ -52,15 +58,13 @@ def represent(
 
 def test_same_embed_batch(obj: unittest.TestCase, img_paths: list):
     rs = layers.Rescaling(scale=1.0 / 255)
-    rsiz = layers.Resizing(
-        obj._image_shape[0], obj._image_shape[1], pad_to_aspect_ratio=True, fill_value=0
-    )
+    rsiz = layers.Resizing(obj._image_shape[0], obj._image_shape[1])
 
     a = []
     for img_path in img_paths:
         file = utils.get_file(origin=img_path, cache_subdir="tst_imgs")
         img = utils.load_img(file)
-        a.append(rsiz(utils.img_to_array(img, data_format="channels_last")))
+        a.append(rsiz(utils.img_to_array(img)))
 
     a = ops.stack(a)
 
@@ -82,20 +86,20 @@ def test_same_embed_batch(obj: unittest.TestCase, img_paths: list):
         df_embed.append(resp[0]["embedding"])
 
     dist = cosine_distance(my_embed, df_embed, axis=-1)
+    dist = dist.detach().cpu()
     np.testing.assert_allclose(dist, np.zeros_like(dist), atol=obj.atol, rtol=obj.rtol)
     # obj.assertAlmostEqual(float(dist), 0.0, places=4)
 
 
 def test_same_embed(obj: unittest.TestCase, img_path: str):
     rs = layers.Rescaling(scale=1.0 / 255)
-    rsiz = layers.Resizing(
-        obj._image_shape[0], obj._image_shape[1], pad_to_aspect_ratio=True, fill_value=0
-    )
+    rsiz = layers.Resizing(obj._image_shape[0], obj._image_shape[1])
 
     file = utils.get_file(origin=img_path, cache_subdir="tst_imgs")
     a = utils.load_img(file)
     a = utils.img_to_array(a)
     a = rs(rsiz(a))
+    # utils.array_to_img(a).save("Altered.png")
 
     my_embed = obj._embed_model(ops.expand_dims(a, axis=0), training=False)
 
@@ -117,9 +121,12 @@ def test_same_embed(obj: unittest.TestCase, img_path: str):
 
 def test_diff_embed(obj: unittest.TestCase, img_path_a, img_path_b):
     rs = layers.Rescaling(scale=1.0 / 255)
-    rsiz = layers.Resizing(
-        obj._image_shape[0], obj._image_shape[1], pad_to_aspect_ratio=True, fill_value=0
-    )
+    rsiz = layers.Resizing(obj._image_shape[0], obj._image_shape[1])
+
+    print(obj._image_shape)
+
+    print(rs)
+    print(rsiz)
 
     file_a = utils.get_file(origin=img_path_a, cache_subdir="tst_imgs")
     a = rs(rsiz(rgb_to_bgr(cv2.imread(file_a))))

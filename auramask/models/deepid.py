@@ -1,4 +1,4 @@
-from keras import Model, utils, layers, backend
+from keras import Model, utils, layers, backend, ops
 import os
 
 WEIGHTS_PATH = (
@@ -8,7 +8,8 @@ WEIGHTS_PATH = (
 
 
 def preprocess_input(x):
-    return layers.Rescaling(scale=1.0 / 255, offset=0)(x)
+    return ops.divide(x, 255)
+    # return layers.Rescaling(scale=1.0 / 255, offset=0)(x)
 
 
 def DeepID(
@@ -18,6 +19,7 @@ def DeepID(
     classes=160,
     preprocess=False,
     name="DeepID",
+    image_data_format=None,
 ):
     if not (weights in {"deepface", None} or os.path.exists(weights)):
         raise ValueError(
@@ -34,6 +36,9 @@ def DeepID(
             "as true, `classes` should be 160.  "
             f"Received: `classes={classes}.`"
         )
+
+    if not image_data_format:
+        image_data_format = backend.image_data_format()
 
     if input_tensor is None:
         img_input = layers.Input(shape=input_shape)

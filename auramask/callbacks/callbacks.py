@@ -3,6 +3,7 @@ from os import PathLike, getenv, path
 import os
 import string
 from typing import Any, Dict, List, Literal, Optional
+import numpy as np
 
 import wandb
 from wandb.sdk.lib import telemetry
@@ -13,7 +14,7 @@ from wandb.integration.keras import (
     WandbEvalCallback,
 )
 from wandb.integration.keras.callbacks.model_checkpoint import SaveStrategy
-from keras import preprocessing, ops
+from keras import preprocessing, ops, backend
 
 
 def get_model_summary(model):
@@ -28,60 +29,6 @@ def get_model_summary(model):
     return summary_string
 
 
-# class AuramaskBackupAndRestore(callbacks.BackupAndRestore):
-# def __init__(self, backup_dir, save_freq="epoch", delete_checkpoint=True):
-#     super().__init__(backup_dir, save_freq, delete_checkpoint)
-#     self._optimizer_state_path = file_utils.join(
-#         backup_dir, "optimizer_state.pkl"
-#     )
-
-# def on_train_begin(self, logs=None):
-#     """Get training state from temporary file and restore it."""
-#     if not self.model.built:
-#         raise ValueError(
-#             "To use the BackupAndRestore callback, "
-#             "you model must be built before you call `fit()`. "
-#             f"Model {self.model} is unbuilt. You can build it "
-#             "beforehand by calling it on a batch of data."
-#         )
-#     if file_utils.exists(self._weights_path):
-#         if (
-#             self.model.optimizer is not None
-#             and not self.model.optimizer.built
-#         ):
-#             # Make sure optimizer weights exist before loading.
-#             self.model.optimizer.build(self.model.trainable_variables)
-#         self.model.model.load_weights(self._weights_path)
-#     if file_utils.exists(self._optimizer_state_path):
-#         opt_weights = pickle.load(self._optimizer_state_path)
-#         self.model.optimizer.set_weights(opt_weights)
-#         print("Optimizer", self.model.optimizer)
-
-# def _save_model(self):
-# """Saves the model.
-
-# Args:
-#     epoch: the epoch this iteration is in.
-#     batch: the batch this iteration is in. `None` if the `save_freq`
-#         is set to `"epoch"`.
-#     logs: the `logs` dict passed in to `on_batch_end` or `on_epoch_end`.
-# """
-# # Create host directory if it doesn't exist.
-# if not file_utils.exists(self.backup_dir):
-#     file_utils.makedirs(self.backup_dir)
-# self.model.model.save_weights(filepath=self._weights_path, overwrite=True)
-# with file_utils.File(self._training_metadata_path, "w") as f:
-#     training_metadata = {
-#         "epoch": self._current_epoch,
-#         "batch": self._last_batch_seen,
-#     }
-#     f.write(json.dumps(training_metadata))
-# import keras
-# keras.optimizers.Adam().save_own_variables()
-# print("Optimizer", self.model.optimizer)
-# pickle.dump(self.model.optimizer, file=self._optimizer_state_path)
-
-
 class AuramaskCallback(WandbEvalCallback):
     def __init__(
         self,
@@ -94,7 +41,10 @@ class AuramaskCallback(WandbEvalCallback):
         super().__init__(
             data_table_columns=data_table_columns, pred_table_columns=pred_table_columns
         )
-        self.x = validation_data[:num_samples]
+        if backend.backend() == "torch":
+            self.x = validation_data[:num_samples].detach().cpu()
+        else:
+            self.x = validation_data[:num_samples]
         self.log_freq = log_freq
         self.__cur_epoch = 0
 
@@ -124,9 +74,13 @@ class AuramaskCallback(WandbEvalCallback):
 
     def save_results(self):
         y, mask = self.model(self.x, training=False)
-        if mask.shape[-1] > 3 and mask.shape[-1] % 3 == 0:
+        if ops.shape(mask)[-1] > 3 and ops.shape(mask)[-1] % 3 == 0:
             data = {}
             r = ops.split(mask, 8, axis=-1)
+            if backend.backend() == "torch":
+                y = ops.convert_to_numpy(y)
+                r = ops.convert_to_numpy(r)
+
             for i, r_n in enumerate(r):
                 data["r%d" % i] = [
                     wandb.Image(
@@ -142,6 +96,9 @@ class AuramaskCallback(WandbEvalCallback):
             wandb.log(data, step=wandb.run.step)
 
         else:
+            if backend.backend() == "torch":
+                y = ops.convert_to_numpy(y)
+                mask = ops.convert_to_numpy(mask)
             wandb.log(
                 {
                     "image": [
@@ -172,6 +129,23 @@ class AuramaskCallback(WandbEvalCallback):
 
     def on_train_end(self, logs: Dict[str, float] | None = None) -> None:
         self.save_results()
+
+
+class AuramaskStopOnNaN(k_callbacks.TerminateOnNaN):
+    def __init__(self):
+        super().__init__()
+
+    def on_batch_end(self, batch, logs=None):
+        logs = logs or {}
+        loss = logs.get("loss")
+        if loss is not None:
+            if np.isnan(loss) or np.isinf(loss):
+                wandb.alert(
+                    title="NaN Termination",
+                    text="NaN value detected in one or more of the losses",
+                    level=wandb.AlertLevel.ERROR,
+                )
+                self.model.stop_training = True
 
 
 class AuramaskCheckpoint(k_callbacks.ModelCheckpoint):
@@ -357,5 +331,6 @@ def init_callbacks(hparams: dict, sample, logdir, note: str = ""):
             log_freq=int(getenv("AURAMASK_LOG_FREQ", 5)),
         )
     )
+    callbacks.append(AuramaskStopOnNaN())
     # callbacks.append(LearningRateScheduler())
     return callbacks

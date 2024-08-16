@@ -1,4 +1,4 @@
-from keras import ops, layers, models, Variable, activations
+from keras import ops, layers, models, Variable, activations, backend as K
 import numpy as np
 
 
@@ -113,7 +113,7 @@ class CLIPTextTransformer(models.Model):
         self.encoder = CLIPEncoder()
         self.final_layer_norm = layers.LayerNormalization(epsilon=1e-5)
         self.causal_attention_mask = Variable(
-            ops.triu(ops.ones((1, 1, 77, 77), dtype="float32") * -np.inf, k=1)
+            ops.triu(ops.ones((1, 1, 77, 77), dtype=K.floatx()) * -np.inf, k=1)
         )
 
     def call(self, inputs):

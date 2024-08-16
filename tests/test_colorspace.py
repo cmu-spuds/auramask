@@ -1,5 +1,5 @@
 import unittest
-from keras import ops, random
+from keras import ops, random, backend as K
 
 from auramask.utils.colorspace import ColorSpaceEnum
 from numpy import testing
@@ -9,12 +9,12 @@ class ColorTransformMethods(unittest.TestCase):
     def setUp(self) -> None:
         self._test_img = ops.convert_to_tensor(
             random.uniform(
-                (224, 224, 3), minval=0, maxval=1.0, dtype="float32", seed=123
+                (224, 224, 3), minval=0, maxval=1.0, dtype=K.floatx(), seed=123
             )
         )
         self._test_batch_imgs = ops.convert_to_tensor(
             random.uniform(
-                (5, 224, 224, 3), minval=0, maxval=1.0, dtype="float32", seed=456
+                (5, 224, 224, 3), minval=0, maxval=1.0, dtype=K.floatx(), seed=456
             )
         )
         self.atol = 1.2e-4
@@ -83,7 +83,6 @@ class ColorTransformMethods(unittest.TestCase):
             atol=self.atol,
             rtol=self.rtol,
         )
-        # testing.assert_allclose(tf_to_, tf.subtract(to_, [0.,0.5,0.5]))
 
     def test_to_and_from_yuv(self):
         processed_ = ColorSpaceEnum.YUV.value[0](self._test_img)
