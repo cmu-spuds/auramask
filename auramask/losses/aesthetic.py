@@ -1,5 +1,5 @@
 from typing import Literal
-from keras import ops, KerasTensor, Loss
+from keras import ops, KerasTensor, Loss, backend as K
 from auramask.models.nima import NIMA
 
 
@@ -10,7 +10,7 @@ def _normalize_labels(labels: KerasTensor) -> KerasTensor:
 
 def calc_mean_score(score_dist) -> KerasTensor:
     score_dist = _normalize_labels(score_dist)
-    pred_score = ops.sum(score_dist * ops.arange(1, 11, dtype="float32"), axis=1)
+    pred_score = ops.sum(score_dist * ops.arange(1, 11, dtype=K.floatx()), axis=1)
     return pred_score
 
 

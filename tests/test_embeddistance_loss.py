@@ -1,5 +1,5 @@
 import unittest
-from keras import metrics, random, ops
+from keras import metrics, random, ops, backend as K
 from numpy import testing
 
 from auramask.losses.embeddistance import cosine_distance
@@ -21,7 +21,7 @@ class TestCosineDistance(unittest.TestCase):
     # Test Same CD: 0
     def test_same_embed(self):
         a = random.uniform(
-            self._image_shape, minval=0, maxval=1.0, dtype="float32", seed=123
+            self._image_shape, minval=0, maxval=1.0, dtype=K.floatx(), seed=123
         )
         b = ops.copy(a)
         dist = cosine_distance(a, b, axis=-1)

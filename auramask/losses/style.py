@@ -1,6 +1,5 @@
 from typing import Callable
-import keras
-from keras import ops, layers
+from keras import ops, layers, Loss, Model, applications, backend as K
 
 from auramask.utils.distance import cosine_distance
 from auramask.utils.stylerefs import StyleRefs
@@ -54,7 +53,7 @@ def get_gram_matrix(x, norm_by_channels=False, flatten=False):
     return gram
 
 
-class StyleLoss(keras.Loss):
+class StyleLoss(Loss):
     def __init__(
         self,
         name="StyleLoss",
@@ -80,9 +79,9 @@ class StyleLoss(keras.Loss):
             model_obj = {}
 
         if "vgg19" not in model_obj.keys():
-            inp = keras.layers.Input(shape=(None, None, 3))
-            x = keras.applications.vgg19.preprocess_input(inp)
-            model = keras.applications.VGG19(
+            inp = layers.Input(shape=(None, None, 3))
+            x = applications.vgg19.preprocess_input(inp)
+            model = applications.VGG19(
                 weights="imagenet", include_top=False, input_tensor=x
             )
             model.trainable = False
@@ -96,7 +95,7 @@ class StyleLoss(keras.Loss):
                 outputs_dict[layer.name] = layer.output
 
         # Feature extractor
-        self.feature_extractor = keras.Model(inputs=inp, outputs=outputs_dict)
+        self.feature_extractor = Model(inputs=inp, outputs=outputs_dict)
         self.feature_extractor.trainable = False
 
         # Style reference
@@ -110,7 +109,7 @@ class StyleLoss(keras.Loss):
             self.S[layer_name] = get_gram_matrix(
                 target[layer_name], norm_by_channels=True, flatten=True
             )
-        self.N = ops.convert_to_tensor(len(style_layers), "float32")
+        self.N = ops.convert_to_tensor(len(style_layers), K.floatx())
 
     def get_config(self):
         base_config = super().get_config()
@@ -133,6 +132,5 @@ class StyleLoss(keras.Loss):
                 pred_layer_features, norm_by_channels=True, flatten=True
             )
             sl = self.distance(S, C)
-            loss = ops.add(loss, ops.true_divide(sl, self.N))
-
+            loss = ops.add(loss, ops.divide(sl, self.N))
         return loss

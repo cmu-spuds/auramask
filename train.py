@@ -23,11 +23,7 @@ from auramask.losses.embeddistance import (
 )
 from auramask.losses.aesthetic import AestheticLoss
 from auramask.losses.ssim import (
-    GRAYSSIM,
     DSSIMObjective,
-    MSSSIMLoss,
-    SSIMLoss,
-    YUVSSIMLoss,
 )
 from auramask.losses.style import StyleLoss, StyleRefs
 from auramask.losses.variation import VariationLoss
@@ -52,8 +48,6 @@ from keras import optimizers as opts, losses as ls, activations, ops, utils
 
 # Global hparams object
 hparams: dict = {}
-
-keras.config.disable_traceback_filtering()
 
 
 # Path checking and creation if appropriate
@@ -141,9 +135,7 @@ def parse_args():
             "squeeze",
             "mse",
             "mae",
-            "ssim",
-            "msssim",
-            "gsssim",
+            "dsssim",
             "nima",
             "ffl",
             "exposure",
@@ -270,22 +262,6 @@ def load_data():
             .prefetch(-1)
         )
 
-        # import tensorflow_datasets as tfds
-
-        # for example in v_ds.take(1):
-        #     print(example[1][0])
-        #     print(example[1][1])
-        #     # print(tf.reduce_mean(example, axis=[-1,-2,-3]), tf.math.reduce_std(example, axis=[-1,-2,-3]))
-        #     # print(tf.reduce_max(example, axis=[-1,-2,-3]), tf.reduce_min(example, axis=[-1,-2,-3]))
-
-        # for example in t_ds.take(1):
-        #     print(example[1][0])
-        #     print(example[1][1])
-
-        # tfds.benchmark(v_ds)
-        # tfds.benchmark(t_ds)
-
-        # exit()
     elif keras.backend.backend() == "torch":
         keras.backend.set_image_data_format("channels_last")
         F = hparams["F"]
@@ -303,6 +279,7 @@ def load_data():
             t_ds.with_format("torch"),
             hparams["batch"],
             shuffle=True,
+            drop_last=True,
             collate_fn=transform,
         )
 
@@ -317,18 +294,6 @@ def load_data():
             shuffle=False,
             collate_fn=v_transform,
         )
-
-        # for v in v_ds:
-        #     print(v[1][0])
-        #     print(ops.shape(v[0]))
-        #     print(ops.shape(v[1][0]))
-        #     break
-
-        # for t in t_ds:
-        #     print(ops.shape(t[0]))
-        #     print(ops.shape(t[1][0]))
-        #     break
-        # exit()
 
     hparams["dataset"] = ds.name.lower()
 
@@ -356,9 +321,6 @@ def initialize_loss():
             else:  # Loss as described by ReFace
                 losses.append(FaceEmbeddingLoss(f=f))
                 weights.append(rho / len(F))
-            # metrics.append(
-            #     PercentageOverThreshold(f=f, threshold=f.get_threshold())
-            # )
             loss_config[losses[-1].name] = losses[-1].get_config() | {
                 "weight": weights[-1]
             }
@@ -385,23 +347,6 @@ def initialize_loss():
                 cs_transforms.append(False)
             elif loss_i == "mae":
                 tmp_loss = ls.MeanAbsoluteError()
-                cs_transforms.append(False)
-            elif loss_i == "ssim":
-                tmp_loss = (
-                    SSIMLoss(
-                        max_val=1.0, filter_size=11, filter_sigma=1.5, k1=0.01, k2=0.03
-                    )
-                    if hparams["color_space"].name.casefold() != "yuv"
-                    else YUVSSIMLoss()
-                )
-                cs_transforms.append(False)
-            elif loss_i == "gsssim":
-                tmp_loss = GRAYSSIM(
-                    max_val=1.0, filter_size=11, filter_sigma=1.5, k1=0.01, k2=0.03
-                )
-                cs_transforms.append(is_not_rgb)
-            elif loss_i == "msssim":
-                tmp_loss = MSSSIMLoss()
                 cs_transforms.append(False)
             elif loss_i == "dsssim":
                 tmp_loss = DSSIMObjective()

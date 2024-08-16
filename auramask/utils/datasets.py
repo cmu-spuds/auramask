@@ -85,12 +85,10 @@ class DatasetEnum(Enum):
     @staticmethod
     def compute_embeddings(img_batch, embedding_models: list[FaceEmbedEnum]) -> dict:
         features = []
-        names = []
         if embedding_models:
             for model in embedding_models:
                 embed = model.get_model()(img_batch)
                 features.append(embed)
-                names.append(model.name)
 
         return tuple(features)
 

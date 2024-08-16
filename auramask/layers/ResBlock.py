@@ -1,4 +1,12 @@
-from keras import layers, activations, regularizers, constraints, initializers, saving
+from keras import (
+    layers,
+    activations,
+    regularizers,
+    constraints,
+    initializers,
+    saving,
+    backend as K,
+)
 from typing import Tuple, List, Union, AnyStr, Callable, Dict, Optional, Type
 from keras.src.utils.argument_validation import standardize_padding, standardize_tuple
 from keras.src.backend import standardize_data_format
@@ -28,7 +36,7 @@ class ResidualMultiplier(layers.Layer):
         self.multiplier = self.add_weight(
             name="multiplier",
             shape=[],
-            dtype="float32",
+            dtype=K.floatx(),
             initializer=initializers.Constant(value=self.initial_value),
         )
 
@@ -55,7 +63,7 @@ class ResidualBias(layers.Layer):
 
     def build(self, input_shape):
         self.bias = self.add_weight(
-            name="bias", shape=[], dtype="float32", initializer=initializers.Zeros()
+            name="bias", shape=[], dtype=K.floatx(), initializer=initializers.Zeros()
         )
 
     def call(self, inputs, **kwargs):

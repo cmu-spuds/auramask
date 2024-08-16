@@ -26,7 +26,7 @@ class PerceptualSimilarity(Metric):
         }
 
     def update_state(self, y_true, y_pred, sample_weight=None):
-        out = ops.reduce_mean(self.model([y_true, y_pred]))
+        out = ops.mean(self.model([y_true, y_pred]))
         self.similarity.assign_add(out)
 
     def result(self):

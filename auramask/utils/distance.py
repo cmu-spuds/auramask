@@ -1,4 +1,4 @@
-from keras import ops, KerasTensor, utils
+from keras import ops, KerasTensor, utils, backend as K
 
 
 def cosine_similarity(y_true: KerasTensor, y_pred: KerasTensor, axis=-1) -> KerasTensor:
@@ -51,7 +51,7 @@ def euclidean_distance(
     # of 1.0.
     dist_mask = ops.greater_equal(distances, 1e-18)
     distances = ops.maximum(distances, 1e-18)
-    distances = ops.sqrt(distances) * ops.cast(dist_mask, "float32")
+    distances = ops.sqrt(distances) * ops.cast(dist_mask, K.floatx())
 
     return distances
 

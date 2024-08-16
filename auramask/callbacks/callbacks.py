@@ -73,15 +73,14 @@ class AuramaskCallback(WandbEvalCallback):
         self.__cur_epoch = epoch
 
     def save_results(self):
-        if backend.backend() == "torch":
-            y, mask = self.model(self.x, training=False)
-            y = ops.convert_to_numpy(y)
-            mask = ops.convert_to_numpy(y)
-        else:
-            y, mask = self.model(self.x, training=False)
-        if mask.shape[-1] > 3 and mask.shape[-1] % 3 == 0:
+        y, mask = self.model(self.x, training=False)
+        if ops.shape(mask)[-1] > 3 and ops.shape(mask)[-1] % 3 == 0:
             data = {}
             r = ops.split(mask, 8, axis=-1)
+            if backend.backend() == "torch":
+                y = ops.convert_to_numpy(y)
+                r = ops.convert_to_numpy(r)
+
             for i, r_n in enumerate(r):
                 data["r%d" % i] = [
                     wandb.Image(
@@ -97,6 +96,9 @@ class AuramaskCallback(WandbEvalCallback):
             wandb.log(data, step=wandb.run.step)
 
         else:
+            if backend.backend() == "torch":
+                y = ops.convert_to_numpy(y)
+                mask = ops.convert_to_numpy(mask)
             wandb.log(
                 {
                     "image": [

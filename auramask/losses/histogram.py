@@ -91,13 +91,13 @@
 #             diff_u0 = abs(
 #                 Iu0
 #                 - ops.expand_dims(
-#                     ops.cast(ops.linspace(-3, 3, num=self.h), "float32"), axis=0
+#                     ops.cast(ops.linspace(-3, 3, num=self.h), K.floatx()), axis=0
 #                 )
 #             )
 #             diff_v0 = abs(
 #                 Iv0
 #                 - ops.expand_dims(
-#                     ops.cast(ops.linspace(-3, 3, num=self.h), "float32"), axis=0
+#                     ops.cast(ops.linspace(-3, 3, num=self.h), K.floatx()), axis=0
 #                 )
 #             )
 #             if self.method == "thresholding":
@@ -125,8 +125,8 @@
 #             # 	raise Exception(
 #             # 		f'Wrong kernel method. It should be either thresholding, RBF,'
 #             # 		f' inverse-quadratic. But the given value is {self.method}.')
-#             diff_u0 = ops.cast(diff_u0, "float32")
-#             diff_v0 = ops.cast(diff_v0, "float32")
+#             diff_u0 = ops.cast(diff_u0, K.floatx())
+#             diff_v0 = ops.cast(diff_v0, K.floatx())
 #             a = torch.t(Iy * diff_u0)
 #             hists[l, 0, :, :] = torch.mm(a, diff_v0)
 
@@ -139,13 +139,13 @@
 #             diff_u1 = abs(
 #                 Iu1
 #                 - ops.expand_dims(
-#                     ops.cast(ops.linspace(-3, 3, num=self.h), "float32"), axis=0
+#                     ops.cast(ops.linspace(-3, 3, num=self.h), K.floatx()), axis=0
 #                 )
 #             )
 #             diff_v1 = abs(
 #                 Iv1
 #                 - ops.expand_dims(
-#                     ops.cast(ops.linspace(-3, 3, num=self.h), "float32"), axis=0
+#                     ops.cast(ops.linspace(-3, 3, num=self.h), K.floatx()), axis=0
 #                 )
 #             )
 
@@ -171,8 +171,8 @@
 #                 diff_u1 = 1 / (1 + diff_u1)  # Inverse quadratic
 #                 diff_v1 = 1 / (1 + diff_v1)
 
-#             diff_u1 = ops.cast(diff_u1, "float32")
-#             diff_v1 = ops.cast(diff_v1, "float32")
+#             diff_u1 = ops.cast(diff_u1, K.floatx())
+#             diff_v1 = ops.cast(diff_v1, K.floatx())
 #             a = torch.t(Iy * diff_u1)
 #             hists[l, 1, :, :] = torch.mm(a, diff_v1)
 
@@ -185,13 +185,13 @@
 #             diff_u2 = abs(
 #                 Iu2
 #                 - ops.expand_dims(
-#                     ops.cast(ops.linspace(-3, 3, num=self.h), "float32"), axis=0
+#                     ops.cast(ops.linspace(-3, 3, num=self.h), K.floatx()), axis=0
 #                 )
 #             )
 #             diff_v2 = abs(
 #                 Iv2
 #                 - ops.expand_dims(
-#                     ops.cast(ops.linspace(-3, 3, num=self.h), "float32"), axis=0
+#                     ops.cast(ops.linspace(-3, 3, num=self.h), K.floatx()), axis=0
 #                 )
 #             )
 #             if self.method == "thresholding":
@@ -215,8 +215,8 @@
 #                 )
 #                 diff_u2 = 1 / (1 + diff_u2)  # Inverse quadratic
 #                 diff_v2 = 1 / (1 + diff_v2)
-#             diff_u2 = ops.cast(diff_u2, "float32")
-#             diff_v2 = ops.cast(diff_v2, "float32")
+#             diff_u2 = ops.cast(diff_u2, K.floatx())
+#             diff_v2 = ops.cast(diff_v2, K.floatx())
 #             a = torch.t(Iy * diff_u2)
 #             hists[l, 2, :, :] = torch.mm(a, diff_v2)
 
