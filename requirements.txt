@@ -1,7 +1,7 @@
 datasets[vision]
 keras_unet_collection
 numpy
-tensorflow[and-cuda]
+tensorflow
 keras
 keras_cv
 wandb
