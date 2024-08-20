@@ -6,13 +6,11 @@ def NIMA(
     backbone: Literal["mobilenet"]
     | Literal["nasnetmobile"]
     | Literal["inceptionresnetv2"],
-    kind: Literal["aesthetic"] | Literal["technical"] = "aesthetic",
     rescale: bool = True,
 ):
     """_summary_
 
     Args:
-        kind (str): Choice of "aesthetic" or "technical"
         backbone: Right now only "mobilenet"
     """
     inp = layers.Input((None, None, 3))

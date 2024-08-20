@@ -22,9 +22,7 @@ from auramask.losses.embeddistance import (
     FaceEmbeddingThresholdLoss,
 )
 from auramask.losses.aesthetic import AestheticLoss
-from auramask.losses.ssim import (
-    DSSIMObjective,
-)
+from auramask.losses.ssim import DSSIMObjective, GRAYSSIMObjective
 from auramask.losses.style import StyleLoss, StyleRefs
 from auramask.losses.variation import VariationLoss
 from auramask.losses.zero_dce import (
@@ -48,6 +46,8 @@ from keras import optimizers as opts, losses as ls, activations, ops, utils
 
 # Global hparams object
 hparams: dict = {}
+# keras.config.disable_traceback_filtering()
+keras.mixed_precision.set_dtype_policy("mixed_float16")
 
 
 # Path checking and creation if appropriate
@@ -136,13 +136,13 @@ def parse_args():
             "mse",
             "mae",
             "dsssim",
+            "gsssim",
             "nima",
             "ffl",
             "exposure",
             "color",
             "illumination",
             "spatial",
-            "aesthetic",
             "style",
             "content",
             "variation",
@@ -351,8 +351,11 @@ def initialize_loss():
             elif loss_i == "dsssim":
                 tmp_loss = DSSIMObjective()
                 cs_transforms.append(False)
+            elif loss_i == "gsssim":
+                tmp_loss = GRAYSSIMObjective()
+                cs_transforms.append(False)
             elif loss_i == "nima":
-                tmp_loss = AestheticLoss(name="NIMA-T", kind="nima-tech")
+                tmp_loss = AestheticLoss(name="NIMA-A", backbone="inceptionresnetv2")
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "exposure":
                 tmp_loss = ExposureControlLoss(mean_val=0.6)
@@ -375,11 +378,6 @@ def initialize_loss():
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "content":
                 tmp_loss = ContentLoss()
-                cs_transforms.append(is_not_rgb)
-            elif loss_i == "aesthetic":
-                tmp_loss = AestheticLoss(
-                    name="NIMA-A", kind="nima-aes", backbone="nasnetmobile"
-                )
                 cs_transforms.append(is_not_rgb)
             else:
                 tmp_loss = PerceptualLoss(backbone=loss_i)

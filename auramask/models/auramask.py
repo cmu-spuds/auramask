@@ -84,7 +84,7 @@ class AuraMask(Model):
                 idx += 1
             elif isinstance(loss, IlluminationSmoothnessLoss):
                 tmp_pred = mask
-                tmp_y = None
+                tmp_y = x
             else:
                 tmp_y, tmp_pred = (
                     (x, y_pred)

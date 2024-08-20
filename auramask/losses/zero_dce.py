@@ -1,4 +1,4 @@
-from keras import Loss, ops, Variable, KerasTensor, backend as K
+from keras import Loss, ops, KerasTensor, backend as K
 # Implementations pulled from https://github.com/keras-team/keras-io/blob/master/examples/vision/zero_dce.py
 
 """
@@ -76,7 +76,7 @@ class ExposureControlLoss(Loss):
         self, mean_val=0.6, window_size=16, name="ExposureControlLoss", **kwargs
     ):
         super().__init__(name=name, **kwargs)
-        self.mean_val = Variable(mean_val)
+        self.mean_val = mean_val
         self.window_size = window_size
 
     def call(self, y_true, y_pred):
@@ -92,7 +92,7 @@ class ExposureControlLoss(Loss):
         mean = ops.nn.average_pool(
             x, pool_size=self.window_size, strides=self.window_size, padding="valid"
         )
-        return ops.square(mean - self.mean_val)
+        return ops.square(ops.subtract(mean, self.mean_val))
 
 
 class IlluminationSmoothnessLoss(Loss):
@@ -127,19 +127,29 @@ class IlluminationSmoothnessLoss(Loss):
         batch_size = ops.shape(y_pred)[0]
         h_x = ops.shape(y_pred)[1]
         w_x = ops.shape(y_pred)[2]
-        count_h = (ops.shape(y_pred)[2] - 1) * ops.shape(y_pred)[1]
-        count_w = ops.shape(y_pred)[2] * (ops.shape(y_pred)[3] - 1)
-        h_tv = ops.sum(ops.square((y_pred[:, 1:, :, :] - y_pred[:, : h_x - 1, :, :])))
-        w_tv = ops.sum(ops.square((y_pred[:, :, 1:, :] - y_pred[:, :, : w_x - 1, :])))
+        count_h = ops.multiply(
+            ops.subtract(ops.shape(y_pred)[1], 1), ops.shape(y_pred)[2]
+        )
+        count_w = ops.multiply(
+            ops.shape(y_pred)[1], ops.subtract(ops.shape(y_pred)[2], 1)
+        )
+        h_tv = ops.sum(
+            ops.square(ops.subtract(y_pred[:, 1:, :, :], y_pred[:, : h_x - 1, :, :]))
+        )
+        w_tv = ops.sum(
+            ops.square(ops.subtract(y_pred[:, :, 1:, :], y_pred[:, :, : w_x - 1, :]))
+        )
         batch_size = ops.cast(batch_size, dtype=K.floatx())
         count_h = ops.cast(count_h, dtype=K.floatx())
         count_w = ops.cast(count_w, dtype=K.floatx())
-        return ops.multiply(
-            2,
-            ops.divide(
-                ops.add(ops.divide(h_tv, count_h), ops.divide(w_tv, count_w)),
-                batch_size,
-            ),
+        return ops.mean(
+            ops.multiply(
+                2,
+                ops.divide(
+                    ops.add(ops.divide(h_tv, count_h), ops.divide(w_tv, count_w)),
+                    batch_size,
+                ),
+            )
         )
 
 
@@ -154,16 +164,16 @@ class SpatialConsistencyLoss(Loss):
     def __init__(self, name="SpatialConsistencyLoss", **kwargs):
         super().__init__(name=name, **kwargs)
 
-        self.left_kernel = Variable(
+        self.left_kernel = ops.convert_to_tensor(
             [[[[0, 0, 0]], [[-1, 1, 0]], [[0, 0, 0]]]], dtype=K.floatx()
         )
-        self.right_kernel = Variable(
+        self.right_kernel = ops.convert_to_tensor(
             [[[[0, 0, 0]], [[0, 1, -1]], [[0, 0, 0]]]], dtype=K.floatx()
         )
-        self.up_kernel = Variable(
+        self.up_kernel = ops.convert_to_tensor(
             [[[[0, -1, 0]], [[0, 1, 0]], [[0, 0, 0]]]], dtype=K.floatx()
         )
-        self.down_kernel = Variable(
+        self.down_kernel = ops.convert_to_tensor(
             [[[[0, 0, 0]], [[0, 1, 0]], [[0, -1, 0]]]], dtype=K.floatx()
         )
 
