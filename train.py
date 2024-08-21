@@ -47,7 +47,6 @@ from keras import optimizers as opts, losses as ls, activations, ops, utils
 # Global hparams object
 hparams: dict = {}
 # keras.config.disable_traceback_filtering()
-keras.mixed_precision.set_dtype_policy("mixed_float16")
 
 
 # Path checking and creation if appropriate
@@ -124,6 +123,12 @@ def parse_args():
     parser.add_argument("-B", "--batch-size", dest="batch", type=int, default=32)
     parser.add_argument("-E", "--epochs", type=int, default=5)
     parser.add_argument("-s", "--steps-per-epoch", type=int, default=-1)
+    parser.add_argument(
+        "--mixed-precision",
+        default=True,
+        type=bool,
+        action=argparse.BooleanOptionalAction,
+    )
     parser.add_argument(
         "-L",
         "--losses",
@@ -446,6 +451,7 @@ def initialize_model():
         metrics=metrics,
         jit_compile=False,
     )
+
     return model
 
 
@@ -476,6 +482,11 @@ def main():
     logdir = hparams.pop("log_dir")
     note = hparams.pop("note")
     verbose = hparams.pop("verbose")
+    mixed_precision = hparams.pop("mixed_precision")
+
+    if mixed_precision:
+        print("Using mixed precision for training")
+        keras.mixed_precision.set_dtype_policy("mixed_float16")
 
     if not log:
         os.environ["WANDB_MODE"] = "offline"
