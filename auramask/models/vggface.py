@@ -13,9 +13,9 @@ WEIGHTS_PATH = (
 
 def preprocess_input(x):
     if backend.image_data_format() == "channels_last":
-        axis = -1
+        axis = 3
     else:
-        axis = -3
+        axis = 1
     b, g, r = ops.split(x, 3, axis=axis)
     b = ops.subtract(b, 93.540)
     g = ops.subtract(g, 104.7624)

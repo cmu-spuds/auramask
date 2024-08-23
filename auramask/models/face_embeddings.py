@@ -12,7 +12,6 @@ from auramask.models.vggface import VggFace
 # from auramask.utils.preprocessing import rgb_to_bgr
 
 
-# TODO: Concrete function execution (https://medium.com/tinyclues-vision/optimizing-tensorflow-models-for-inference-d3636cf34034)
 class FaceEmbedEnum(str, Enum):
     VGGFACE = "VGG-Face"
     FACENET = "Facenet"
