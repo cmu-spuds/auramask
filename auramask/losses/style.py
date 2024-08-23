@@ -19,7 +19,7 @@ def get_gram_matrix(x, norm_by_channels=False, flatten=False):
         gram - a tensor representing the Gram Matrix of x
     """
     if ops.ndim(x) == 3:
-        features = layers.Flatten()(ops.transpose(x, (2, 0, 1)))
+        features = layers.Flatten(dtype="float32")(ops.transpose(x, (2, 0, 1)))
 
         shape = ops.shape(x)
         C, H, W = shape[0], shape[1], shape[2]
@@ -34,7 +34,7 @@ def get_gram_matrix(x, norm_by_channels=False, flatten=False):
         # Reshape as a batch of 2D matrices with vectorized channels
         features = ops.reshape(x, (B, C, -1))
         # This is a batch of Gram matrices (B, C, C).
-        gram = layers.Dot(axes=2)([features, features])
+        gram = layers.Dot(axes=2, dtype="float32")([features, features])
     else:
         raise ValueError(
             "The input tensor should be either a 3d (H, W, C) "
@@ -42,13 +42,13 @@ def get_gram_matrix(x, norm_by_channels=False, flatten=False):
         )
     # Normalize the Gram matrix
     if norm_by_channels:
-        denominator = C * H * W  # Normalization from Johnson
+        denominator = ops.multiply(ops.multiply(C, H), W)  # Normalization from Johnson
     else:
-        denominator = H * W  # Normalization from Google
-    gram = gram / ops.cast(denominator, x.dtype)
+        denominator = ops.multiply(H, W)  # Normalization from Google
+    gram = ops.divide(gram, ops.cast(denominator, "float32"))
 
     if flatten:
-        gram = layers.Flatten()(gram)
+        gram = layers.Flatten(dtype="float32")(gram)
 
     return gram
 
@@ -122,9 +122,9 @@ class StyleLoss(Loss):
 
     def call(self, X, y_pred):
         del X
-        y_pred = layers.Rescaling(scale=255)(y_pred)
+        y_pred = layers.Rescaling(scale=255, dtype="float32")(y_pred)
         pred_features = self.feature_extractor(y_pred, training=False)
-        loss = ops.zeros(shape=())
+        loss = ops.zeros(shape=(), dtype="float32")
 
         for layer_name, S in self.S.items():
             pred_layer_features = pred_features[layer_name]
@@ -133,4 +133,5 @@ class StyleLoss(Loss):
             )
             sl = self.distance(S, C)
             loss = ops.add(loss, ops.divide(sl, self.N))
+        loss = ops.cast(loss, dtype=K.floatx())
         return loss
