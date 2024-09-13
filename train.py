@@ -213,7 +213,7 @@ def load_data():
 
     w, h = hparams["input"]
 
-    augmenters = DatasetEnum.get_augmenters(
+    augmenters = ds.get_augmenters(
         {"augs_per_image": 1, "rate": 0.5},
         {"augs_per_image": 1, "rate": 0.2, "magnitude": 0.5},
     )
@@ -224,22 +224,20 @@ def load_data():
             t_ds.to_tf_dataset(
                 columns=ds.value[2],
                 batch_size=hparams["batch"],
-                collate_fn=DatasetEnum.data_collater,
+                collate_fn=ds.data_collater,
                 collate_fn_args={"args": {"w": w, "h": h, "crop": True}},
                 prefetch=False,
                 shuffle=True,
                 drop_remainder=True,
             )
             .map(
-                lambda x: DatasetEnum.data_augmenter(
-                    x, augmenters["geom"], augmenters["aug"]
-                ),
+                lambda x: ds.data_augmenter(x, augmenters["geom"], augmenters["aug"]),
                 num_parallel_calls=-1,
             )
             .map(
                 lambda x, y: (
                     x,
-                    DatasetEnum.compute_embeddings(y, hparams["F"]),
+                    ds.compute_embeddings(y, hparams["F"]),
                 ),
                 num_parallel_calls=-1,
             )
@@ -251,7 +249,7 @@ def load_data():
             v_ds.to_tf_dataset(
                 columns=ds.value[2],
                 batch_size=hparams["batch"],
-                collate_fn=DatasetEnum.data_collater,
+                collate_fn=ds.data_collater,
                 collate_fn_args={"args": {"w": w, "h": h, "crop": True}},
                 prefetch=True,
                 drop_remainder=True,
@@ -259,7 +257,7 @@ def load_data():
             .map(
                 lambda x: (
                     x,
-                    DatasetEnum.compute_embeddings(x, hparams["F"]),
+                    ds.compute_embeddings(x, hparams["F"]),
                 ),
                 num_parallel_calls=-1,
             )
@@ -272,14 +270,14 @@ def load_data():
         F = hparams["F"]
         from torch.utils.data import DataLoader
 
-        def transform(x):
-            x = DatasetEnum.data_collater(x, {"w": w, "h": h, "crop": True})
-            x, y = DatasetEnum.data_augmenter(
-                x["image"], augmenters["geom"], augmenters["aug"]
-            )
-            return (x, DatasetEnum.compute_embeddings(y, F))
+        # This transform collates the data, converting all features into tensors, scaling to 0-1, resizing, and cropping
+        # Then it augments the data according to the random geometric and pixel-level augmentations set in preprocessing
+        # Finally, the embeddings of the unaltered image is pre-computed for each of the models in F
+        def transform(example):
+            example = ds.data_collater(example, {"w": w, "h": h, "crop": True})
+            return ds.data_augmenter(example, augmenters["geom"], augmenters["aug"], F)
 
-        t_ds = t_ds.select_columns("image")
+        t_ds = t_ds.select_columns(ds.value[-1])
         t_ds = DataLoader(
             t_ds.with_format("torch"),
             hparams["batch"],
@@ -288,17 +286,36 @@ def load_data():
             collate_fn=transform,
         )
 
-        def v_transform(x):
-            x = DatasetEnum.data_collater(x, {"w": w, "h": h, "crop": True})["image"]
-            return (x, DatasetEnum.compute_embeddings(x, F))
+        def v_transform(data):
+            data = ds.data_collater(data, {"w": w, "h": h, "crop": True})
+            x = data[ds.value[-1][0]]
+            if len(ds.value[-1]) > 1:
+                y = data[ds.value[-1][1]]
+            else:
+                y = ops.copy(x)
+            return (x, (y, ds.compute_embeddings(x, F)))
 
-        v_ds = v_ds.select_columns("image")
+        v_ds = v_ds.select_columns(ds.value[-1])
         v_ds = DataLoader(
             v_ds.with_format("torch"),
             hparams["batch"],
             shuffle=False,
             collate_fn=v_transform,
         )
+
+    # from keras import preprocessing
+
+    # for example in t_ds:
+    #     preprocessing.image.array_to_img(example[0][0]).save('train_in.png')
+    #     preprocessing.image.array_to_img(example[1][0]).save('train_targ.png')
+    #     print(example[2][0].shape)
+    #     break
+    # for example in v_ds:
+    #     preprocessing.image.array_to_img(example[0][0]).save('val_in.png')
+    #     preprocessing.image.array_to_img(example[1][0]).save('val_targ.png')
+    #     print(example[2][0].shape)
+    #     break
+    # exit(1)
 
     hparams["dataset"] = ds.name.lower()
 

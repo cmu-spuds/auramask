@@ -92,9 +92,20 @@ class DatasetEnum(Enum):
 
         return tuple(features)
 
-    @staticmethod
-    def data_augmenter(examples, geom, aug):
-        data = geom(examples)  # Geometric augmentations
-        y = data  # Separate out target
-        x = aug(data)  # Pixel-level modifications
-        return (x, y)
+    def data_augmenter(
+        self, examples, geom, aug, embedding_models: list[FaceEmbedEnum]
+    ):
+        cols = self.value[-1]
+        x = examples[cols[0]]
+        # TODO: Make sure when geometric is applied it is applied the same to x and y
+        x = geom(x)  # Apply geometric modifications
+
+        # Determine if desired output is a referenced output or the original image
+        if len(cols) > 1:
+            y = examples[cols[1]]
+        else:
+            y = ops.copy(x)  # Separate out target
+
+        emb = self.compute_embeddings(x, embedding_models)
+        x = aug(x)  # Pixel-level modifications
+        return (x, (y, emb))
