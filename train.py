@@ -402,7 +402,7 @@ def initialize_loss():
                 tmp_loss = ContentLoss()
                 cs_transforms.append(is_not_rgb)
             else:
-                tmp_loss = PerceptualLoss(backbone=loss_i)
+                tmp_loss = PerceptualLoss(backbone=loss_i, spatial=False)
                 cs_transforms.append(is_not_rgb)
 
             losses.append(tmp_loss)
