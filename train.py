@@ -124,6 +124,12 @@ def parse_args():
     parser.add_argument("-E", "--epochs", type=int, default=5)
     parser.add_argument("-s", "--steps-per-epoch", type=int, default=-1)
     parser.add_argument(
+        "--lpips-spatial",
+        type=bool,
+        default=True,
+        action=argparse.BooleanOptionalAction,
+    )
+    parser.add_argument(
         "--mixed-precision",
         default=True,
         type=bool,
@@ -402,7 +408,8 @@ def initialize_loss():
                 tmp_loss = ContentLoss()
                 cs_transforms.append(is_not_rgb)
             else:
-                tmp_loss = PerceptualLoss(backbone=loss_i, spatial=False)
+                spatial = hparams.pop("lpips_spatial")
+                tmp_loss = PerceptualLoss(backbone=loss_i, spatial=spatial)
                 cs_transforms.append(is_not_rgb)
 
             losses.append(tmp_loss)
