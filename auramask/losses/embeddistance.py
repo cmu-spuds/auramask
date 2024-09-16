@@ -22,7 +22,7 @@ class FaceEmbeddingLoss(Loss):
         self,
         f: FaceEmbedEnum,
         d: Callable = cosine_distance,
-        name="FaceEmbeddingLoss",
+        name="FE_",
         reduction="sum_over_batch_size",
         **kwargs,
     ):
@@ -55,7 +55,7 @@ class FaceEmbeddingThresholdLoss(FaceEmbeddingLoss):
         f: FaceEmbedEnum,
         threshold: float,
         d: Callable = cosine_distance,
-        name="FaceEmbeddingThresholdLoss",
+        name="FET_",
         reduction="sum_over_batch_size",
         **kwargs,
     ):

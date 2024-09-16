@@ -1,5 +1,5 @@
 from typing import Callable
-from keras import Loss, layers, applications, Model
+from keras import Loss, layers, applications, Model, ops
 
 from auramask.utils import distance
 
@@ -37,8 +37,6 @@ class ContentLoss(Loss):
             if layer.name is content_layer:
                 output = layer.output
 
-        output = layers.Flatten()(output)
-
         # Feature extractor
         self.feature_extractor = Model(inputs=inp, outputs=output)
         self.feature_extractor.trainable = False
@@ -59,4 +57,5 @@ class ContentLoss(Loss):
 
         # Add content loss
         loss = self.distance(X_features, pred_features)
+        loss = ops.sum(loss, axis=[1, 2])
         return loss
