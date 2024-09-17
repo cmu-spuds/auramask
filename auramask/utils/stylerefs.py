@@ -108,6 +108,11 @@ class StyleRefs(enum.Enum):
         "url": "https://www.itl.cat/pngfile/big/128-1285387_keith-haring-2-keith-haring-wallpaper6-madonna-into.jpg",
         "cid": "Qma3i63Ngg8gWkxa1BhtmtJJvWHZBU5zWg9LgTiHdZLX9p",
     }
+    INSTA_LOFI = {
+        "source": "ipfs",
+        "url": "http://ipfs.meekoracc.com/ipfs/Qmebq8cmMq1Az8wTZrZr5iuLbUma7YghVDEf59PoqdQAaf",
+        "cid": "Qmebq8cmMq1Az8wTZrZr5iuLbUma7YghVDEf59PoqdQAaf",
+    }
 
     def get_img(self):
         if self.value["source"] == "url":
