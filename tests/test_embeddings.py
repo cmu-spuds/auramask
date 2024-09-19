@@ -22,7 +22,20 @@ from auramask.models.deepid import DeepID
 from auramask.models.facenet import FaceNet
 from auramask.models.openface import OpenFace
 from auramask.models.vggface import VggFace
-from auramask.utils.preprocessing import rgb_to_bgr
+
+
+def rgb_to_bgr(x):
+    if backend.image_data_format() == "channels_first":
+        # 'RGB'->'BGR'
+        if backend.ndim(x) == 3:
+            x = x[::-1, ...]
+        else:
+            x = x[:, ::-1, ...]
+    else:
+        # 'RGB'->'BGR'
+        x = x[..., ::-1]
+    return x
+
 
 config.disable_traceback_filtering()
 backend.set_image_data_format("channels_last")
@@ -129,7 +142,7 @@ def test_diff_embed(obj: unittest.TestCase, img_path_a, img_path_b):
     print(rsiz)
 
     file_a = utils.get_file(origin=img_path_a, cache_subdir="tst_imgs")
-    a = rs(rsiz(rgb_to_bgr(cv2.imread(file_a))))
+    a = rs(rsiz(cv2.imread(file_a)))
 
     my_embed = obj._embed_model(ops.expand_dims(a, axis=0), training=False)
 
@@ -168,7 +181,7 @@ class TestArcFaceEmbedding(unittest.TestCase):
     def test_preprocess_input(self):
         file = utils.get_file(origin=FDF_IMG, cache_subdir="tst_imgs")
         a: Image = utils.load_img(file, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
+        a = utils.img_to_array(a) / 255.0
         a = ops.expand_dims(a, axis=0)
         from auramask.models.arcface import preprocess_input
 
@@ -243,7 +256,7 @@ class TestVGGFaceEmbedding(unittest.TestCase):
     def test_preprocess_input(self):
         file = utils.get_file(origin=FDF_IMG, cache_subdir="tst_imgs")
         a: Image = utils.load_img(file, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
+        a = utils.img_to_array(a) / 255.0
         a = ops.expand_dims(a, axis=0)
         from auramask.models.vggface import preprocess_input
 
@@ -325,7 +338,7 @@ class TestFaceNetEmbedding(unittest.TestCase):
     def test_preprocess_input(self):
         file = utils.get_file(origin=FDF_IMG, cache_subdir="tst_imgs")
         a: Image = utils.load_img(file, target_size=(self._image_shape))
-        a = rgb_to_bgr(utils.img_to_array(a) / 255.0)
+        a = utils.img_to_array(a) / 255.0
         a = ops.expand_dims(a, axis=0)
         from auramask.models.facenet import preprocess_input
 

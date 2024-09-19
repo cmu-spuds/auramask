@@ -1,7 +1,8 @@
 from enum import Enum
 from typing import TypedDict
 from datasets import load_dataset
-from auramask.models.face_embeddings import FaceEmbedEnum
+
+# from auramask.models.face_embeddings import FaceEmbedEnum
 from auramask.utils import preprocessing
 from os import cpu_count
 from keras import ops, utils
@@ -100,19 +101,17 @@ class DatasetEnum(Enum):
         del loader
         return batch
 
-    @staticmethod
-    def compute_embeddings(img_batch, embedding_models: list[FaceEmbedEnum]) -> dict:
-        features = []
-        if embedding_models:
-            for model in embedding_models:
-                embed = model.get_model()(img_batch)
-                features.append(embed)
+    # @staticmethod
+    # def compute_embeddings(img_batch, embedding_models: list[FaceEmbedEnum]) -> dict:
+    #     features = []
+    #     if embedding_models:
+    #         for model in embedding_models:
+    #             embed = model.get_model()(img_batch, training=False)
+    #             features.append(embed)
 
-        return tuple(features)
+    #     return tuple(features)
 
-    def data_augmenter(
-        self, examples, geom, aug, embedding_models: list[FaceEmbedEnum]
-    ):
+    def data_augmenter(self, examples, geom, aug):
         cols = self.value[-1]
         x = examples[cols[0]]
 
@@ -130,6 +129,5 @@ class DatasetEnum(Enum):
         ]  # Apply geometric modifications
         x, y = np.stack([i["image"] for i in a]), ops.stack([j["mask"] for j in a])
 
-        emb = self.compute_embeddings(x, embedding_models)
         x = ops.stack([aug(image=i)["image"] for i in x])  # Pixel-level modifications
-        return (x, (y, emb))
+        return (x, y)

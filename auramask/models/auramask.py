@@ -73,24 +73,19 @@ class AuraMask(Model):
 
     def compute_loss(self, x=None, y=None, y_pred=None, sample_weight=None):
         del sample_weight
-        # Targets are passed as a tuple (y, precomputed_embeds)
-        target, embed = y
         # Predictions are passed as tuple (y_pred, mask)
         y_pred, mask = y_pred
         tloss = 0  # tracked total loss
 
-        idx = 0
-
         for loss, metric, l_w, l_c in self._custom_losses:
             if isinstance(loss, FaceEmbeddingLoss):
-                tmp_y, tmp_pred = (embed[idx], y_pred)
-                idx += 1
+                tmp_y, tmp_pred = (ops.stop_gradient(x), y_pred)
             elif isinstance(loss, IlluminationSmoothnessLoss):
                 tmp_pred = mask
-                tmp_y = target
+                tmp_y = y
             else:
                 tmp_y, tmp_pred = (
-                    (target, y_pred)
+                    (y, y_pred)
                     # (x_rgb, y_pred_rgb) if l_c is True else (x_mod, y_pred)
                 )
             sim_loss = loss(tmp_y, tmp_pred)
@@ -104,18 +99,14 @@ class AuraMask(Model):
 
     def compute_metrics(self, x, y, y_pred, sample_weight):
         del sample_weight
-        del x
 
-        target, emb = y
         y_pred, _ = y_pred
-        idx = 0
 
         for metric in self._metrics:
             if isinstance(metric, PercentageOverThreshold):
-                metric.update_state(emb[idx], y_pred)
-                idx += 1
+                metric.update_state(x, y_pred)
             else:
-                metric.update_state(target, y_pred)
+                metric.update_state(y, y_pred)
         return self.get_metrics_result()
 
     def get_metrics_result(self):
@@ -139,9 +130,7 @@ class AuraMask(Model):
     def _tensorflow_train_step(self, data):
         from tensorflow import GradientTape
 
-        X, y = (
-            data  # X is input image data, y is tuple of target image and pre-computed set of N embeddings (N x batch x Embeddings)
-        )
+        X, y = data  # X is input image data, y is the target image
 
         with GradientTape() as tape:
             # X = self.colorspace[0](X)  # Convert to chosen colorspace
@@ -164,9 +153,7 @@ class AuraMask(Model):
     def _torch_train_step(self, data):
         import torch
 
-        X, y = (
-            data  # X is input image data, y is tuple of target image and pre-computed set of N embeddings (N x batch x Embeddings)
-        )
+        X, y = data  # X is input image data, y is target image
 
         self.zero_grad()
 
@@ -180,20 +167,29 @@ class AuraMask(Model):
 
         with torch.no_grad():
             self.optimizer.apply(gradients, trainable_weights)
+            metrics = self.compute_metrics(x=X, y=y, y_pred=y_pred, sample_weight=None)
 
-        metrics = self.compute_metrics(x=X, y=y, y_pred=y_pred, sample_weight=None)
         metrics["loss"] = loss
         return metrics
 
-    def test_step(self, data):
-        X, y = (
-            data  # X is input image data, y is tuple of target image and pre-computed set of N embeddings (N x batch x Embeddings)
-        )
+    def test_step(self, *args, **kwargs):
+        if backend.backend() == "jax":
+            return self._jax_test_step(*args, **kwargs)
+        elif backend.backend() == "tensorflow":
+            return self._tensorflow_test_step(*args, **kwargs)
+        elif backend.backend() == "torch":
+            return self._torch_test_step(*args, **kwargs)
 
-        y_pred = self(X, training=False)
+    def _torch_test_step(self, data):
+        import torch
 
-        # Updates stateful loss metrics.
-        loss = self.compute_loss(x=X, y=y, y_pred=y_pred)
-        metrics = self.compute_metrics(x=X, y=y, y_pred=y_pred, sample_weight=None)
+        X, y = data  # X is input image data, y is target image
+
+        with torch.no_grad():
+            y_pred = self(X, training=False)
+
+            # Updates stateful loss metrics.
+            loss = self.compute_loss(x=X, y=y, y_pred=y_pred)
+            metrics = self.compute_metrics(x=X, y=y, y_pred=y_pred, sample_weight=None)
         metrics["loss"] = loss
         return metrics

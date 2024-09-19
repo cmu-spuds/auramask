@@ -242,13 +242,6 @@ def load_data():
                 lambda x: ds.data_augmenter(x, augmenters["geom"], augmenters["aug"]),
                 num_parallel_calls=-1,
             )
-            .map(
-                lambda x, y: (
-                    x,
-                    ds.compute_embeddings(y, hparams["F"]),
-                ),
-                num_parallel_calls=-1,
-            )
             .repeat()
             .prefetch(-1)
         )
@@ -262,20 +255,12 @@ def load_data():
                 prefetch=True,
                 drop_remainder=True,
             )
-            .map(
-                lambda x: (
-                    x,
-                    ds.compute_embeddings(x, hparams["F"]),
-                ),
-                num_parallel_calls=-1,
-            )
             .cache()
             .prefetch(-1)
         )
 
     elif keras.backend.backend() == "torch":
         keras.backend.set_image_data_format("channels_last")
-        F = hparams["F"]
         insta = hparams["instagram_filter"]
         from torch.utils.data import DataLoader
 
@@ -284,7 +269,7 @@ def load_data():
         # Finally, the embeddings of the unaltered image is pre-computed for each of the models in F
         def transform(example):
             example = ds.data_collater(example, {"w": w, "h": h})
-            return ds.data_augmenter(example, augmenters["geom"], augmenters["aug"], F)
+            return ds.data_augmenter(example, augmenters["geom"], augmenters["aug"])
 
         if insta:
             t_ds = t_ds.map(
@@ -313,7 +298,7 @@ def load_data():
                 y = ops.convert_to_tensor(example["target"])
             else:
                 y = ops.copy(x)
-            return (x, (y, ds.compute_embeddings(x, F)))
+            return (x, y)
 
         if insta:
             v_ds = v_ds.map(
@@ -343,7 +328,7 @@ def load_data():
     #     preprocessing.image.array_to_img(ex[0]).save('val_in.png')
     #     preprocessing.image.array_to_img(ey[0]).save('val_targ.png')
     #     break
-    # exit(1)
+    # # exit(1)
 
     hparams["dataset"] = ds.name.lower()
 
