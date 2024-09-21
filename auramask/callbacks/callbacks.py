@@ -29,6 +29,24 @@ def get_model_summary(model):
     return summary_string
 
 
+class AuramaskWandbMetrics(WandbMetricsLogger):
+    def _get_lr(self) -> float | None:
+        if ops.is_tensor(
+            self.model.optimizer.learning_rate,
+        ) or (
+            hasattr(self.model.optimizer.learning_rate, "shape")
+            and self.model.optimizer.learning_rate.shape == ()
+        ):
+            return ops.convert_to_numpy(self.model.optimizer.learning_rate)
+        try:
+            return ops.convert_to_numpy(
+                self.model.optimizer.learning_rate(step=self.global_step)
+            )
+        except Exception as e:
+            wandb.termerror(f"Unable to log learning rate: {e}", repeat=False)
+            return None
+
+
 class AuramaskCallback(WandbEvalCallback):
     def __init__(
         self,
@@ -322,7 +340,7 @@ def init_callbacks(hparams: dict, sample, logdir, note: str = ""):
             )
         )
 
-    callbacks.append(WandbMetricsLogger(log_freq="epoch"))
+    callbacks.append(AuramaskWandbMetrics(log_freq="epoch"))
     callbacks.append(
         AuramaskCallback(
             validation_data=sample,

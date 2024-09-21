@@ -65,7 +65,7 @@ class LPIPS(Model):
         elif backend.backend() == "torch":
             import lpips
 
-            self.net = lpips.LPIPS(net=backbone)
+            self.net = lpips.LPIPS(net=backbone, spatial=spatial)
 
     def get_config(self):
         return {

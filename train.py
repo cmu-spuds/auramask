@@ -416,7 +416,9 @@ def initialize_loss():
                 cs_transforms.append(is_not_rgb)
             else:
                 spatial = hparams.pop("lpips_spatial")
-                tmp_loss = PerceptualLoss(backbone=loss_i, spatial=spatial)
+                tmp_loss = PerceptualLoss(
+                    backbone=loss_i, spatial=spatial, tolerance=0.2
+                )
                 cs_transforms.append(is_not_rgb)
 
             losses.append(tmp_loss)
@@ -472,7 +474,13 @@ def initialize_model():
     )
 
     losses, losses_w, losses_t, metrics = initialize_loss()
-    optimizer = opts.Adam(learning_rate=hparams["alpha"], clipnorm=1.0)
+    schedule = opts.schedules.ExponentialDecay(
+        initial_learning_rate=hparams["alpha"],
+        decay_steps=500,
+        decay_rate=0.96,
+        staircase=True,
+    )
+    optimizer = opts.Adam(learning_rate=schedule, clipnorm=1.0)
     model.compile(
         optimizer=optimizer,
         loss=losses,

@@ -1,8 +1,6 @@
 from enum import Enum
 from typing import TypedDict
 from datasets import load_dataset
-
-# from auramask.models.face_embeddings import FaceEmbedEnum
 from auramask.utils import preprocessing
 from os import cpu_count
 from keras import ops, utils
@@ -101,16 +99,6 @@ class DatasetEnum(Enum):
         del loader
         return batch
 
-    # @staticmethod
-    # def compute_embeddings(img_batch, embedding_models: list[FaceEmbedEnum]) -> dict:
-    #     features = []
-    #     if embedding_models:
-    #         for model in embedding_models:
-    #             embed = model.get_model()(img_batch, training=False)
-    #             features.append(embed)
-
-    #     return tuple(features)
-
     def data_augmenter(self, examples, geom, aug):
         cols = self.value[-1]
         x = examples[cols[0]]
@@ -121,9 +109,8 @@ class DatasetEnum(Enum):
         elif "target" in examples.keys():
             y = examples["target"]
         else:
-            y = ops.copy(x)  # Separate out target
+            y = np.copy(x)  # Separate out target
 
-        # TODO: Make sure when geometric is applied it is applied the same to x and y
         a = [
             geom(image=i, mask=j) for i, j in zip(x, y)
         ]  # Apply geometric modifications
