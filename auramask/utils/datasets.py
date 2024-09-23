@@ -67,13 +67,15 @@ class DatasetEnum(Enum):
                 elif ops.is_tensor(first):
                     batch[k] = np.stack(ops.convert_to_numpy(values))
                 elif PIL.Image.isImageType(first):
-                    batch[k] = np.stack([utils.img_to_array(v) for v in values])
+                    batch[k] = np.stack(
+                        [utils.img_to_array(v, dtype="uint8") for v in values]
+                    )
                 else:
                     batch[k] = np.array([v for v in values])
         elif ops.is_tensor(features):
             batch = {"image": ops.convert_to_numpy(features)}
         elif PIL.Image.isImageType(features):
-            batch = {"image": utils.img_to_array(features)}
+            batch = {"image": utils.img_to_array(features, dtype="uint8")}
         else:
             first = features[0]
             batch = {}
@@ -90,7 +92,9 @@ class DatasetEnum(Enum):
                 elif PIL.Image.isImageType(v):
                     batch[k] = np.stack(
                         [
-                            loader(image=utils.img_to_array(f[k]))["image"]
+                            loader(image=utils.img_to_array(f[k], dtype="uint8"))[
+                                "image"
+                            ]
                             for f in features
                         ]
                     )

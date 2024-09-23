@@ -16,7 +16,7 @@ def gen_image_loading_layers(w: int, h: int):
     """
     return A.Compose(
         [
-            A.ToFloat(max_value=255),
+            A.ToFloat(max_value=255, always_apply=True),
             A.LongestMaxSize(np.maximum(h, w)),
             A.CenterCrop(int(h * 0.875), int(w * 0.875)),
         ]

@@ -1,5 +1,6 @@
 from enum import Enum
 import pilgram
+from PIL.Image import Image
 
 
 class InstaFilterEnum(Enum):
@@ -30,7 +31,7 @@ class InstaFilterEnum(Enum):
     WILLOW = 24
     XPRO2 = 25
 
-    def filter_transform(self, features):
+    def filter_transform(self, features: list[Image]):
         batch = {}
         fn = getattr(pilgram, self.name.lower())
         batch["target"] = [fn(f) for f in features]

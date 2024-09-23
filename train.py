@@ -275,9 +275,10 @@ def load_data():
             t_ds = t_ds.map(
                 lambda x: insta.filter_transform(x),
                 input_columns=ds.value[-1][-1],
+                # load_from_cache_file=False,
                 batched=True,
                 batch_size=32,
-                num_proc=16,
+                num_proc=os.cpu_count(),
             ).select_columns(ds.value[-1] + ["target"])
         else:
             t_ds = t_ds.select_columns(ds.value[-1])
@@ -304,9 +305,10 @@ def load_data():
             v_ds = v_ds.map(
                 lambda x: insta.filter_transform(x),
                 input_columns=ds.value[-1][-1],
+                # load_from_cache_file=False,
                 batched=True,
                 batch_size=32,
-                num_proc=16,
+                num_proc=os.cpu_count(),
             )
         else:
             v_ds = v_ds.select_columns(ds.value[-1])
@@ -317,18 +319,22 @@ def load_data():
     # from keras import preprocessing
 
     # for example in t_ds:
-    #     ex = ops.convert_to_numpy(example[0])
+    #     # print(ops.max(example[0]), ops.min(example[0]))
+    #     # print(ops.max(example[1]), ops.min(example[1]))
+    #     ex = ops.convert_to_numpy(example[0][0])
     #     ey = ops.convert_to_numpy(example[1][0])
-    #     preprocessing.image.array_to_img(ex[3]).save('train_in.png')
-    #     preprocessing.image.array_to_img(ey[3]).save('train_targ.png')
+    #     preprocessing.image.array_to_img(ex).save('train_in.png')
+    #     preprocessing.image.array_to_img(ey).save('train_targ.png')
     #     break
     # for example in v_ds:
-    #     ex = ops.convert_to_numpy(example[0])
+    #     # print(ops.max(example[0]), ops.min(example[0]))
+    #     # print(ops.max(example[1]), ops.min(example[1]))
+    #     ex = ops.convert_to_numpy(example[0][0])
     #     ey = ops.convert_to_numpy(example[1][0])
-    #     preprocessing.image.array_to_img(ex[0]).save('val_in.png')
-    #     preprocessing.image.array_to_img(ey[0]).save('val_targ.png')
+    #     preprocessing.image.array_to_img(ex).save('val_in.png')
+    #     preprocessing.image.array_to_img(ey).save('val_targ.png')
     #     break
-    # # exit(1)
+    # exit(1)
 
     hparams["dataset"] = ds.name.lower()
 
@@ -439,7 +445,11 @@ def initialize_model():
 
     if base_model in [backbones.BaseModels.ZERODCE, backbones.BaseModels.RESZERODCE]:
         postproc = get_enhanced_image
-        preproc = None
+
+        def preproc(inputs):
+            inputs = keras.layers.Rescaling(scale=2, offset=-1)(inputs)
+            return inputs
+
     else:
 
         def preproc(inputs):
