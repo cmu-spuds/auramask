@@ -29,6 +29,8 @@ class FaceEmbeddingLoss(Loss):
         super().__init__(name=name + f.value, reduction=reduction)
         self.f = f
         self.d = d
+        self.net = self.f.get_model()
+        self.threshold = 1
 
     def get_config(self) -> dict:
         base_config = super().get_config()
@@ -44,9 +46,10 @@ class FaceEmbeddingLoss(Loss):
         y_true: KerasTensor,
         y_pred: KerasTensor,
     ) -> KerasTensor:
-        emb_adv = self.f.get_model()(y_pred, training=False)
-        distance = self.d(y_true, emb_adv, -1)
-        return ops.subtract(1, distance)
+        emb_adv = self.net(y_pred, training=False)
+        emb_true = self.net(y_true, training=False)
+        distance = self.d(emb_true, emb_adv, -1)
+        return ops.subtract(self.threshold, distance)
 
 
 class FaceEmbeddingThresholdLoss(FaceEmbeddingLoss):
@@ -68,50 +71,6 @@ class FaceEmbeddingThresholdLoss(FaceEmbeddingLoss):
         return {**base_config, **config}
 
     def call(self, y_true: KerasTensor, y_pred: KerasTensor) -> KerasTensor:
-        emb_adv = self.f.get_model()(y_pred, training=False)
-        distance = self.d(y_true, emb_adv, -1)
-        dist_thresh = ops.divide(ops.subtract(self.threshold, distance), self.threshold)
+        dist = super().call(y_true, y_pred)
+        dist_thresh = ops.divide(dist, self.threshold)
         return ops.nn.leaky_relu(dist_thresh, negative_slope=0.2 * self.threshold)
-
-
-# class EmbeddingDistanceLoss(Loss):
-#     """Computes the loss for Adversarial Transformation Network training as described by the ReFace paper.
-
-#     In general, this loss computes the distance from computed embeddings from a set of victim models (F)
-
-#     Args:
-#         F ([FaceEmbedEnum]): A set of face embedding extraction models for the model to attack.
-#     """
-
-#     def __init__(self, F, name="EmbeddingsLoss", **kwargs):
-#         super().__init__(name=name, **kwargs)
-#         self.F = FaceEmbedEnum.build_F(F)
-#         self.N = len(F)
-#         self.f = F
-
-#     def get_config(self) -> dict:
-#         return {
-#             "name": self.name,
-#             "F": [x.value for x in self.f],
-#         }
-
-#     def call(
-#         self,
-#         y_true,  # original images
-#         y_pred,  # perturbed images
-#     ):
-#         """Compute the loss across the set of target models (F)
-
-#         Args:
-#             y_true (_type_): Original image
-#             y_pred (_type_): Adversarially perturbed image
-
-#         Returns:
-#             tensorflow.Tensor : Normalized loss over models F
-#         """
-#         loss = 0.0
-#         for f in self.F:
-#             emb_adv = f(y_pred, training=False)
-#             sim = ops.negative(cosine_distance(y_true, emb_adv, -1))
-#             loss = ops.add(loss, sim)
-#         return ops.divide(loss, self.N)

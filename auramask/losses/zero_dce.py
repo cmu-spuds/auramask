@@ -15,7 +15,7 @@ class ColorConstancyLoss(Loss):
     The purpose of the Color Constancy Loss is to correct the potential color deviations in the
     enhanced image and also build the relations among the three adjusted channels. It is given by
 
-    $$L_{c o l}=\sum_{\forall(p, q) \in \varepsilon}\left(J^p-J^q\right)^2, \varepsilon=\{(R, G),(R, B),(G, B)\}$$
+    $$L_{c o l}=\\sum_{\\forall(p, q) \\in \\varepsilon}\\left(J^p-J^q\\right)^2, \\varepsilon=\\{(R, G),(R, B),(G, B)\\}$$
 
     Reference:
 
@@ -56,7 +56,7 @@ class ExposureControlLoss(Loss):
     The exposure control loss measures the distance between the average intensity value of a local
     region to the well-exposedness level E which is set within [0.4, 0.7]. It is given by
 
-    $$L_{e x p}=\frac{1}{M} \sum_{k=1}^M\left|Y_k-E\right|$$
+    $$L_{e x p}=\\frac{1}{M} \\sum_{k=1}^M\\left|Y_k-E\\right|$$
 
     Reference:
 

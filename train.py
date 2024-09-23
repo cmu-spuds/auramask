@@ -37,6 +37,7 @@ from auramask.models.face_embeddings import FaceEmbedEnum
 from auramask.models.zero_dce import get_enhanced_image
 
 from auramask.utils import backbones
+from auramask.utils.insta_filter import InstaFilterEnum
 from auramask.utils.colorspace import ColorSpaceEnum
 from auramask.utils.datasets import DatasetEnum
 
@@ -201,6 +202,9 @@ def parse_args():
         action=EnumAction,
         required=True,
     )
+    parser.add_argument(
+        "--instagram-filter", type=InstaFilterEnum, action=EnumAction, required=False
+    )
 
     args = parser.parse_args()
 
@@ -213,9 +217,7 @@ def parse_args():
 
 def load_data():
     ds: DatasetEnum = hparams["dataset"]
-    t_ds, v_ds = ds.fetch_dataset(
-        hparams["training"], hparams["validation"], "tensorflow"
-    )
+    t_ds, v_ds = ds.fetch_dataset(hparams["training"], hparams["validation"])
 
     w, h = hparams["input"]
 
@@ -231,20 +233,13 @@ def load_data():
                 columns=ds.value[2],
                 batch_size=hparams["batch"],
                 collate_fn=ds.data_collater,
-                collate_fn_args={"args": {"w": w, "h": h, "crop": True}},
+                collate_fn_args={"args": {"w": w, "h": h}},
                 prefetch=False,
                 shuffle=True,
                 drop_remainder=True,
             )
             .map(
                 lambda x: ds.data_augmenter(x, augmenters["geom"], augmenters["aug"]),
-                num_parallel_calls=-1,
-            )
-            .map(
-                lambda x, y: (
-                    x,
-                    ds.compute_embeddings(y, hparams["F"]),
-                ),
                 num_parallel_calls=-1,
             )
             .repeat()
@@ -256,16 +251,9 @@ def load_data():
                 columns=ds.value[2],
                 batch_size=hparams["batch"],
                 collate_fn=ds.data_collater,
-                collate_fn_args={"args": {"w": w, "h": h, "crop": True}},
+                collate_fn_args={"args": {"w": w, "h": h}},
                 prefetch=True,
                 drop_remainder=True,
-            )
-            .map(
-                lambda x: (
-                    x,
-                    ds.compute_embeddings(x, hparams["F"]),
-                ),
-                num_parallel_calls=-1,
             )
             .cache()
             .prefetch(-1)
@@ -273,53 +261,78 @@ def load_data():
 
     elif keras.backend.backend() == "torch":
         keras.backend.set_image_data_format("channels_last")
-        F = hparams["F"]
+        insta = hparams["instagram_filter"]
         from torch.utils.data import DataLoader
 
         # This transform collates the data, converting all features into tensors, scaling to 0-1, resizing, and cropping
         # Then it augments the data according to the random geometric and pixel-level augmentations set in preprocessing
         # Finally, the embeddings of the unaltered image is pre-computed for each of the models in F
         def transform(example):
-            example = ds.data_collater(example, {"w": w, "h": h, "crop": True})
-            return ds.data_augmenter(example, augmenters["geom"], augmenters["aug"], F)
+            example = ds.data_collater(example, {"w": w, "h": h})
+            return ds.data_augmenter(example, augmenters["geom"], augmenters["aug"])
 
-        t_ds = t_ds.select_columns(ds.value[-1])
+        if insta:
+            t_ds = t_ds.map(
+                lambda x: insta.filter_transform(x),
+                input_columns=ds.value[-1][-1],
+                # load_from_cache_file=False,
+                batched=True,
+                batch_size=32,
+                num_proc=os.cpu_count(),
+            ).select_columns(ds.value[-1] + ["target"])
+        else:
+            t_ds = t_ds.select_columns(ds.value[-1])
         t_ds = DataLoader(
-            t_ds.with_format("torch"),
-            hparams["batch"],
+            t_ds,
+            int(hparams["batch"]),
             shuffle=True,
             drop_last=True,
             collate_fn=transform,
         )
 
-        def v_transform(data):
-            data = ds.data_collater(data, {"w": w, "h": h, "crop": True})
-            x = data[ds.value[-1][0]]
+        def v_transform(example):
+            example = ds.data_collater(example, {"w": w, "h": h})
+            x = ops.convert_to_tensor(example[ds.value[-1][0]])
             if len(ds.value[-1]) > 1:
-                y = data[ds.value[-1][1]]
+                y = ops.convert_to_tensor(example[ds.value[-1][1]])
+            elif "target" in example.keys():
+                y = ops.convert_to_tensor(example["target"])
             else:
                 y = ops.copy(x)
-            return (x, (y, ds.compute_embeddings(x, F)))
+            return (x, y)
 
-        v_ds = v_ds.select_columns(ds.value[-1])
+        if insta:
+            v_ds = v_ds.map(
+                lambda x: insta.filter_transform(x),
+                input_columns=ds.value[-1][-1],
+                # load_from_cache_file=False,
+                batched=True,
+                batch_size=32,
+                num_proc=os.cpu_count(),
+            )
+        else:
+            v_ds = v_ds.select_columns(ds.value[-1])
         v_ds = DataLoader(
-            v_ds.with_format("torch"),
-            hparams["batch"],
-            shuffle=False,
-            collate_fn=v_transform,
+            v_ds, int(hparams["batch"]), shuffle=False, collate_fn=v_transform
         )
 
     # from keras import preprocessing
 
     # for example in t_ds:
-    #     preprocessing.image.array_to_img(example[0][0]).save('train_in.png')
-    #     preprocessing.image.array_to_img(example[1][0]).save('train_targ.png')
-    #     print(example[2][0].shape)
+    #     # print(ops.max(example[0]), ops.min(example[0]))
+    #     # print(ops.max(example[1]), ops.min(example[1]))
+    #     ex = ops.convert_to_numpy(example[0][0])
+    #     ey = ops.convert_to_numpy(example[1][0])
+    #     preprocessing.image.array_to_img(ex).save('train_in.png')
+    #     preprocessing.image.array_to_img(ey).save('train_targ.png')
     #     break
     # for example in v_ds:
-    #     preprocessing.image.array_to_img(example[0][0]).save('val_in.png')
-    #     preprocessing.image.array_to_img(example[1][0]).save('val_targ.png')
-    #     print(example[2][0].shape)
+    #     # print(ops.max(example[0]), ops.min(example[0]))
+    #     # print(ops.max(example[1]), ops.min(example[1]))
+    #     ex = ops.convert_to_numpy(example[0][0])
+    #     ey = ops.convert_to_numpy(example[1][0])
+    #     preprocessing.image.array_to_img(ex).save('val_in.png')
+    #     preprocessing.image.array_to_img(ey).save('val_targ.png')
     #     break
     # exit(1)
 
@@ -409,7 +422,9 @@ def initialize_loss():
                 cs_transforms.append(is_not_rgb)
             else:
                 spatial = hparams.pop("lpips_spatial")
-                tmp_loss = PerceptualLoss(backbone=loss_i, spatial=spatial)
+                tmp_loss = PerceptualLoss(
+                    backbone=loss_i, spatial=spatial, tolerance=0.05
+                )
                 cs_transforms.append(is_not_rgb)
 
             losses.append(tmp_loss)
@@ -430,7 +445,11 @@ def initialize_model():
 
     if base_model in [backbones.BaseModels.ZERODCE, backbones.BaseModels.RESZERODCE]:
         postproc = get_enhanced_image
-        preproc = None
+
+        def preproc(inputs):
+            inputs = keras.layers.Rescaling(scale=2, offset=-1)(inputs)
+            return inputs
+
     else:
 
         def preproc(inputs):
@@ -465,6 +484,12 @@ def initialize_model():
     )
 
     losses, losses_w, losses_t, metrics = initialize_loss()
+    # schedule = opts.schedules.ExponentialDecay(
+    #     initial_learning_rate=hparams["alpha"],
+    #     decay_steps=1000,
+    #     decay_rate=0.96,
+    #     staircase=True,
+    # )
     optimizer = opts.Adam(learning_rate=hparams["alpha"], clipnorm=1.0)
     model.compile(
         optimizer=optimizer,

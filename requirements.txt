@@ -3,10 +3,11 @@ keras_unet_collection
 numpy
 tensorflow
 keras
-keras_cv
 wandb
 torch
 torchvision
 lpips
+pilgram
+albumentations
 ruff
 pre-commit
