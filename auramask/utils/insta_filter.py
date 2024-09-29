@@ -1,6 +1,7 @@
 from enum import Enum
 import pilgram
 from PIL.Image import Image
+from PIL.ImageOps import equalize, autocontrast
 
 
 class InstaFilterEnum(Enum):
@@ -34,5 +35,8 @@ class InstaFilterEnum(Enum):
     def filter_transform(self, features: list[Image]):
         batch = {}
         fn = getattr(pilgram, self.name.lower())
-        batch["target"] = [fn(f) for f in features]
+        batch["image"] = [
+            autocontrast(equalize(f), preserve_tone=True) for f in features
+        ]
+        batch["target"] = [fn(f) for f in batch["image"]]
         return batch

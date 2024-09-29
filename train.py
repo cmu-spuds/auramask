@@ -275,7 +275,7 @@ def load_data():
             t_ds = t_ds.map(
                 lambda x: insta.filter_transform(x),
                 input_columns=ds.value[-1][-1],
-                # load_from_cache_file=False,
+                load_from_cache_file=False,
                 batched=True,
                 batch_size=32,
                 num_proc=os.cpu_count(),
@@ -305,7 +305,7 @@ def load_data():
             v_ds = v_ds.map(
                 lambda x: insta.filter_transform(x),
                 input_columns=ds.value[-1][-1],
-                # load_from_cache_file=False,
+                load_from_cache_file=False,
                 batched=True,
                 batch_size=32,
                 num_proc=os.cpu_count(),

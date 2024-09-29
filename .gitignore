@@ -168,3 +168,4 @@ logs/
 artifacts/
 ./models/
 .ruff_cache/
+checkpoints/
