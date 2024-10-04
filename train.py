@@ -227,14 +227,14 @@ def load_data():
     if test_size > 1.0:
         test_size = int(test_size)
 
-    insta = hparams["instagram_filter"]
-    t_ds, v_ds = ds.load_data(
-        train_size,
-        test_size,
+    insta: InstaFilterEnum = hparams["instagram_filter"]
+    data = ds.generate_ds(
+        insta.name,
         hparams["input"],
         hparams["batch"],
         insta.filter_transform if insta else None,
     )
+    t_ds, v_ds = ds.get_loaders(data, train_size, test_size, hparams["batch"])
 
     # from keras import preprocessing
 

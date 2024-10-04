@@ -1,6 +1,7 @@
 from enum import Enum
+import os
 from typing import Callable, TypedDict
-from datasets import load_dataset, Dataset
+from datasets import load_dataset, Dataset, load_from_disk
 from torch import NoneType
 from auramask.utils import preprocessing
 from os import cpu_count
@@ -145,17 +146,43 @@ class DatasetEnum(Enum):
             ops.convert_to_tensor(y, dtype=backend.floatx()),
         )
 
-    def load_data(
+    def generate_ds(
         self,
-        train_size: float | int | None,
-        test_size: float | int | None,
+        name: str,
         dim: tuple[int],
         batch: int = 32,
         prefilter: Callable | NoneType = None,
     ):
-        ds = self.fetch_dataset()
-        ds = self.preprocess_dataset(ds, batch, {"w": dim[0], "h": dim[1]}, prefilter)
-        ds = ds.train_test_split(train_size, test_size)
+        cache_dir = (
+            "~/.cache/huggingface/datasets/"
+            + self.name.lower()
+            + "-"
+            + name.lower()
+            + "/"
+        )
+        if os.path.exists(os.path.expanduser(cache_dir)):
+            ds = load_from_disk(cache_dir)
+        else:
+            ds = self.fetch_dataset()
+            ds = self.preprocess_dataset(
+                ds, batch, {"w": dim[0], "h": dim[1]}, prefilter
+            )
+            ds.save_to_disk(
+                "~/.cache/huggingface/datasets/"
+                + self.name.lower()
+                + "-"
+                + name.lower()
+            )
+        return ds
+
+    def get_loaders(
+        self,
+        ds: Dataset,
+        train_size: float | int | None,
+        test_size: float | int | None,
+        batch: int = 32,
+    ):
+        ds = ds.train_test_split(test_size=test_size, train_size=train_size)
 
         augmenters = self.get_augmenters(
             {"augs_per_image": 1, "rate": 0.5},
@@ -163,7 +190,7 @@ class DatasetEnum(Enum):
         )
 
         if backend.backend() == "tensorflow":
-            train_ds, test_ds = self._load_data_tf(ds["train"], ds["test"], dim, batch)
+            train_ds, test_ds = self._load_data_tf(ds["train"], ds["test"], batch)
             train_ds = (
                 train_ds.map(
                     lambda x: self.data_augmenter(
@@ -220,14 +247,12 @@ class DatasetEnum(Enum):
 
         return train_ds, test_ds
 
-    def _load_data_tf(
-        self, train_ds: Dataset, test_ds: Dataset, dim: tuple[int], batch: int
-    ):
+    def _load_data_tf(self, train_ds: Dataset, test_ds: Dataset, batch: int):
         train_ds = train_ds.to_tf_dataset(
             columns=self.value[2],
             batch_size=batch,
             collate_fn=self.data_collater,
-            collate_fn_args={"args": {"w": dim[0], "h": dim[1]}},
+            # collate_fn_args={"args": {"w": dim[0], "h": dim[1]}},
             prefetch=False,
             shuffle=True,
             drop_remainder=True,
@@ -238,7 +263,7 @@ class DatasetEnum(Enum):
                 columns=self.value[2],
                 batch_size=batch,
                 collate_fn=self.data_collater,
-                collate_fn_args={"args": {"w": dim[0], "h": dim[1]}},
+                # collate_fn_args={"args": {"w": dim[0], "h": dim[1]}},
                 prefetch=True,
                 drop_remainder=True,
             )
