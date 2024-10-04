@@ -184,13 +184,12 @@ class DatasetEnum(Enum):
     ):
         ds = ds.train_test_split(test_size=test_size, train_size=train_size)
 
-        augmenters = self.get_augmenters(
-            {"augs_per_image": 1, "rate": 0.5},
-            {"augs_per_image": 1, "rate": 0.2, "magnitude": 0.5},
-        )
-
         if backend.backend() == "tensorflow":
             train_ds, test_ds = self._load_data_tf(ds["train"], ds["test"], batch)
+            augmenters = self.get_augmenters(
+                {"augs_per_image": 1, "rate": 0.5},
+                {"augs_per_image": 1, "rate": 0.2, "magnitude": 0.5},
+            )
             train_ds = (
                 train_ds.map(
                     lambda x: self.data_augmenter(
@@ -204,6 +203,11 @@ class DatasetEnum(Enum):
         elif backend.backend() == "torch":
 
             def augmenter(example):
+                augmenters = self.get_augmenters(
+                    {"augs_per_image": 1, "rate": 0.5},
+                    {"augs_per_image": 1, "rate": 0.2, "magnitude": 0.5},
+                )
+
                 return self.data_augmenter(
                     example, augmenters["geom"], augmenters["aug"]
                 )
@@ -225,7 +229,6 @@ class DatasetEnum(Enum):
             shuffle=True,
             drop_last=True,
             collate_fn=augmenter,
-            prefetch_factor=16,
             num_workers=(cpu_count() - 8) if cpu_count() > 8 else 4,
             pin_memory=True,
         )
@@ -248,7 +251,6 @@ class DatasetEnum(Enum):
             shuffle=False,
             collate_fn=v_transform,
             num_workers=2,
-            prefetch_factor=8,
             pin_memory=True,
         )
 
