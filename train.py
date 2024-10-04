@@ -239,6 +239,7 @@ def load_data():
     # from keras import preprocessing
 
     # for example in t_ds:
+    #     print(example[0])
     #     print(ops.max(example[0]), ops.min(example[0]))
     #     print(ops.max(example[1]), ops.min(example[1]))
     #     ex = ops.convert_to_numpy(example[0][0])
@@ -247,6 +248,7 @@ def load_data():
     #     preprocessing.image.array_to_img(ey).save('train_targ.png')
     #     break
     # for example in v_ds:
+    #     print(example[0])
     #     print(ops.max(example[0]), ops.min(example[0]))
     #     print(ops.max(example[1]), ops.min(example[1]))
     #     ex = ops.convert_to_numpy(example[0][0])

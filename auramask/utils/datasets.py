@@ -142,8 +142,8 @@ class DatasetEnum(Enum):
 
         x = np.stack([aug(image=i)["image"] for i in x])  # Pixel-level modifications
         return (
-            ops.convert_to_tensor(x, dtype=backend.floatx()),
-            ops.convert_to_tensor(y, dtype=backend.floatx()),
+            x,
+            y,
         )
 
     def generate_ds(
@@ -225,7 +225,9 @@ class DatasetEnum(Enum):
             shuffle=True,
             drop_last=True,
             collate_fn=augmenter,
-            # num_workers=cpu_count()
+            prefetch_factor=4,
+            num_workers=2,
+            pin_memory=True,
         )
 
         def v_transform(examples):
@@ -238,12 +240,16 @@ class DatasetEnum(Enum):
                 y = np.stack([ex["target"] for ex in examples], dtype="float32")
             else:
                 y = np.copy(x)
-            return (
-                ops.convert_to_tensor(x, dtype=backend.floatx()),
-                ops.convert_to_tensor(y, dtype=backend.floatx()),
-            )
+            return (x, y)
 
-        test_ds = DataLoader(test_ds, batch, shuffle=False, collate_fn=v_transform)
+        test_ds = DataLoader(
+            test_ds,
+            batch,
+            shuffle=False,
+            collate_fn=v_transform,
+            num_workers=2,
+            pin_memory=True,
+        )
 
         return train_ds, test_ds
 
