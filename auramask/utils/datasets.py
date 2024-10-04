@@ -225,8 +225,8 @@ class DatasetEnum(Enum):
             shuffle=True,
             drop_last=True,
             collate_fn=augmenter,
-            prefetch_factor=4,
-            num_workers=2,
+            prefetch_factor=16,
+            num_workers=(cpu_count() - 8) if cpu_count() > 8 else 4,
             pin_memory=True,
         )
 
@@ -248,6 +248,7 @@ class DatasetEnum(Enum):
             shuffle=False,
             collate_fn=v_transform,
             num_workers=2,
+            prefetch_factor=8,
             pin_memory=True,
         )
 
