@@ -115,22 +115,35 @@ class DatasetEnum(Enum):
 
     def data_augmenter(self, examples: list[dict], geom, aug):
         cols = self.value[-1]
-        x = [ex[cols[0]] for ex in examples]
-        # Determine if desired output is a referenced output or the original image
-        if len(cols) > 1:
-            y = [ex[cols[1]] for ex in examples]
-        elif "target" in examples[0].keys():
-            y = [ex["target"] for ex in examples]
+        if isinstance(examples, dict):
+            x = np.stack(examples[cols[0]], dtype="float32")
+            # Determine if desired output is a referenced output or the original image
+            if len(cols) > 1:
+                y = np.stack(examples[cols[1]], dtype="float32")
+            elif "target" in examples.keys():
+                y = np.stack(examples["target"], dtype="float32")
+            else:
+                y = np.copy(x)  # Separate out target
         else:
-            y = np.copy(x)  # Separate out target
+            x = np.stack([ex[cols[0]] for ex in examples], dtype="float32")
+            # Determine if desired output is a referenced output or the original image
+            if len(cols) > 1:
+                y = np.stack([ex[cols[1]] for ex in examples], dtype="float32")
+            elif "target" in examples[0].keys():
+                y = np.stack([ex["target"] for ex in examples], dtype="float32")
+            else:
+                y = np.copy(x)  # Separate out target
 
         a = [
             geom(image=i, mask=j) for i, j in zip(x, y)
         ]  # Apply geometric modifications
-        x, y = np.stack([i["image"] for i in a]), ops.stack([j["mask"] for j in a])
+        x, y = np.stack([i["image"] for i in a]), np.stack([j["mask"] for j in a])
 
         x = np.stack([aug(image=i)["image"] for i in x])  # Pixel-level modifications
-        return (ops.convert_to_tensor(x), ops.convert_to_tensor(y))
+        return (
+            ops.convert_to_tensor(x, dtype=backend.floatx()),
+            ops.convert_to_tensor(y, dtype=backend.floatx()),
+        )
 
     def load_data(
         self,
@@ -142,7 +155,6 @@ class DatasetEnum(Enum):
     ):
         ds = self.fetch_dataset()
         ds = self.preprocess_dataset(ds, batch, {"w": dim[0], "h": dim[1]}, prefilter)
-        ds.set_format("numpy")
         ds = ds.train_test_split(train_size, test_size)
 
         augmenters = self.get_augmenters(
@@ -190,14 +202,19 @@ class DatasetEnum(Enum):
         )
 
         def v_transform(examples):
-            x = np.stack([ex[self.value[-1][0]] for ex in examples])
+            x = np.stack([ex[self.value[-1][0]] for ex in examples], dtype="float32")
             if len(self.value[-1]) > 1:
-                y = np.stack([ex[self.value[-1][1]] for ex in examples])
+                y = np.stack(
+                    [ex[self.value[-1][1]] for ex in examples], dtype="float32"
+                )
             elif "target" in examples[0].keys():
-                y = np.stack([ex["target"] for ex in examples])
+                y = np.stack([ex["target"] for ex in examples], dtype="float32")
             else:
                 y = np.copy(x)
-            return (ops.convert_to_tensor(x), ops.convert_to_tensor(y))
+            return (
+                ops.convert_to_tensor(x, dtype=backend.floatx()),
+                ops.convert_to_tensor(y, dtype=backend.floatx()),
+            )
 
         test_ds = DataLoader(test_ds, batch, shuffle=False, collate_fn=v_transform)
 
