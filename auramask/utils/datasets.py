@@ -224,6 +224,7 @@ class DatasetEnum(Enum):
             batch,
             shuffle=True,
             drop_last=True,
+            persistent_workers=True,
             collate_fn=lambda x: (
                 np.stack([im["image"] for im in x]),
                 np.stack([tar["target"] for tar in x]),
@@ -263,6 +264,7 @@ class DatasetEnum(Enum):
             test_ds,
             batch,
             shuffle=False,
+            persistent_workers=True,
             collate_fn=lambda x: (
                 np.stack([im["image"] for im in x]),
                 np.stack([tar["target"] for tar in x]),
