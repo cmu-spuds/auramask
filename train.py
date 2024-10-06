@@ -229,7 +229,7 @@ def load_data():
 
     insta: InstaFilterEnum = hparams["instagram_filter"]
     data = ds.generate_ds(
-        insta.name,
+        insta.name if insta else "default",
         hparams["input"],
         hparams["batch"],
         insta.filter_transform if insta else None,

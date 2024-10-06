@@ -164,6 +164,18 @@ class DatasetEnum(Enum):
             ds = load_from_disk(cache_dir)
         else:
             ds = self.fetch_dataset()
+            if not prefilter:
+
+                def prefilter(features: list[PIL.Image.Image]):
+                    batch = {}
+                    batch["image"] = [
+                        PIL.ImageOps.autocontrast(
+                            PIL.ImageOps.equalize(f), preserve_tone=True
+                        )
+                        for f in features
+                    ]
+                    return batch
+
             ds = self.preprocess_dataset(
                 ds, batch, {"w": dim[0], "h": dim[1]}, prefilter
             )
