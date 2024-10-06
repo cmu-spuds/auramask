@@ -1,11 +1,11 @@
 from enum import Enum
 import os
 from typing import Callable, TypedDict
-from datasets import load_dataset, Dataset, load_from_disk
+from datasets import load_dataset, Dataset, load_from_disk, features
 from torch import NoneType
 from auramask.utils import preprocessing
 from os import cpu_count
-from keras import ops, utils, backend
+from keras import utils, backend
 import numpy as np
 import PIL
 
@@ -33,37 +33,6 @@ class DatasetEnum(Enum):
 
         return ds
 
-    def preprocess_dataset(
-        self,
-        ds: Dataset,
-        batch: int = 32,
-        collater_args: LoaderConfig | NoneType = None,
-        prefilter: Callable | NoneType = None,
-    ):
-        if prefilter:
-            ds = ds.map(
-                lambda x: self.data_collater(prefilter(x), collater_args),
-                input_columns=self.value[-1][-1],
-                batched=True,
-                batch_size=batch,
-                num_proc=cpu_count(),
-            )
-        else:
-            ds = ds.map(
-                lambda x: self.data_collater(x, collater_args),
-                batched=True,
-                batch_size=batch,
-                num_proc=cpu_count(),
-                input_columns=self.value[-1],
-            )
-
-        if "target" in ds.column_names:
-            ds = ds.select_columns(self.value[-1] + ["target"])
-        else:
-            ds = ds.select_columns(self.value[-1])
-
-        return ds
-
     class GeomConfig(TypedDict):
         augs_per_image: int
         rate: float
@@ -88,35 +57,25 @@ class DatasetEnum(Enum):
 
         if isinstance(features, list):  # Just one column (assume it is an image column)
             first = features[0]
+            tmp_features = {}
+            for k, values in first.items():
+                tmp_features[k] = [i[k] for i in features]
+            del features
+            features = tmp_features
+
+        for k, values in features.items():
+            first = values[0]
             if isinstance(first, np.ndarray):
-                batch["image"] = np.stack([loader(image=f)["image"] for f in features])
-            elif ops.is_tensor(first):
-                batch["image"] = np.stack(
-                    [loader(image=ops.convert_to_numpy(f))["image"] for f in features]
-                )
+                batch[k] = [loader(image=i)["image"] for i in values]
             elif PIL.Image.isImageType(first):
-                batch["image"] = np.stack(
+                batch[k] = np.stack(
                     [
-                        loader(image=utils.img_to_array(f, dtype="uint8"))["image"]
-                        for f in features
+                        loader(image=utils.img_to_array(v, dtype="uint8"))["image"]
+                        for v in values
                     ]
                 )
             else:
-                batch["image"] = np.array([f for f in features])
-        else:
-            for k, values in features.items():
-                first = values[0]
-                if isinstance(first, np.ndarray):
-                    batch[k] = values
-                elif PIL.Image.isImageType(first):
-                    batch[k] = np.stack(
-                        [
-                            loader(image=utils.img_to_array(v, dtype="uint8"))["image"]
-                            for v in values
-                        ]
-                    )
-                else:
-                    batch[k] = np.array([v for v in values])
+                batch[k] = np.array([loader(image=v) for v in values])
         del loader
         return batch
 
@@ -155,7 +114,6 @@ class DatasetEnum(Enum):
     def generate_ds(
         self,
         name: str,
-        dim: tuple[int],
         batch: int = 32,
         prefilter: Callable | NoneType = None,
     ):
@@ -182,20 +140,28 @@ class DatasetEnum(Enum):
                     ]
                     return batch
 
-            ds = self.preprocess_dataset(
-                ds, batch, {"w": dim[0], "h": dim[1]}, prefilter
+            ds = ds.map(
+                lambda x: prefilter(x),
+                input_columns=self.value[-1][-1],
+                batched=True,
+                batch_size=batch,
+                num_proc=cpu_count(),
             )
-            ds.save_to_disk(
-                "~/.cache/huggingface/datasets/"
-                + self.name.lower()
-                + "-"
-                + name.lower()
-            )
+
+            if "target" in ds.column_names:
+                ds = ds.select_columns(self.value[-1] + ["target"])
+                ds = ds.cast_column("target", features.Image())
+            else:
+                ds = ds.select_columns(self.value[-1])
+
+            ds = ds.cast_column("image", features.Image())
+            ds.save_to_disk(cache_dir)
         return ds
 
     def get_loaders(
         self,
         ds: Dataset,
+        dims: tuple[int, int],
         train_size: float | int | None,
         test_size: float | int | None,
         batch: int = 32,
@@ -219,23 +185,31 @@ class DatasetEnum(Enum):
                 .prefetch(-1)
             )
         elif backend.backend() == "torch":
-            train_ds, test_ds = self._load_data_torch(ds["train"], ds["test"], batch)
+            train_ds, test_ds = self._load_data_torch(
+                dims, ds["train"], ds["test"], batch
+            )
 
         return train_ds, test_ds
 
-    def _load_data_torch(self, train_ds: Dataset, test_ds: Dataset, batch: int):
+    def _load_data_torch(
+        self, dims: tuple[int, int], train_ds: Dataset, test_ds: Dataset, batch: int
+    ):
         from torch.utils.data import DataLoader
 
         def augmenter(example):
+            example = self.data_collater(example, {"w": dims[0], "h": dims[1]})
             augmenters = self.get_augmenters(
                 {"augs_per_image": 1, "rate": 0.5},
                 {"augs_per_image": 1, "rate": 0.2, "magnitude": 0.5},
             )
 
             x, y = self.data_augmenter(example, augmenters["geom"], augmenters["aug"])
-            return {"image": x, "target": y}
+            return (x, y)
+            # return {"image": x, "target": y}
 
-        train_ds.set_transform(augmenter)
+        # train_ds.set_transform(augmenter)
+
+        train_ds.set_format("numpy")
 
         train_ds = DataLoader(
             train_ds,
@@ -243,15 +217,18 @@ class DatasetEnum(Enum):
             shuffle=True,
             drop_last=True,
             persistent_workers=True,
-            collate_fn=lambda x: (
-                np.stack([im["image"] for im in x]),
-                np.stack([tar["target"] for tar in x]),
-            ),
-            num_workers=os.getenv("DL_TRAIN_WORKERS", cpu_count() - 4),
+            collate_fn=augmenter,
+            # collate_fn=lambda x: (
+            #     np.stack([im["image"] for im in x]),
+            #     np.stack([tar["target"] for tar in x]),
+            # ),
+            num_workers=int(os.getenv("DL_TRAIN_WORKERS", cpu_count() - 4)),
             pin_memory=True,
         )
 
         def v_transform(examples):
+            examples = self.data_collater(examples, {"w": dims[0], "h": dims[1]})
+
             if isinstance(examples, list):
                 x = np.stack(
                     [ex[self.value[-1][0]] for ex in examples], dtype="float32"
@@ -274,20 +251,22 @@ class DatasetEnum(Enum):
                 else:
                     y = np.copy(x)  # Separate out target
 
-            return {"image": x, "target": y}
+            return (x, y)
+            # return {"image": x, "target": y}
 
-        test_ds.set_transform(v_transform)
+        test_ds.set_format("numpy")
 
         test_ds = DataLoader(
             test_ds,
             batch,
             shuffle=False,
             persistent_workers=True,
-            collate_fn=lambda x: (
-                np.stack([im["image"] for im in x]),
-                np.stack([tar["target"] for tar in x]),
-            ),
-            num_workers=os.getenv("DL_TEST_WORKERS", 4),
+            collate_fn=v_transform,
+            # collate_fn=lambda x: (
+            #     np.stack([im["image"] for im in x]),
+            #     np.stack([tar["target"] for tar in x]),
+            # ),
+            num_workers=int(os.getenv("DL_TEST_WORKERS", 4)),
             pin_memory=True,
         )
 
