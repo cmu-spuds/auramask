@@ -47,7 +47,7 @@ class DatasetEnum(Enum):
                 batched=True,
                 batch_size=batch,
                 num_proc=cpu_count(),
-            ).select_columns(self.value[-1] + ["target"])
+            )
         else:
             ds = ds.map(
                 lambda x: self.data_collater(x, collater_args),
@@ -55,7 +55,13 @@ class DatasetEnum(Enum):
                 batch_size=batch,
                 num_proc=cpu_count(),
                 input_columns=self.value[-1],
-            ).select_columns(self.value[-1])
+            )
+
+        if "target" in ds.column_names:
+            ds = ds.select_columns(self.value[-1] + ["target"])
+        else:
+            ds = ds.select_columns(self.value[-1])
+
         return ds
 
     class GeomConfig(TypedDict):
