@@ -97,10 +97,10 @@ def main():
     insta: InstaFilterEnum = hparams["instagram_filter"]
 
     ds.generate_ds(
-        insta.name,
+        insta.name if insta else "default",
         hparams["input"],
         batch=hparams["batch"],
-        prefilter=insta.filter_transform,
+        prefilter=insta.filter_transform if insta else None,
     )
 
 
