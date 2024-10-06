@@ -247,7 +247,7 @@ class DatasetEnum(Enum):
                 np.stack([im["image"] for im in x]),
                 np.stack([tar["target"] for tar in x]),
             ),
-            num_workers=8,
+            num_workers=os.getenv("DL_TRAIN_WORKERS", cpu_count() - 4),
             pin_memory=True,
         )
 
@@ -287,7 +287,7 @@ class DatasetEnum(Enum):
                 np.stack([im["image"] for im in x]),
                 np.stack([tar["target"] for tar in x]),
             ),
-            num_workers=2,
+            num_workers=os.getenv("DL_TEST_WORKERS", 4),
             pin_memory=True,
         )
 
