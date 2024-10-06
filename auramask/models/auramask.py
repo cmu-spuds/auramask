@@ -154,7 +154,8 @@ class AuraMask(Model):
         import torch
 
         X, y = data  # X is input image data, y is target image
-
+        X = ops.convert_to_tensor(X)
+        y = ops.convert_to_tensor(y)
         self.zero_grad()
 
         y_pred = self(X, training=True)
@@ -184,6 +185,9 @@ class AuraMask(Model):
         import torch
 
         X, y = data  # X is input image data, y is target image
+
+        X = ops.convert_to_tensor(X)
+        y = ops.convert_to_tensor(y)
 
         with torch.no_grad():
             y_pred = self(X, training=False)

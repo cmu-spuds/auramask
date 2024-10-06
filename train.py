@@ -47,7 +47,9 @@ from keras import optimizers as opts, losses as ls, activations, ops, utils
 
 # Global hparams object
 hparams: dict = {}
-# keras.config.disable_traceback_filtering()
+keras.config.disable_traceback_filtering()
+# Normalize network to use channels last ordering
+keras.backend.set_image_data_format("channels_last")
 
 
 # Path checking and creation if appropriate
@@ -179,8 +181,8 @@ def parse_args():
         "--log", default=True, type=bool, action=argparse.BooleanOptionalAction
     )
     parser.add_argument("--log-dir", default=None, type=dir_path)
-    parser.add_argument("--training", type=str, required=True)
-    parser.add_argument("--validation", type=str, required=True)
+    parser.add_argument("--training", type=float, required=True)
+    parser.add_argument("--testing", type=float, required=True)
     parser.add_argument(
         "--eager", default=False, type=bool, action=argparse.BooleanOptionalAction
     )
@@ -217,118 +219,38 @@ def parse_args():
 
 def load_data():
     ds: DatasetEnum = hparams["dataset"]
-    t_ds, v_ds = ds.fetch_dataset(hparams["training"], hparams["validation"])
+    train_size, test_size = hparams["training"], hparams["testing"]
 
-    w, h = hparams["input"]
+    # In the case that a number of samples is passed in instead of a percentage of the test split
+    if train_size > 1.0:
+        train_size = int(train_size)
+    if test_size > 1.0:
+        test_size = int(test_size)
 
-    augmenters = ds.get_augmenters(
-        {"augs_per_image": 1, "rate": 0.5},
-        {"augs_per_image": 1, "rate": 0.2, "magnitude": 0.5},
+    insta: InstaFilterEnum = hparams["instagram_filter"]
+    data = ds.generate_ds(
+        insta.name if insta else "default",
+        hparams["input"],
+        hparams["batch"],
+        insta.filter_transform if insta else None,
     )
-
-    if keras.backend.backend() == "tensorflow":
-        keras.backend.set_image_data_format("channels_last")
-        t_ds = (
-            t_ds.to_tf_dataset(
-                columns=ds.value[2],
-                batch_size=hparams["batch"],
-                collate_fn=ds.data_collater,
-                collate_fn_args={"args": {"w": w, "h": h}},
-                prefetch=False,
-                shuffle=True,
-                drop_remainder=True,
-            )
-            .map(
-                lambda x: ds.data_augmenter(x, augmenters["geom"], augmenters["aug"]),
-                num_parallel_calls=-1,
-            )
-            .repeat()
-            .prefetch(-1)
-        )
-
-        v_ds = (
-            v_ds.to_tf_dataset(
-                columns=ds.value[2],
-                batch_size=hparams["batch"],
-                collate_fn=ds.data_collater,
-                collate_fn_args={"args": {"w": w, "h": h}},
-                prefetch=True,
-                drop_remainder=True,
-            )
-            .cache()
-            .prefetch(-1)
-        )
-
-    elif keras.backend.backend() == "torch":
-        keras.backend.set_image_data_format("channels_last")
-        insta = hparams["instagram_filter"]
-        from torch.utils.data import DataLoader
-
-        # This transform collates the data, converting all features into tensors, scaling to 0-1, resizing, and cropping
-        # Then it augments the data according to the random geometric and pixel-level augmentations set in preprocessing
-        # Finally, the embeddings of the unaltered image is pre-computed for each of the models in F
-        def transform(example):
-            example = ds.data_collater(example, {"w": w, "h": h})
-            return ds.data_augmenter(example, augmenters["geom"], augmenters["aug"])
-
-        if insta:
-            t_ds = t_ds.map(
-                lambda x: insta.filter_transform(x),
-                input_columns=ds.value[-1][-1],
-                load_from_cache_file=False,
-                batched=True,
-                batch_size=32,
-                num_proc=os.cpu_count(),
-            ).select_columns(ds.value[-1] + ["target"])
-        else:
-            t_ds = t_ds.select_columns(ds.value[-1])
-        t_ds = DataLoader(
-            t_ds,
-            int(hparams["batch"]),
-            shuffle=True,
-            drop_last=True,
-            collate_fn=transform,
-        )
-
-        def v_transform(example):
-            example = ds.data_collater(example, {"w": w, "h": h})
-            x = ops.convert_to_tensor(example[ds.value[-1][0]])
-            if len(ds.value[-1]) > 1:
-                y = ops.convert_to_tensor(example[ds.value[-1][1]])
-            elif "target" in example.keys():
-                y = ops.convert_to_tensor(example["target"])
-            else:
-                y = ops.copy(x)
-            return (x, y)
-
-        if insta:
-            v_ds = v_ds.map(
-                lambda x: insta.filter_transform(x),
-                input_columns=ds.value[-1][-1],
-                load_from_cache_file=False,
-                batched=True,
-                batch_size=32,
-                num_proc=os.cpu_count(),
-            )
-        else:
-            v_ds = v_ds.select_columns(ds.value[-1])
-        v_ds = DataLoader(
-            v_ds, int(hparams["batch"]), shuffle=False, collate_fn=v_transform
-        )
+    t_ds, v_ds = ds.get_loaders(data, train_size, test_size, hparams["batch"])
 
     # from keras import preprocessing
 
     # for example in t_ds:
-    #     # print(ops.max(example[0]), ops.min(example[0]))
-    #     # print(ops.max(example[1]), ops.min(example[1]))
+    #     print(example[0])
+    #     print(ops.max(example[0]), ops.min(example[0]))
+    #     print(ops.max(example[1]), ops.min(example[1]))
     #     ex = ops.convert_to_numpy(example[0][0])
     #     ey = ops.convert_to_numpy(example[1][0])
     #     preprocessing.image.array_to_img(ex).save('train_in.png')
     #     preprocessing.image.array_to_img(ey).save('train_targ.png')
     #     break
     # for example in v_ds:
-    #     # print(ops.max(example[0]), ops.min(example[0]))
-    #     # print(ops.max(example[1]), ops.min(example[1]))
+    #     print(example[0])
+    #     print(ops.max(example[0]), ops.min(example[0]))
+    #     print(ops.max(example[1]), ops.min(example[1]))
     #     ex = ops.convert_to_numpy(example[0][0])
     #     ey = ops.convert_to_numpy(example[1][0])
     #     preprocessing.image.array_to_img(ex).save('val_in.png')

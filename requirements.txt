@@ -7,7 +7,7 @@ wandb
 torch
 torchvision
 lpips
-pilgram
+pilgram2
 albumentations
 ruff
 pre-commit

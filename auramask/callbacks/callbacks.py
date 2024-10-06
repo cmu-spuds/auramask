@@ -60,7 +60,7 @@ class AuramaskCallback(WandbEvalCallback):
             data_table_columns=data_table_columns, pred_table_columns=pred_table_columns
         )
         if backend.backend() == "torch":
-            self.x = validation_data[:num_samples].detach().cpu()
+            self.x = validation_data[:num_samples]
         else:
             self.x = validation_data[:num_samples]
         self.log_freq = log_freq

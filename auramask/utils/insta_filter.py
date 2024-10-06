@@ -1,5 +1,5 @@
 from enum import Enum
-import pilgram
+import pilgram2 as pilgram
 from PIL.Image import Image
 from PIL.ImageOps import equalize, autocontrast
 

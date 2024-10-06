@@ -1,9 +1,11 @@
 from enum import Enum
-from typing import TypedDict
-from datasets import load_dataset
+import os
+from typing import Callable, TypedDict
+from datasets import load_dataset, Dataset, load_from_disk
+from torch import NoneType
 from auramask.utils import preprocessing
 from os import cpu_count
-from keras import ops, utils
+from keras import ops, utils, backend
 import numpy as np
 import PIL
 
@@ -15,28 +17,52 @@ class DatasetEnum(Enum):
     FDF = ("logasja/FDF", "fdf", ["image"])
     VGGFACE2 = ("logasja/VGGFace2", "256", ["image"])
 
-    def fetch_dataset(self, t_split: str, v_split: str):
-        dataset, name, _ = self.value
-        t_ds = load_dataset(
-            dataset,
-            name,
-            split=t_split,
-            num_proc=cpu_count() if cpu_count() < 9 else 8,
-        )
-
-        v_ds = load_dataset(
-            dataset,
-            name,
-            split=v_split,
-            num_proc=cpu_count() if cpu_count() < 9 else 8,
-        )
-
-        return t_ds, v_ds
-
     class LoaderConfig(TypedDict):
         w: int
         h: int
         crop: bool
+
+    def fetch_dataset(self):
+        dataset, name, _ = self.value
+        ds = load_dataset(
+            dataset,
+            name,
+            split="train",
+            num_proc=cpu_count(),
+        )
+
+        return ds
+
+    def preprocess_dataset(
+        self,
+        ds: Dataset,
+        batch: int = 32,
+        collater_args: LoaderConfig | NoneType = None,
+        prefilter: Callable | NoneType = None,
+    ):
+        if prefilter:
+            ds = ds.map(
+                lambda x: self.data_collater(prefilter(x), collater_args),
+                input_columns=self.value[-1][-1],
+                batched=True,
+                batch_size=batch,
+                num_proc=cpu_count(),
+            )
+        else:
+            ds = ds.map(
+                lambda x: self.data_collater(x, collater_args),
+                batched=True,
+                batch_size=batch,
+                num_proc=cpu_count(),
+                input_columns=self.value[-1],
+            )
+
+        if "target" in ds.column_names:
+            ds = ds.select_columns(self.value[-1] + ["target"])
+        else:
+            ds = ds.select_columns(self.value[-1])
+
+        return ds
 
     class GeomConfig(TypedDict):
         augs_per_image: int
@@ -58,67 +84,236 @@ class DatasetEnum(Enum):
     def data_collater(features, args: LoaderConfig):
         loader = preprocessing.gen_image_loading_layers(**args)
 
-        if isinstance(features, dict):  # case batch_size=None: nothing to collate
-            batch = {}
+        batch = {}
+
+        if isinstance(features, list):  # Just one column (assume it is an image column)
+            first = features[0]
+            if isinstance(first, np.ndarray):
+                batch["image"] = np.stack([loader(image=f)["image"] for f in features])
+            elif ops.is_tensor(first):
+                batch["image"] = np.stack(
+                    [loader(image=ops.convert_to_numpy(f))["image"] for f in features]
+                )
+            elif PIL.Image.isImageType(first):
+                batch["image"] = np.stack(
+                    [
+                        loader(image=utils.img_to_array(f, dtype="uint8"))["image"]
+                        for f in features
+                    ]
+                )
+            else:
+                batch["image"] = np.array([f for f in features])
+        else:
             for k, values in features.items():
                 first = values[0]
                 if isinstance(first, np.ndarray):
                     batch[k] = values
-                elif ops.is_tensor(first):
-                    batch[k] = np.stack(ops.convert_to_numpy(values))
                 elif PIL.Image.isImageType(first):
                     batch[k] = np.stack(
-                        [utils.img_to_array(v, dtype="uint8") for v in values]
+                        [
+                            loader(image=utils.img_to_array(v, dtype="uint8"))["image"]
+                            for v in values
+                        ]
                     )
                 else:
                     batch[k] = np.array([v for v in values])
-        elif ops.is_tensor(features):
-            batch = {"image": ops.convert_to_numpy(features)}
-        elif PIL.Image.isImageType(features):
-            batch = {"image": utils.img_to_array(features, dtype="uint8")}
-        else:
-            first = features[0]
-            batch = {}
-            for k, v in first.items():
-                if isinstance(v, np.ndarray):
-                    batch[k] = np.stack([loader(image=f[k])["image"] for f in features])
-                elif ops.is_tensor(v):
-                    batch[k] = np.stack(
-                        [
-                            loader(image=ops.convert_to_numpy(f[k]))["image"]
-                            for f in features
-                        ]
-                    )
-                elif PIL.Image.isImageType(v):
-                    batch[k] = np.stack(
-                        [
-                            loader(image=utils.img_to_array(f[k], dtype="uint8"))[
-                                "image"
-                            ]
-                            for f in features
-                        ]
-                    )
-                else:
-                    batch[k] = np.array([f[k] for f in features])
         del loader
         return batch
 
-    def data_augmenter(self, examples, geom, aug):
+    def data_augmenter(self, examples: list[dict] | dict, geom, aug):
         cols = self.value[-1]
-        x = examples[cols[0]]
-
-        # Determine if desired output is a referenced output or the original image
-        if len(cols) > 1:
-            y = examples[cols[1]]
-        elif "target" in examples.keys():
-            y = examples["target"]
+        if isinstance(examples, list):
+            x = np.stack([ex[cols[0]] for ex in examples], dtype="float32")
+            # Determine if desired output is a referenced output or the original image
+            if len(cols) > 1:
+                y = np.stack([ex[cols[1]] for ex in examples], dtype="float32")
+            elif "target" in examples[0].keys():
+                y = np.stack([ex["target"] for ex in examples], dtype="float32")
+            else:
+                y = np.copy(x)  # Separate out target
         else:
-            y = np.copy(x)  # Separate out target
+            x = np.stack(examples[cols[0]], dtype="float32")
+            # Determine if desired output is a referenced output or the original image
+            if len(cols) > 1:
+                y = np.stack(examples[cols[1]], dtype="float32")
+            elif "target" in examples.keys():
+                y = np.stack(examples["target"], dtype="float32")
+            else:
+                y = np.copy(x)  # Separate out target
 
         a = [
             geom(image=i, mask=j) for i, j in zip(x, y)
         ]  # Apply geometric modifications
-        x, y = np.stack([i["image"] for i in a]), ops.stack([j["mask"] for j in a])
+        x, y = np.stack([i["image"] for i in a]), np.stack([j["mask"] for j in a])
 
-        x = ops.stack([aug(image=i)["image"] for i in x])  # Pixel-level modifications
-        return (x, y)
+        x = np.stack([aug(image=i)["image"] for i in x])  # Pixel-level modifications
+        return (
+            x,
+            y,
+        )
+
+    def generate_ds(
+        self,
+        name: str,
+        dim: tuple[int],
+        batch: int = 32,
+        prefilter: Callable | NoneType = None,
+    ):
+        cache_dir = (
+            "~/.cache/huggingface/datasets/"
+            + self.name.lower()
+            + "-"
+            + name.lower()
+            + "/"
+        )
+        if os.path.exists(os.path.expanduser(cache_dir)):
+            ds = load_from_disk(cache_dir)
+        else:
+            ds = self.fetch_dataset()
+            if not prefilter:
+
+                def prefilter(features: list[PIL.Image.Image]):
+                    batch = {}
+                    batch["image"] = [
+                        PIL.ImageOps.autocontrast(
+                            PIL.ImageOps.equalize(f), preserve_tone=True
+                        )
+                        for f in features
+                    ]
+                    return batch
+
+            ds = self.preprocess_dataset(
+                ds, batch, {"w": dim[0], "h": dim[1]}, prefilter
+            )
+            ds.save_to_disk(
+                "~/.cache/huggingface/datasets/"
+                + self.name.lower()
+                + "-"
+                + name.lower()
+            )
+        return ds
+
+    def get_loaders(
+        self,
+        ds: Dataset,
+        train_size: float | int | None,
+        test_size: float | int | None,
+        batch: int = 32,
+    ):
+        ds = ds.train_test_split(test_size=test_size, train_size=train_size)
+
+        if backend.backend() == "tensorflow":
+            train_ds, test_ds = self._load_data_tf(ds["train"], ds["test"], batch)
+            augmenters = self.get_augmenters(
+                {"augs_per_image": 1, "rate": 0.5},
+                {"augs_per_image": 1, "rate": 0.2, "magnitude": 0.5},
+            )
+            train_ds = (
+                train_ds.map(
+                    lambda x: self.data_augmenter(
+                        x, augmenters["geom"], augmenters["aug"]
+                    ),
+                    num_parallel_calls=-1,
+                )
+                .repeat()
+                .prefetch(-1)
+            )
+        elif backend.backend() == "torch":
+            train_ds, test_ds = self._load_data_torch(ds["train"], ds["test"], batch)
+
+        return train_ds, test_ds
+
+    def _load_data_torch(self, train_ds: Dataset, test_ds: Dataset, batch: int):
+        from torch.utils.data import DataLoader
+
+        def augmenter(example):
+            augmenters = self.get_augmenters(
+                {"augs_per_image": 1, "rate": 0.5},
+                {"augs_per_image": 1, "rate": 0.2, "magnitude": 0.5},
+            )
+
+            x, y = self.data_augmenter(example, augmenters["geom"], augmenters["aug"])
+            return {"image": x, "target": y}
+
+        train_ds.set_transform(augmenter)
+
+        train_ds = DataLoader(
+            train_ds,
+            batch,
+            shuffle=True,
+            drop_last=True,
+            persistent_workers=True,
+            collate_fn=lambda x: (
+                np.stack([im["image"] for im in x]),
+                np.stack([tar["target"] for tar in x]),
+            ),
+            num_workers=8,
+            pin_memory=True,
+        )
+
+        def v_transform(examples):
+            if isinstance(examples, list):
+                x = np.stack(
+                    [ex[self.value[-1][0]] for ex in examples], dtype="float32"
+                )
+                if len(self.value[-1]) > 1:
+                    y = np.stack(
+                        [ex[self.value[-1][1]] for ex in examples], dtype="float32"
+                    )
+                elif "target" in examples[0].keys():
+                    y = np.stack([ex["target"] for ex in examples], dtype="float32")
+                else:
+                    y = np.copy(x)
+            else:
+                x = np.stack(examples[self.value[-1][0]], dtype="float32")
+                # Determine if desired output is a referenced output or the original image
+                if len(self.value[-1]) > 1:
+                    y = np.stack(examples[self.value[-1][1]], dtype="float32")
+                elif "target" in examples.keys():
+                    y = np.stack(examples["target"], dtype="float32")
+                else:
+                    y = np.copy(x)  # Separate out target
+
+            return {"image": x, "target": y}
+
+        test_ds.set_transform(v_transform)
+
+        test_ds = DataLoader(
+            test_ds,
+            batch,
+            shuffle=False,
+            persistent_workers=True,
+            collate_fn=lambda x: (
+                np.stack([im["image"] for im in x]),
+                np.stack([tar["target"] for tar in x]),
+            ),
+            num_workers=2,
+            pin_memory=True,
+        )
+
+        return train_ds, test_ds
+
+    def _load_data_tf(self, train_ds: Dataset, test_ds: Dataset, batch: int):
+        train_ds = train_ds.to_tf_dataset(
+            columns=self.value[2],
+            batch_size=batch,
+            collate_fn=self.data_collater,
+            # collate_fn_args={"args": {"w": dim[0], "h": dim[1]}},
+            prefetch=False,
+            shuffle=True,
+            drop_remainder=True,
+        )
+
+        test_ds = (
+            test_ds.to_tf_dataset(
+                columns=self.value[2],
+                batch_size=batch,
+                collate_fn=self.data_collater,
+                # collate_fn_args={"args": {"w": dim[0], "h": dim[1]}},
+                prefetch=True,
+                drop_remainder=True,
+            )
+            .cache()
+            .prefetch(-1)
+        )
+        return train_ds, test_ds
