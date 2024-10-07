@@ -98,7 +98,6 @@ def main():
 
     ds.generate_ds(
         insta.name if insta else "default",
-        hparams["input"],
         batch=hparams["batch"],
         prefilter=insta.filter_transform if insta else None,
     )

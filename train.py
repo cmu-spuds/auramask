@@ -230,11 +230,12 @@ def load_data():
     insta: InstaFilterEnum = hparams["instagram_filter"]
     data = ds.generate_ds(
         insta.name if insta else "default",
-        hparams["input"],
         hparams["batch"],
         insta.filter_transform if insta else None,
     )
-    t_ds, v_ds = ds.get_loaders(data, train_size, test_size, hparams["batch"])
+    t_ds, v_ds = ds.get_loaders(
+        data, hparams["input"], train_size, test_size, hparams["batch"]
+    )
 
     # from keras import preprocessing
 
