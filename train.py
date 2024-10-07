@@ -1,6 +1,5 @@
 # ruff: noqa: E402
 import argparse
-import enum
 import hashlib
 import os
 import ast
@@ -13,37 +12,34 @@ os.environ["KERAS_BACKEND"] = "torch"
 
 import keras
 
-from auramask.callbacks.callbacks import init_callbacks
+from auramask.utils.constants import (
+    EnumAction,
+    DatasetEnum,
+    BaseModels,
+    ColorSpaceEnum,
+    InstaFilterEnum,
+    FaceEmbedEnum,
+)
+from auramask.callbacks import init_callbacks
 
-from auramask.losses.content import ContentLoss
-from auramask.losses.perceptual import PerceptualLoss
-from auramask.losses.embeddistance import (
+from auramask.losses import (
+    ContentLoss,
+    PerceptualLoss,
     FaceEmbeddingLoss,
     FaceEmbeddingThresholdLoss,
-)
-from auramask.losses.aesthetic import AestheticLoss
-from auramask.losses.ssim import DSSIMObjective, GRAYSSIMObjective
-from auramask.losses.style import StyleLoss, StyleRefs
-from auramask.losses.variation import VariationLoss
-from auramask.losses.zero_dce import (
+    AestheticLoss,
+    DSSIMObjective,
+    GRAYSSIMObjective,
+    StyleLoss,
+    StyleRefs,
+    VariationLoss,
     ColorConstancyLoss,
     SpatialConsistencyLoss,
     ExposureControlLoss,
     IlluminationSmoothnessLoss,
 )
 
-
-from auramask.models.face_embeddings import FaceEmbedEnum
-from auramask.models.zero_dce import get_enhanced_image
-
-from auramask.utils import backbones
-from auramask.utils.insta_filter import InstaFilterEnum
-from auramask.utils.colorspace import ColorSpaceEnum
-from auramask.utils.datasets import DatasetEnum
-
 from keras import optimizers as opts, losses as ls, activations, ops, utils
-
-# os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"
 
 # Global hparams object
 hparams: dict = {}
@@ -70,36 +66,6 @@ def dir_path(path):
     return
 
 
-# Action for enumeration input
-class EnumAction(argparse.Action):
-    """Action for an enumeration input, maps enumeration type to choices"""
-
-    def __init__(self, **kwargs):
-        # Pop off the type value
-        enum_type = kwargs.pop("type", None)
-
-        # Ensure an Enum subclass is provided
-        if enum_type is None:
-            raise ValueError("type must be assigned an Enum when using EnumAction")
-        if not issubclass(enum_type, enum.Enum):
-            raise TypeError("type must be an Enum when using EnumAction")
-
-        # Generate choices from the Enum
-        kwargs.setdefault("choices", tuple(e.name.lower() for e in enum_type))
-
-        super(EnumAction, self).__init__(**kwargs)
-
-        self._enum = enum_type
-
-    def __call__(self, parser, namespace, values, option_string=None):
-        # Convert value back into an Enum
-        if isinstance(values, str):
-            value = self._enum[values.upper()]
-        elif isinstance(values, list):
-            value = [self._enum[x.upper()] for x in values]
-        setattr(namespace, self.dest, value)
-
-
 def parse_args():
     parser = argparse.ArgumentParser(
         prog="AuraMask Training",
@@ -108,7 +74,7 @@ def parse_args():
     parser.add_argument(
         "-m",
         "--model-backbone",
-        type=backbones.BaseModels,
+        type=BaseModels,
         action=EnumAction,
         required=True,
     )
@@ -364,9 +330,11 @@ def initialize_loss():
 
 def initialize_model():
     eps = hparams["epsilon"]
-    base_model: backbones.BaseModels = hparams.pop("model_backbone")
+    base_model: BaseModels = hparams.pop("model_backbone")
 
-    if base_model in [backbones.BaseModels.ZERODCE, backbones.BaseModels.RESZERODCE]:
+    if base_model in [BaseModels.ZERODCE, BaseModels.RESZERODCE]:
+        from auramask.models.zero_dce import get_enhanced_image
+
         postproc = get_enhanced_image
 
         def preproc(inputs):
