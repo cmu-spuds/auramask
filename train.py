@@ -328,9 +328,11 @@ def initialize_loss():
     return losses, weights, cs_transforms, metrics
 
 
-def initialize_model():
+def initialize_model(mixed_precision=False):
     eps = hparams["epsilon"]
     base_model: BaseModels = hparams.pop("model_backbone")
+
+    losses, losses_w, losses_t, metrics = initialize_loss()
 
     if base_model in [BaseModels.ZERODCE, BaseModels.RESZERODCE]:
         from auramask.models.zero_dce import get_enhanced_image
@@ -362,6 +364,10 @@ def initialize_model():
             cfg_mod[key] = True if val.lower() == "true" else False
     model_config.update(cfg_mod)
 
+    if mixed_precision:
+        print("Using mixed precision for training")
+        keras.mixed_precision.set_dtype_policy("mixed_float16")
+
     hparams["model"] = base_model.name.lower()
     model = base_model.build_backbone(
         model_config=model_config,
@@ -374,7 +380,6 @@ def initialize_model():
         name=hparams["model"],
     )
 
-    losses, losses_w, losses_t, metrics = initialize_loss()
     # schedule = opts.schedules.ExponentialDecay(
     #     initial_learning_rate=hparams["alpha"],
     #     decay_steps=1000,
@@ -382,6 +387,9 @@ def initialize_model():
     #     staircase=True,
     # )
     optimizer = opts.Adam(learning_rate=hparams["alpha"], clipnorm=1.0)
+    if mixed_precision:
+        optimizer = keras.mixed_precision.LossScaleOptimizer(optimizer)
+
     model.compile(
         optimizer=optimizer,
         loss=losses,
@@ -424,10 +432,6 @@ def main():
     verbose = hparams.pop("verbose")
     mixed_precision = hparams.pop("mixed_precision")
 
-    if mixed_precision:
-        print("Using mixed precision for training")
-        keras.mixed_precision.set_dtype_policy("mixed_float16")
-
     if not log:
         os.environ["WANDB_MODE"] = "offline"
 
@@ -453,7 +457,7 @@ def main():
     # Load the training and validation data
     t_ds, v_ds = load_data()
 
-    model = initialize_model()
+    model = initialize_model(mixed_precision)
 
     v = get_sample_data(v_ds)
     model(v)
