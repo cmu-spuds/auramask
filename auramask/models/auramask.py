@@ -136,10 +136,11 @@ class AuraMask(Model):
             # X = self.colorspace[0](X)  # Convert to chosen colorspace
             y_pred = self(X, training=True)  # Forward pass with
             loss = self.compute_loss(x=X, y=y, y_pred=y_pred)  # Compute loss
+            scaled_loss = self.optimizer.scale_loss(loss)
 
         # Compute Gradients
         trainable_vars = self.trainable_variables
-        gradients = tape.gradient(loss, trainable_vars)
+        gradients = tape.gradient(scaled_loss, trainable_vars)
 
         # Update Weights
         self.optimizer.apply_gradients(zip(gradients, trainable_vars))
@@ -161,9 +162,11 @@ class AuraMask(Model):
         y_pred = self(X, training=True)
         loss = self.compute_loss(x=X, y=y, y_pred=y_pred)
 
-        loss.backward()
+        scaled_loss = self.optimizer.scale_loss(loss)
+        scaled_loss.backward()
 
         trainable_weights = [v for v in self.trainable_weights]
+
         gradients = [v.value.grad for v in trainable_weights]
 
         with torch.no_grad():

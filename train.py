@@ -328,7 +328,7 @@ def initialize_loss():
     return losses, weights, cs_transforms, metrics
 
 
-def initialize_model(mixed_precision=False):
+def initialize_model():
     eps = hparams["epsilon"]
     base_model: BaseModels = hparams.pop("model_backbone")
 
@@ -364,10 +364,6 @@ def initialize_model(mixed_precision=False):
             cfg_mod[key] = True if val.lower() == "true" else False
     model_config.update(cfg_mod)
 
-    if mixed_precision:
-        print("Using mixed precision for training")
-        keras.mixed_precision.set_dtype_policy("mixed_float16")
-
     hparams["model"] = base_model.name.lower()
     model = base_model.build_backbone(
         model_config=model_config,
@@ -387,8 +383,6 @@ def initialize_model(mixed_precision=False):
     #     staircase=True,
     # )
     optimizer = opts.Adam(learning_rate=hparams["alpha"], clipnorm=1.0)
-    if mixed_precision:
-        optimizer = keras.mixed_precision.LossScaleOptimizer(optimizer)
 
     model.compile(
         optimizer=optimizer,
@@ -398,6 +392,7 @@ def initialize_model(mixed_precision=False):
         run_eagerly=hparams.pop("eager"),
         metrics=metrics,
         jit_compile=False,
+        auto_scale_loss=True,
     )
 
     return model
@@ -432,6 +427,10 @@ def main():
     verbose = hparams.pop("verbose")
     mixed_precision = hparams.pop("mixed_precision")
 
+    if mixed_precision:
+        print("Using mixed precision for training")
+        keras.mixed_precision.set_dtype_policy("mixed_float16")
+
     if not log:
         os.environ["WANDB_MODE"] = "offline"
 
@@ -457,7 +456,7 @@ def main():
     # Load the training and validation data
     t_ds, v_ds = load_data()
 
-    model = initialize_model(mixed_precision)
+    model = initialize_model()
 
     v = get_sample_data(v_ds)
     model(v)
