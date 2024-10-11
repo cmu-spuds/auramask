@@ -203,16 +203,14 @@ def load_data():
         data, hparams["input"], train_size, test_size, hparams["batch"]
     )
 
-    # from keras import preprocessing
-
     # for example in t_ds:
     #     print(example[0])
     #     print(ops.max(example[0]), ops.min(example[0]))
     #     print(ops.max(example[1]), ops.min(example[1]))
     #     ex = ops.convert_to_numpy(example[0][0])
     #     ey = ops.convert_to_numpy(example[1][0])
-    #     preprocessing.image.array_to_img(ex).save('train_in.png')
-    #     preprocessing.image.array_to_img(ey).save('train_targ.png')
+    #     utils.array_to_img(ex).save('train_in.png')
+    #     utils.array_to_img(ey).save('train_targ.png')
     #     break
     # for example in v_ds:
     #     print(example[0])
@@ -220,8 +218,8 @@ def load_data():
     #     print(ops.max(example[1]), ops.min(example[1]))
     #     ex = ops.convert_to_numpy(example[0][0])
     #     ey = ops.convert_to_numpy(example[1][0])
-    #     preprocessing.image.array_to_img(ex).save('val_in.png')
-    #     preprocessing.image.array_to_img(ey).save('val_targ.png')
+    #     utils.array_to_img(ex).save('val_in.png')
+    #     utils.array_to_img(ey).save('val_targ.png')
     #     break
     # exit(1)
 

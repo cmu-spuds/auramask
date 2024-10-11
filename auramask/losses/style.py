@@ -62,10 +62,6 @@ class StyleLoss(Loss):
         self.reference = reference
         self.distance = distance
 
-        # mixed_context = mixed_precision.dtype_policy().name == "mixed_float16"
-        # if mixed_context:
-        #     mixed_precision.set_dtype_policy("float32")
-
         global model_obj
 
         if "model_obj" not in globals():
@@ -103,8 +99,6 @@ class StyleLoss(Loss):
                 ops.cast(target[layer_name], "float32")
             )
         self.N = ops.convert_to_tensor(len(style_layers), "float32")
-        # if mixed_context:
-        #     mixed_precision.set_dtype_policy("mixed_float16")
 
     def get_config(self):
         base_config = super().get_config()
