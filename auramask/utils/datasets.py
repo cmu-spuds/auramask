@@ -7,6 +7,7 @@ from auramask.utils import preprocessing
 from os import cpu_count
 from keras import utils, backend
 import numpy as np
+from albumentations import clahe
 import PIL
 
 
@@ -65,8 +66,8 @@ class DatasetEnum(Enum):
 
         for k, values in features.items():
             first = values[0]
-            if isinstance(first, np.ndarray):
-                batch[k] = [loader(image=i)["image"] for i in values]
+            if isinstance(first, np.ndarray) and np.ndim(first) == 3:
+                batch[k] = np.array([loader(image=i)["image"] for i in values])
             elif PIL.Image.isImageType(first):
                 batch[k] = np.stack(
                     [
@@ -75,7 +76,7 @@ class DatasetEnum(Enum):
                     ]
                 )
             else:
-                batch[k] = np.array([loader(image=v) for v in values])
+                batch[k] = np.array(values)
         del loader
         return batch
 
@@ -133,8 +134,12 @@ class DatasetEnum(Enum):
                 def prefilter(features: list[PIL.Image.Image]):
                     batch = {}
                     batch["image"] = [
-                        PIL.ImageOps.autocontrast(
-                            PIL.ImageOps.equalize(f), preserve_tone=True
+                        utils.array_to_img(
+                            clahe(
+                                utils.img_to_array(f, dtype="uint8"),
+                                clip_limit=1.0,
+                                tile_grid_size=(8, 8),
+                            )
                         )
                         for f in features
                     ]
@@ -218,10 +223,6 @@ class DatasetEnum(Enum):
             drop_last=True,
             persistent_workers=True,
             collate_fn=augmenter,
-            # collate_fn=lambda x: (
-            #     np.stack([im["image"] for im in x]),
-            #     np.stack([tar["target"] for tar in x]),
-            # ),
             num_workers=int(os.getenv("DL_TRAIN_WORKERS", cpu_count() - 4)),
             pin_memory=True,
         )
@@ -262,10 +263,6 @@ class DatasetEnum(Enum):
             shuffle=False,
             persistent_workers=True,
             collate_fn=v_transform,
-            # collate_fn=lambda x: (
-            #     np.stack([im["image"] for im in x]),
-            #     np.stack([tar["target"] for tar in x]),
-            # ),
             num_workers=int(os.getenv("DL_TEST_WORKERS", 4)),
             pin_memory=True,
         )

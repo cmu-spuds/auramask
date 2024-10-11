@@ -1,7 +1,8 @@
 from enum import Enum
 import pilgram2 as pilgram
 from PIL.Image import Image
-from PIL.ImageOps import equalize, autocontrast
+from albumentations import clahe
+from keras import utils
 
 
 class InstaFilterEnum(Enum):
@@ -36,7 +37,15 @@ class InstaFilterEnum(Enum):
         batch = {}
         fn = getattr(pilgram, self.name.lower())
         batch["image"] = [
-            autocontrast(equalize(f), preserve_tone=True) for f in features
+            utils.array_to_img(
+                clahe(
+                    utils.img_to_array(f, dtype="uint8"),
+                    clip_limit=1.0,
+                    tile_grid_size=(8, 8),
+                )
+            )
+            for f in features
+            # autocontrast(f, preserve_tone=True) for f in features
         ]
         batch["target"] = [fn(f) for f in batch["image"]]
         return batch

@@ -14,10 +14,6 @@ class ContentLoss(Loss):
     ):
         super().__init__(name=name, **kwargs)
 
-        # mixed_context = mixed_precision.dtype_policy().name == "mixed_float16"
-        # if mixed_context:
-        #     mixed_precision.set_dtype_policy("float32")
-
         global model_obj
 
         if "model_obj" not in globals():
@@ -45,9 +41,6 @@ class ContentLoss(Loss):
         self.feature_extractor = Model(inputs=inp, outputs=output)
         self.feature_extractor.trainable = False
 
-        # if mixed_context:
-        #     mixed_precision.set_dtype_policy("mixed_float16")
-
     def get_config(self):
         base_config = super().get_config()
         config = {
@@ -61,9 +54,6 @@ class ContentLoss(Loss):
 
         X_features = self.feature_extractor(X, training=False)
         pred_features = self.feature_extractor(y_pred, training=False)
-
-        # print(ops.shape(X_features))
-        # print(ops.shape(pred_features))
 
         # Add content loss
         loss = self.distance(X_features, pred_features)
