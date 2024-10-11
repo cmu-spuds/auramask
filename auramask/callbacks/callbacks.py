@@ -243,7 +243,7 @@ class AuramaskCheckpoint(k_callbacks.ModelCheckpoint):
         self.__cur_epoch = epoch
 
     def on_train_end(self, logs: Dict[SaveStrategy, float] | None = None) -> None:
-        self.on_epoch_end(self.__cur_epoch, logs)
+        self._on_epoch_end(self.__cur_epoch, logs)
 
     def on_train_batch_end(
         self, batch: int, logs: Optional[Dict[str, float]] = None
