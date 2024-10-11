@@ -1,40 +1,30 @@
 from typing import Callable
-from keras import ops, layers, Loss, Model, applications, backend as K
+from keras import ops, layers, Loss, Model, applications
 
 from auramask.utils.distance import cosine_distance
 from auramask.utils.stylerefs import StyleRefs
 
 
-def get_gram_matrix(x, norm_by_channels=False, flatten=False):
+def get_gram_matrix(feature_map, norm_by_channels=False):
     """Compute the Gram matrix of the tensor x.
 
     This code was adopted from @robertomest
     https://github.com/robertomest/neural-style-keras/blob/master/training.py  # NOQA
 
     Args:
-        x - a tensor
+        feature_map: A tensor of shape (batch_size, height, width, channels)
         norm_by_channels - if True, normalize the Gram Matrix by the number
         of channels.
     Returns:
-        gram - a tensor representing the Gram Matrix of x
+        gram - a tensor representing the Gram Matrix of feature_map
     """
-    if ops.ndim(x) == 3:
-        features = layers.Flatten(dtype="float32")(ops.transpose(x, (2, 0, 1)))
-
-        shape = ops.shape(x)
-        C, H, W = shape[0], shape[1], shape[2]
-
-        gram = ops.dot(features, ops.transpose(features))
-    elif ops.ndim(x) == 4:
-        # Swap from (B, H, W, C) to (B, C, H, W)
-        x = ops.transpose(x, (0, 3, 1, 2))
-        shape = ops.shape(x)
-        B, C, H, W = shape[0], shape[1], shape[2], shape[3]
-
-        # Reshape as a batch of 2D matrices with vectorized channels
-        features = ops.reshape(x, (B, C, -1))
-        # This is a batch of Gram matrices (B, C, C).
-        gram = layers.Dot(axes=2, dtype="float32")([features, features])
+    feature_map = ops.cast(feature_map, "float32")
+    if ops.ndim(feature_map) == 4:
+        # Reshape feature map to 2D (batch_size, height * width, channels)
+        B, H, W, C = ops.shape(feature_map)
+        feature_map = ops.reshape(feature_map, (B, H * W, C))
+        # Compute the Gram Matrix: G = F^T F
+        gram = ops.matmul(ops.transpose(feature_map, axes=(0, 2, 1)), feature_map)
     else:
         raise ValueError(
             "The input tensor should be either a 3d (H, W, C) "
@@ -42,13 +32,12 @@ def get_gram_matrix(x, norm_by_channels=False, flatten=False):
         )
     # Normalize the Gram matrix
     if norm_by_channels:
-        denominator = ops.multiply(ops.multiply(C, H), W)  # Normalization from Johnson
+        denominator = ops.cast(
+            ops.multiply(ops.multiply(C, H), W), "float32"
+        )  # Normalization from Johnson
     else:
-        denominator = ops.multiply(H, W)  # Normalization from Google
-    gram = ops.divide(gram, ops.cast(denominator, "float32"))
-
-    if flatten:
-        gram = layers.Flatten(dtype="float32")(gram)
+        denominator = ops.cast(ops.multiply(H, W), "float32")
+    gram = ops.divide(gram, denominator)
 
     return gram
 
@@ -107,9 +96,9 @@ class StyleLoss(Loss):
         self.S = {}
         for layer_name in style_layers:
             self.S[layer_name] = get_gram_matrix(
-                target[layer_name], norm_by_channels=True, flatten=True
+                ops.cast(target[layer_name], "float32")
             )
-        self.N = ops.convert_to_tensor(len(style_layers), K.floatx())
+        self.N = ops.convert_to_tensor(len(style_layers), "float32")
 
     def get_config(self):
         base_config = super().get_config()
@@ -122,16 +111,16 @@ class StyleLoss(Loss):
 
     def call(self, X, y_pred):
         del X
-        y_pred = layers.Rescaling(scale=255, dtype="float32")(y_pred)
+        y_pred = ops.multiply(y_pred, 255.0)
         pred_features = self.feature_extractor(y_pred, training=False)
         loss = ops.zeros(shape=(), dtype="float32")
 
         for layer_name, S in self.S.items():
             pred_layer_features = pred_features[layer_name]
-            C = get_gram_matrix(
-                pred_layer_features, norm_by_channels=True, flatten=True
-            )
-            sl = self.distance(S, C)
+
+            C = get_gram_matrix(pred_layer_features)
+
+            sl = self.distance(S, C, axis=(1, 2))
             loss = ops.add(loss, ops.divide(sl, self.N))
-        loss = ops.cast(loss, dtype=K.floatx())
+
         return loss
