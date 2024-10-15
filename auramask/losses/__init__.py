@@ -16,3 +16,4 @@ from auramask.losses.zero_dce import (
     ExposureControlLoss,
     IlluminationSmoothnessLoss,
 )
+from auramask.losses.histogram import HistogramMatchingLoss

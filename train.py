@@ -37,6 +37,7 @@ from auramask.losses import (
     SpatialConsistencyLoss,
     ExposureControlLoss,
     IlluminationSmoothnessLoss,
+    HistogramMatchingLoss,
 )
 
 from keras import optimizers as opts, losses as ls, activations, ops, utils
@@ -126,6 +127,7 @@ def parse_args():
             "style",
             "content",
             "variation",
+            "histogram",
             "none",
         ],
         nargs="+",
@@ -204,22 +206,26 @@ def load_data():
     )
 
     # for example in t_ds:
-    #     print(example[0])
-    #     print(ops.max(example[0]), ops.min(example[0]))
-    #     print(ops.max(example[1]), ops.min(example[1]))
-    #     ex = ops.convert_to_numpy(example[0][0])
-    #     ey = ops.convert_to_numpy(example[1][0])
-    #     utils.array_to_img(ex).save('train_in.png')
-    #     utils.array_to_img(ey).save('train_targ.png')
+    #     x, y = example
+    #     for i, ex in enumerate(x):
+    #         print(ops.max(ex), ops.min(ex))
+    #         x = ops.convert_to_numpy(ex)
+    #         utils.array_to_img(x).save('tmp/train_x_' + str(i) + '.png')
+    #     for i, ey in enumerate(y):
+    #         print(ops.max(ey), ops.min(ey))
+    #         y = ops.convert_to_numpy(ey)
+    #         utils.array_to_img(y).save('tmp/train_y_' + str(i) + '.png')
     #     break
     # for example in v_ds:
-    #     print(example[0])
-    #     print(ops.max(example[0]), ops.min(example[0]))
-    #     print(ops.max(example[1]), ops.min(example[1]))
-    #     ex = ops.convert_to_numpy(example[0][0])
-    #     ey = ops.convert_to_numpy(example[1][0])
-    #     utils.array_to_img(ex).save('val_in.png')
-    #     utils.array_to_img(ey).save('val_targ.png')
+    #     x, y = example
+    #     for i, ex in enumerate(x):
+    #         print(ops.max(ex), ops.min(ex))
+    #         x = ops.convert_to_numpy(ex)
+    #         utils.array_to_img(x).save('tmp/test_x_' + str(i) + '.png')
+    #     for i, ey in enumerate(y):
+    #         print(ops.max(ey), ops.min(ey))
+    #         y = ops.convert_to_numpy(ey)
+    #         utils.array_to_img(y).save('tmp/test_y_' + str(i) + '.png')
     #     break
     # exit(1)
 
@@ -306,6 +312,9 @@ def initialize_loss():
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "content":
                 tmp_loss = ContentLoss()
+                cs_transforms.append(is_not_rgb)
+            elif loss_i == "histogram":
+                tmp_loss = HistogramMatchingLoss()
                 cs_transforms.append(is_not_rgb)
             else:
                 spatial = hparams.pop("lpips_spatial")

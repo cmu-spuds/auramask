@@ -349,6 +349,6 @@ def init_callbacks(hparams: dict, sample, logdir, note: str = ""):
             log_freq=int(getenv("AURAMASK_LOG_FREQ", 5)),
         )
     )
-    callbacks.append(AuramaskStopOnNaN())
+    # callbacks.append(AuramaskStopOnNaN())
     # callbacks.append(LearningRateScheduler())
     return callbacks
