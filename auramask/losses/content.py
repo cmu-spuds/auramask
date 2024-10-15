@@ -1,7 +1,4 @@
-from typing import Callable
-from keras import Loss, layers, applications, Model, ops
-
-from auramask.utils import distance
+from keras import Loss, layers, applications, Model, ops, losses
 
 
 class ContentLoss(Loss):
@@ -9,7 +6,7 @@ class ContentLoss(Loss):
         self,
         name="ContentLoss",
         content_layer: list[str] = "block5_conv2",
-        distance: Callable = distance.cosine_distance,
+        distance: Loss = losses.MeanSquaredError(),
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
@@ -44,7 +41,7 @@ class ContentLoss(Loss):
     def get_config(self):
         base_config = super().get_config()
         config = {
-            "distance": self.distance.__name__,
+            "distance": self.distance.name,
         }
         return {**base_config, **config}
 
@@ -57,5 +54,5 @@ class ContentLoss(Loss):
 
         # Add content loss
         loss = self.distance(X_features, pred_features)
-        loss = ops.sum(loss, axis=[1, 2])
+
         return loss

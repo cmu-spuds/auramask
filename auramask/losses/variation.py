@@ -27,10 +27,18 @@ class VariationLoss(Loss):
 
             # Calculate the difference of neighboring pixel-values.
             # The images are shifted one pixel along the height and width by slicing.
-            width_var = ops.square(y_pred[:, :-1, :-1, :] - y_pred[:, 1:, :-1, :])
-            height_var = ops.square(y_pred[:, :-1, :-1, :] - y_pred[:, :-1, 1:, :])
+            width_var = ops.abs(
+                ops.subtract(y_pred[:, :-1, :-1, :], y_pred[:, 1:, :-1, :])
+            )
+            height_var = ops.abs(
+                ops.subtract(y_pred[:, :-1, :-1, :], y_pred[:, :-1, 1:, :])
+            )
             sum_axes = (1, 2, 3)
         else:
             raise ValueError("'images' must be either 3 or 4-dimensional.")
 
-        return ops.sum(ops.power(ops.add(width_var, height_var), 1.25), axis=sum_axes)
+        loss = ops.add(
+            ops.sum(width_var, axis=sum_axes), ops.sum(height_var, axis=sum_axes)
+        )
+
+        return loss

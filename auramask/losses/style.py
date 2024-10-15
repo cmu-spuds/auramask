@@ -1,11 +1,12 @@
-from typing import Callable
-from keras import ops, layers, Loss, Model, applications
+from typing import Literal
+from keras import ops, layers, Loss, Model, applications, losses, backend as K
 
-from auramask.utils.distance import cosine_distance
 from auramask.utils.stylerefs import StyleRefs
 
 
-def get_gram_matrix(feature_map, norm_by_channels=False):
+def get_gram_matrix(
+    feature_map, norm: bool | Literal["channels"] | Literal["size"] = False
+):
     """Compute the Gram matrix of the tensor x.
 
     This code was adopted from @robertomest
@@ -22,22 +23,24 @@ def get_gram_matrix(feature_map, norm_by_channels=False):
     if ops.ndim(feature_map) == 4:
         # Reshape feature map to 2D (batch_size, height * width, channels)
         B, H, W, C = ops.shape(feature_map)
-        feature_map = ops.reshape(feature_map, (B, H * W, C))
+        feature_map = ops.reshape(feature_map, (B, -1, C))
+        feature_map_t = ops.transpose(feature_map, axes=(0, 2, 1))
         # Compute the Gram Matrix: G = F^T F
-        gram = ops.matmul(ops.transpose(feature_map, axes=(0, 2, 1)), feature_map)
+        gram = ops.matmul(feature_map_t, feature_map)
     else:
-        raise ValueError(
-            "The input tensor should be either a 3d (H, W, C) "
-            "or 4d (B, H, W, C) tensor."
-        )
+        raise ValueError("The input tensor should be 4d (B, H, W, C) tensor.")
     # Normalize the Gram matrix
-    if norm_by_channels:
+    if norm or norm == "channels":
         denominator = ops.cast(
             ops.multiply(ops.multiply(C, H), W), "float32"
         )  # Normalization from Johnson
-    else:
+    if norm == "size":
         denominator = ops.cast(ops.multiply(H, W), "float32")
+    else:
+        denominator = ops.convert_to_tensor(1.0, "float32")
     gram = ops.divide(gram, denominator)
+
+    gram = ops.cast(gram, K.floatx())
 
     return gram
 
@@ -47,7 +50,7 @@ class StyleLoss(Loss):
         self,
         name="StyleLoss",
         reference: StyleRefs = StyleRefs.DIM,
-        distance: Callable = cosine_distance,
+        distance: Loss = losses.MeanSquaredError(),
         style_layers: list[str] = [
             "block1_conv1",
             "block2_conv1",
@@ -92,12 +95,13 @@ class StyleLoss(Loss):
 
         target = self.feature_extractor(img, training=False)
 
+        _, H, W, C = ops.cast(ops.shape(img), "float32")
+        self.denom = 4.0 * ops.square(C) * (ops.square(ops.multiply(H, W)))
+
         # Precompute gram matrix for style
         self.S = {}
         for layer_name in style_layers:
-            self.S[layer_name] = get_gram_matrix(
-                ops.cast(target[layer_name], "float32")
-            )
+            self.S[layer_name] = get_gram_matrix(target[layer_name], norm=False)
         self.N = ops.convert_to_tensor(len(style_layers), "float32")
 
     def get_config(self):
@@ -105,7 +109,7 @@ class StyleLoss(Loss):
         config = {
             "reference": self.reference.name,
             "reference_url": self.reference.value["url"],
-            "distance": self.distance.__name__,
+            "distance": self.distance.name,
         }
         return {**base_config, **config}
 
@@ -118,9 +122,10 @@ class StyleLoss(Loss):
         for layer_name, S in self.S.items():
             pred_layer_features = pred_features[layer_name]
 
-            C = get_gram_matrix(pred_layer_features)
+            C = get_gram_matrix(pred_layer_features, norm=False)
 
-            sl = self.distance(S, C, axis=(1, 2))
+            sl = self.distance(S, C)
+            sl = ops.divide(sl, self.denom)
             loss = ops.add(loss, ops.divide(sl, self.N))
 
         return loss
