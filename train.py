@@ -432,7 +432,7 @@ def main():
     logdir = hparams.pop("log_dir")
     note = hparams.pop("note")
     verbose = hparams.pop("verbose")
-    mixed_precision = hparams.pop("mixed_precision")
+    mixed_precision = hparams["mixed_precision"]
 
     if mixed_precision:
         print("Using mixed precision for training")
