@@ -2,7 +2,7 @@ from typing import Any
 from keras import ops, backend, Model, Loss, metrics as m
 from auramask.losses.embeddistance import FaceEmbeddingLoss
 from auramask.losses.zero_dce import IlluminationSmoothnessLoss
-from auramask.metrics.embeddistance import PercentageOverThreshold
+from auramask.metrics.facevalidate import FaceValidationAccuracy
 
 
 class AuraMask(Model):
@@ -76,10 +76,14 @@ class AuraMask(Model):
         # Predictions are passed as tuple (y_pred, mask)
         y_pred, mask = y_pred
         tloss = 0  # tracked total loss
+        adv_loss = 0  # tracked adversarial loss
 
         for loss, metric, l_w, l_c in self._custom_losses:
             if isinstance(loss, FaceEmbeddingLoss):
-                tmp_y, tmp_pred = (ops.stop_gradient(x), y_pred)
+                tmp_loss = loss(ops.stop_gradient(x), y_pred)
+                metric.update_state(tmp_loss)
+                adv_loss = ops.add(adv_loss, ops.multiply(l_w, tmp_loss))
+                continue
             elif isinstance(loss, IlluminationSmoothnessLoss):
                 tmp_pred = mask
                 tmp_y = y
@@ -92,7 +96,7 @@ class AuraMask(Model):
             metric.update_state(sim_loss)
             tloss = ops.add(tloss, ops.multiply(sim_loss, l_w))
 
-        return tloss
+        return tloss, adv_loss
 
     # def save(self, filepath, overwrite=True, **kwargs):
     #     return self.model.save(filepath, overwrite, **kwargs)
@@ -103,7 +107,7 @@ class AuraMask(Model):
         y_pred, _ = y_pred
 
         for metric in self._metrics:
-            if isinstance(metric, PercentageOverThreshold):
+            if isinstance(metric, FaceValidationAccuracy):
                 metric.update_state(x, y_pred)
             else:
                 metric.update_state(y, y_pred)
@@ -135,7 +139,10 @@ class AuraMask(Model):
         with GradientTape() as tape:
             # X = self.colorspace[0](X)  # Convert to chosen colorspace
             y_pred = self(X, training=True)  # Forward pass with
-            loss = self.compute_loss(x=X, y=y, y_pred=y_pred)  # Compute loss
+            img_loss, adv_loss = self.compute_loss(
+                x=X, y=y, y_pred=y_pred
+            )  # Compute loss
+            loss = ops.add(img_loss, adv_loss)
             scaled_loss = self.optimizer.scale_loss(loss)
 
         # Compute Gradients
@@ -160,7 +167,9 @@ class AuraMask(Model):
         self.zero_grad()
 
         y_pred = self(X, training=True)
-        loss = self.compute_loss(x=X, y=y, y_pred=y_pred)
+        img_loss, adv_loss = self.compute_loss(x=X, y=y, y_pred=y_pred)
+
+        loss = ops.add(img_loss, adv_loss)
 
         scaled_loss = self.optimizer.scale_loss(loss)
         scaled_loss.backward()
@@ -196,7 +205,8 @@ class AuraMask(Model):
             y_pred = self(X, training=False)
 
             # Updates stateful loss metrics.
-            loss = self.compute_loss(x=X, y=y, y_pred=y_pred)
+            img_loss, adv_loss = self.compute_loss(x=X, y=y, y_pred=y_pred)
+            loss = ops.add(img_loss, adv_loss)
             metrics = self.compute_metrics(x=X, y=y, y_pred=y_pred, sample_weight=None)
         metrics["loss"] = loss
         return metrics

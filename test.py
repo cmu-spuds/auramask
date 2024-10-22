@@ -15,6 +15,7 @@ os.environ["KERAS_BACKEND"] = "torch"
 import keras
 import numpy as np
 from keras import utils
+from auramask.metrics.facevalidate import FaceValidationAccuracy
 
 from auramask.utils.constants import (
     EnumAction,
@@ -78,22 +79,8 @@ def parse_args():
         type=str,
         default=["none"],
         choices=[
-            "alex",
-            "vgg",
-            "squeeze",
             "mse",
             "mae",
-            "dsssim",
-            "gsssim",
-            "nima",
-            "ffl",
-            "exposure",
-            "color",
-            "illumination",
-            "spatial",
-            "style",
-            "content",
-            "variation",
             "none",
         ],
         nargs="+",
@@ -138,6 +125,34 @@ def load_model(config: dict, weights_path: str) -> keras.Model:
     return model
 
 
+def initialize_metrics():
+    metrics = []
+    metric_config = {}
+
+    F = hparams.pop("F")
+    if F:
+        for f in F:
+            metrics.append(FaceValidationAccuracy(f=f, threshold=f.get_threshold()))
+
+    if "none" not in hparams["metrics"]:
+        metrics_in = hparams.pop("metrics")
+
+        for metric in metrics_in:
+            if metric == "mse":
+                tmp_metric = keras.metrics.MeanSquaredError()
+            elif metric == "mae":
+                tmp_metric = keras.metrics.MeanAbsoluteError()
+            else:
+                raise Exception("Metric not recognized")
+
+            metrics.append(tmp_metric)
+            metric_config[tmp_metric.name] = tmp_metric.get_config()
+
+    hparams["metrics"] = metric_config
+
+    return metrics
+
+
 def load_pairs_ds() -> datasets.Dataset:
     ds = datasets.load_dataset(hparams["pairs_dataset"], "pairs", split="test")
     insta: InstaFilterEnum = hparams["instagram_filter"]
@@ -158,25 +173,15 @@ def load_pairs_ds() -> datasets.Dataset:
     def v_transform(examples):
         examples = DatasetEnum.data_collater(examples, {"w": dims[0], "h": dims[1]})
 
-        pairs = np.stack(examples["pair"], dtype="int8")
-        img_0 = np.stack(examples["img_0"], dtype="float32")
-        img_1 = np.stack(examples["img_1"], dtype="float32")
+        print(examples["img_0"][0])
 
-        return (pairs, img_0, img_1)
+        examples["pair"] = np.stack(examples["pair"], dtype="int8")
+        examples["img_0"] = np.stack(examples["img_0"], dtype="float32")
+        examples["img_1"] = np.stack(examples["img_1"], dtype="float32")
 
-    ds.set_format("numpy")
+        return examples
 
-    from torch.utils.data import DataLoader
-
-    ds = DataLoader(
-        ds,
-        batch,
-        shuffle=False,
-        # persistent_workers=True,
-        collate_fn=v_transform,
-        num_workers=int(os.getenv("DL_TEST_WORKERS", 4)),
-        pin_memory=True,
-    )
+    ds = ds.batch(batch_size=batch, num_proc=os.cpu_count())
 
     return ds
 
@@ -217,7 +222,14 @@ def main():
 
     set_seed()
 
-    # ds = load_pairs_ds()
+    ds = load_pairs_ds()
+
+    for batch in ds:
+        print(batch.keys())
+        print(batch["img_0"])
+        break
+
+    exit()
 
     # Get the logged weights
     api = wandb.Api(overrides={"entity": "spuds", "project": "auramask"})
@@ -247,9 +259,9 @@ def main():
     run = wandb.init(project="auramask", job_type="evaluation", dir=logdir)
     run.use_model(model_artifact)
 
-    model = load_model(train_run.config, logged_weights)
+    # model = load_model(train_run.config, logged_weights)
 
-    print(model.summary())
+    # metrics = initialize_metrics()
 
 
 if __name__ == "__main__":
