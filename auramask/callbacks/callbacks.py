@@ -46,6 +46,25 @@ class AuramaskWandbMetrics(WandbMetricsLogger):
             wandb.termerror(f"Unable to log learning rate: {e}", repeat=False)
             return None
 
+    def on_epoch_end(self, epoch: int, logs: Optional[Dict[str, Any]] = None) -> None:
+        """Called at the end of an epoch."""
+        logs = (
+            dict()
+            if logs is None
+            else {
+                f"epoch/{k}": ops.convert_to_numpy(ops.cast(v, "float32"))
+                for k, v in logs.items()
+            }
+        )
+
+        logs["epoch/epoch"] = epoch
+
+        lr = self._get_lr()
+        if lr is not None:
+            logs["epoch/learning_rate"] = lr
+
+        wandb.log(logs)
+
 
 class AuramaskCallback(WandbEvalCallback):
     def __init__(
