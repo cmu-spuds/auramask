@@ -196,37 +196,40 @@ def load_data():
         test_size = int(test_size)
 
     insta: InstaFilterEnum = hparams["instagram_filter"]
-    data = ds.generate_ds(
-        insta.name if insta else "default",
+    t_ds, v_ds = ds.load_dataset(
+        hparams["input"],
+        train_size,
+        test_size,
         hparams["batch"],
-        insta.filter_transform if insta else None,
-    )
-    t_ds, v_ds = ds.get_loaders(
-        data, hparams["input"], train_size, test_size, hparams["batch"]
+        insta.filter_transform,
     )
 
-    # for example in t_ds:
-    #     x, y = example
-    #     for i, ex in enumerate(x):
-    #         print(ops.max(ex), ops.min(ex))
-    #         x = ops.convert_to_numpy(ex)
-    #         utils.array_to_img(x).save('tmp/train_x_' + str(i) + '.png')
-    #     for i, ey in enumerate(y):
-    #         print(ops.max(ey), ops.min(ey))
-    #         y = ops.convert_to_numpy(ey)
-    #         utils.array_to_img(y).save('tmp/train_y_' + str(i) + '.png')
-    #     break
-    # for example in v_ds:
-    #     x, y = example
-    #     for i, ex in enumerate(x):
-    #         print(ops.max(ex), ops.min(ex))
-    #         x = ops.convert_to_numpy(ex)
-    #         utils.array_to_img(x).save('tmp/test_x_' + str(i) + '.png')
-    #     for i, ey in enumerate(y):
-    #         print(ops.max(ey), ops.min(ey))
-    #         y = ops.convert_to_numpy(ey)
-    #         utils.array_to_img(y).save('tmp/test_y_' + str(i) + '.png')
-    #     break
+    # import tqdm
+
+    # for example in tqdm.tqdm(t_ds):
+    #     pass
+    #     # x, y = example
+    #     # for i, ex in enumerate(x):
+    #     #     print(ops.max(ex), ops.min(ex))
+    #     #     x = ops.convert_to_numpy(ex)
+    #     #     utils.array_to_img(x).save('tmp/train_x_' + str(i) + '.png')
+    #     # for i, ey in enumerate(y):
+    #     #     print(ops.max(ey), ops.min(ey))
+    #     #     y = ops.convert_to_numpy(ey)
+    #     #     utils.array_to_img(y).save('tmp/train_y_' + str(i) + '.png')
+    #     # break
+    # for example in tqdm.tqdm(v_ds):
+    #     pass
+    #     # x, y = example
+    #     # for i, ex in enumerate(x):
+    #     #     print(ops.max(ex), ops.min(ex))
+    #     #     x = ops.convert_to_numpy(ex)
+    #     #     utils.array_to_img(x).save('tmp/test_x_' + str(i) + '.png')
+    #     # for i, ey in enumerate(y):
+    #     #     print(ops.max(ey), ops.min(ey))
+    #     #     y = ops.convert_to_numpy(ey)
+    #     #     utils.array_to_img(y).save('tmp/test_y_' + str(i) + '.png')
+    #     # break
     # exit(1)
 
     hparams["dataset"] = ds.name.lower()
