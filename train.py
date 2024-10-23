@@ -201,7 +201,7 @@ def load_data():
         train_size,
         test_size,
         hparams["batch"],
-        insta.filter_transform,
+        insta.filter_transform if insta else None,
     )
 
     # import tqdm

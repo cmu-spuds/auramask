@@ -1,7 +1,7 @@
 from enum import Enum
 import os
 from typing import Callable, TypedDict
-from datasets import load_dataset, Dataset, features
+from datasets import load_dataset, Dataset
 from torch import NoneType
 from auramask.utils import preprocessing
 from os import cpu_count
@@ -153,12 +153,12 @@ class DatasetEnum(Enum):
                 examples["target"] = [
                     utils.array_to_img(
                         clahe(
-                            utils.img_to_array(f, dtype="uint8"),
+                            utils.img_to_array(ex, dtype="uint8"),
                             clip_limit=1.0,
                             tile_grid_size=(8, 8),
                         )
                     )
-                    for f in features
+                    for ex in examples["image"]
                 ]
                 examples = DatasetEnum.data_collater(
                     examples, {"w": dims[0], "h": dims[1]}
@@ -240,8 +240,7 @@ class DatasetEnum(Enum):
             drop_last=True,
             persistent_workers=True,
             collate_fn=collate_train,
-            num_workers=int(os.getenv("DL_TRAIN_WORKERS", cpu_count() - 4)),
-            pin_memory=True,
+            num_workers=int(os.getenv("DL_TRAIN_WORKERS", 8)),
         )
 
         def collate_test(examples: list[dict]):
@@ -254,8 +253,7 @@ class DatasetEnum(Enum):
             batch,
             persistent_workers=True,
             collate_fn=collate_test,
-            num_workers=int(os.getenv("DL_TEST_WORKERS", 4)),
-            pin_memory=True,
+            num_workers=int(os.getenv("DL_TEST_WORKERS", 8)),
         )
 
         return train_ds, test_ds
