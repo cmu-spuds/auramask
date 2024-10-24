@@ -141,11 +141,10 @@ class DatasetEnum(Enum):
                 return examples
 
             def transform_test(examples):
+                examples.update(prefilter(examples["image"]))
                 examples = DatasetEnum.data_collater(
                     examples, {"w": dims[0], "h": dims[1]}
                 )
-                if "target" not in examples.keys():
-                    examples["target"] = np.copy(examples["image"])
                 return examples
         else:
 
@@ -168,7 +167,7 @@ class DatasetEnum(Enum):
                     {"augs_per_image": 1, "rate": 0.2, "magnitude": 0.5},
                 )
 
-                examples["image"], examples["target"] = self.data_augmenter(
+                examples = self.data_augmenter(
                     examples, augmenters["geom"], augmenters["aug"]
                 )
                 return examples

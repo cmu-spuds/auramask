@@ -11,7 +11,8 @@ from datetime import datetime
 os.environ["KERAS_BACKEND"] = "torch"
 
 import keras
-
+import wandb
+from auramask import callbacks
 from auramask.utils.constants import (
     EnumAction,
     DatasetEnum,
@@ -20,8 +21,6 @@ from auramask.utils.constants import (
     InstaFilterEnum,
     FaceEmbedEnum,
 )
-from auramask.callbacks import init_callbacks
-
 from auramask.losses import (
     ContentLoss,
     PerceptualLoss,
@@ -159,7 +158,12 @@ def parse_args():
         "--note", default=False, type=bool, action=argparse.BooleanOptionalAction
     )
     parser.add_argument(
-        "-C", "--color-space", type=ColorSpaceEnum, action=EnumAction, required=True
+        "-C",
+        "--color-space",
+        type=ColorSpaceEnum,
+        action=EnumAction,
+        default=ColorSpaceEnum.RGB,
+        required=False,
     )
     parser.add_argument(
         "--checkpoint", default=False, type=bool, action=argparse.BooleanOptionalAction
@@ -424,6 +428,54 @@ def get_sample_data(ds):
             break
 
     return inp
+
+
+def init_callbacks(hparams: dict, sample, logdir, note: str = ""):
+    checkpoint = hparams.pop("checkpoint")
+    tmp_hparams = hparams
+    tmp_hparams["color_space"] = (
+        tmp_hparams["color_space"].name if tmp_hparams["color_space"] else "rgb"
+    )
+    tmp_hparams["input"] = str(tmp_hparams["input"])
+    tmp_hparams["task_id"] = str(os.getenv("SLURM_JOB_ID", None))
+
+    train_callbacks = []
+    wandb.init(
+        project="auramask",
+        id=os.getenv("WANDB_RUN_ID", None),
+        dir=logdir,
+        config=tmp_hparams,
+        name=os.getenv("SLURM_JOB_NAME", None),
+        notes=note,
+        resume="allow",
+    )
+
+    train_callbacks.append(
+        keras.callbacks.BackupAndRestore(backup_dir=os.path.join(logdir, "backup"))
+    )
+
+    if checkpoint:
+        train_callbacks.append(
+            callbacks.AuramaskCheckpoint(
+                filepath=os.path.join(logdir, "checkpoints"),
+                freq_mode="epoch",
+                save_weights_only=True,
+                save_freq=int(os.getenv("AURAMASK_CHECKPOINT_FREQ", 100)),
+            )
+        )
+
+    train_callbacks.append(callbacks.AuramaskWandbMetrics(log_freq="epoch"))
+    train_callbacks.append(
+        callbacks.AuramaskCallback(
+            validation_data=sample,
+            data_table_columns=["idx", "orig", "aug"],
+            pred_table_columns=["epoch", "idx", "pred", "mask"],
+            log_freq=int(os.getenv("AURAMASK_LOG_FREQ", 5)),
+        )
+    )
+    # train_callbacks.append(callbacks.AuramaskStopOnNaN())
+    # train_callbacks.append(keras.callbacks.LearningRateScheduler())
+    return train_callbacks
 
 
 def main():
