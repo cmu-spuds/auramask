@@ -149,16 +149,16 @@ class DatasetEnum(Enum):
         else:
 
             def transform_train(examples):
-                examples["target"] = [
-                    utils.array_to_img(
+                examples["target"] = np.stack(
+                    [
                         clahe(
                             utils.img_to_array(ex, dtype="uint8"),
                             clip_limit=1.0,
                             tile_grid_size=(8, 8),
                         )
-                    )
-                    for ex in examples["image"]
-                ]
+                        for ex in examples["image"]
+                    ]
+                )
                 examples = DatasetEnum.data_collater(
                     examples, {"w": dims[0], "h": dims[1]}
                 )
@@ -202,15 +202,18 @@ class DatasetEnum(Enum):
         elif backend.backend() == "torch":
             ds["train"] = (
                 ds["train"]
-                .flatten_indices(num_proc=8)
-                .to_iterable_dataset(num_shards=1024)
+                .flatten_indices(num_proc=os.cpu_count())
+                .to_iterable_dataset(num_shards=int(os.getenv("DL_TRAIN_WORKERS", 8)))
                 .shuffle()
             )
             ds["test"] = (
                 ds["test"]
-                .flatten_indices(num_proc=8)
-                .to_iterable_dataset(num_shards=1024)
+                .flatten_indices(num_proc=os.cpu_count())
+                .to_iterable_dataset(num_shards=int(os.getenv("DL_TEST_WORKERS", 8)))
             )
+
+            # ds["train"] = ds["train"].with_transform(transform_train, columns=["image"])
+            # ds["test"] = ds["test"].with_transform(transform_test, columns=["image"])
 
             train_ds, test_ds = self._load_data_torch(
                 ds["train"], ds["test"], batch, transform_train, transform_test
@@ -237,7 +240,6 @@ class DatasetEnum(Enum):
             train_ds,
             batch,
             drop_last=True,
-            persistent_workers=True,
             collate_fn=collate_train,
             num_workers=int(os.getenv("DL_TRAIN_WORKERS", 8)),
         )

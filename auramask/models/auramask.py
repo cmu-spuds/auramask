@@ -40,7 +40,7 @@ class AuraMask(Model):
         jit_compile: str = "auto",
         auto_scale_loss: bool = True,
     ):
-        self._metrics = metrics
+        self._metrics = metrics if metrics else []
         if isinstance(loss, list):
             weighted = isinstance(loss_weights, list)
             conversion = isinstance(loss_convert, list)
@@ -106,11 +106,12 @@ class AuraMask(Model):
 
         y_pred, _ = y_pred
 
-        for metric in self._metrics:
-            if isinstance(metric, FaceValidationAccuracy):
-                metric.update_state(x, y_pred)
-            else:
-                metric.update_state(y, y_pred)
+        if self._metrics:
+            for metric in self._metrics:
+                if isinstance(metric, FaceValidationAccuracy):
+                    metric.update_state(x, y_pred)
+                else:
+                    metric.update_state(y, y_pred)
         return self.get_metrics_result()
 
     def get_metrics_result(self):
@@ -118,9 +119,10 @@ class AuraMask(Model):
         for _, metric, _, _ in self._custom_losses:
             all_metrics[metric.name] = metric.result()
             metric.reset_state()
-        for metric in self._metrics:
-            all_metrics[metric.name] = metric.result()
-            metric.reset_state()
+        if self._metrics:
+            for metric in self._metrics:
+                all_metrics[metric.name] = metric.result()
+                metric.reset_state()
         return all_metrics
 
     def train_step(self, *args, **kwargs):

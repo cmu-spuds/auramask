@@ -1,45 +1,18 @@
 # ruff: noqa: E402
-import argparse
-import hashlib
 import os
-import ast
-from pathlib import Path
-from random import choice
-from string import ascii_uppercase
-from datetime import datetime
 
 os.environ["KERAS_BACKEND"] = "torch"
 
 import keras
 import wandb
-from auramask import callbacks
-from auramask.utils.constants import (
-    EnumAction,
-    DatasetEnum,
-    BaseModels,
-    ColorSpaceEnum,
-    InstaFilterEnum,
-    FaceEmbedEnum,
-)
-from auramask.losses import (
-    ContentLoss,
-    PerceptualLoss,
-    FaceEmbeddingLoss,
-    FaceEmbeddingThresholdLoss,
-    AestheticLoss,
-    DSSIMObjective,
-    GRAYSSIMObjective,
-    StyleLoss,
-    StyleRefs,
-    VariationLoss,
-    ColorConstancyLoss,
-    SpatialConsistencyLoss,
-    ExposureControlLoss,
-    IlluminationSmoothnessLoss,
-    HistogramMatchingLoss,
-)
-
-from keras import optimizers as opts, losses as ls, activations, ops, utils
+import auramask
+import argparse
+from ast import literal_eval
+from pathlib import Path
+from random import choice
+from string import ascii_uppercase
+from datetime import datetime
+from hashlib import sha256
 
 # Global hparams object
 hparams: dict = {}
@@ -74,13 +47,17 @@ def parse_args():
     parser.add_argument(
         "-m",
         "--model-backbone",
-        type=BaseModels,
-        action=EnumAction,
+        type=auramask.constants.BaseModels,
+        action=auramask.constants.EnumAction,
         required=True,
     )
     parser.add_argument("--model-config", type=argparse.FileType("r"))
     parser.add_argument(
-        "-F", type=FaceEmbedEnum, nargs="+", required=False, action=EnumAction
+        "-F",
+        type=auramask.constants.FaceEmbedEnum,
+        nargs="+",
+        required=False,
+        action=auramask.constants.EnumAction,
     )
     parser.add_argument(
         "--threshold", default=True, type=bool, action=argparse.BooleanOptionalAction
@@ -133,9 +110,9 @@ def parse_args():
     )
     parser.add_argument(
         "--style-ref",
-        type=StyleRefs,
-        action=EnumAction,
-        default=StyleRefs.STARRYNIGHT,
+        type=auramask.losses.StyleRefs,
+        action=auramask.constants.EnumAction,
+        default=auramask.losses.StyleRefs.STARRYNIGHT,
         required=False,
     )
     parser.add_argument(
@@ -160,9 +137,9 @@ def parse_args():
     parser.add_argument(
         "-C",
         "--color-space",
-        type=ColorSpaceEnum,
-        action=EnumAction,
-        default=ColorSpaceEnum.RGB,
+        type=auramask.constants.ColorSpaceEnum,
+        action=auramask.constants.EnumAction,
+        default=auramask.constants.ColorSpaceEnum.RGB,
         required=False,
     )
     parser.add_argument(
@@ -172,12 +149,15 @@ def parse_args():
         "-D",
         "--dataset",
         default="lfw",
-        type=DatasetEnum,
-        action=EnumAction,
+        type=auramask.constants.DatasetEnum,
+        action=auramask.constants.EnumAction,
         required=True,
     )
     parser.add_argument(
-        "--instagram-filter", type=InstaFilterEnum, action=EnumAction, required=False
+        "--instagram-filter",
+        type=auramask.constants.InstaFilterEnum,
+        action=auramask.constants.EnumAction,
+        required=False,
     )
 
     args = parser.parse_args()
@@ -190,7 +170,7 @@ def parse_args():
 
 
 def load_data():
-    ds: DatasetEnum = hparams["dataset"]
+    ds: auramask.constants.DatasetEnum = hparams["dataset"]
     train_size, test_size = hparams["training"], hparams["testing"]
 
     # In the case that a number of samples is passed in instead of a percentage of the test split
@@ -199,7 +179,7 @@ def load_data():
     if test_size > 1.0:
         test_size = int(test_size)
 
-    insta: InstaFilterEnum = hparams["instagram_filter"]
+    insta: auramask.constants.InstaFilterEnum = hparams["instagram_filter"]
     t_ds, v_ds = ds.load_dataset(
         hparams["input"],
         train_size,
@@ -207,34 +187,6 @@ def load_data():
         hparams["batch"],
         insta.filter_transform if insta else None,
     )
-
-    # import tqdm
-
-    # for example in tqdm.tqdm(t_ds):
-    #     pass
-    #     # x, y = example
-    #     # for i, ex in enumerate(x):
-    #     #     print(ops.max(ex), ops.min(ex))
-    #     #     x = ops.convert_to_numpy(ex)
-    #     #     utils.array_to_img(x).save('tmp/train_x_' + str(i) + '.png')
-    #     # for i, ey in enumerate(y):
-    #     #     print(ops.max(ey), ops.min(ey))
-    #     #     y = ops.convert_to_numpy(ey)
-    #     #     utils.array_to_img(y).save('tmp/train_y_' + str(i) + '.png')
-    #     # break
-    # for example in tqdm.tqdm(v_ds):
-    #     pass
-    #     # x, y = example
-    #     # for i, ex in enumerate(x):
-    #     #     print(ops.max(ex), ops.min(ex))
-    #     #     x = ops.convert_to_numpy(ex)
-    #     #     utils.array_to_img(x).save('tmp/test_x_' + str(i) + '.png')
-    #     # for i, ey in enumerate(y):
-    #     #     print(ops.max(ey), ops.min(ey))
-    #     #     y = ops.convert_to_numpy(ey)
-    #     #     utils.array_to_img(y).save('tmp/test_y_' + str(i) + '.png')
-    #     # break
-    # exit(1)
 
     hparams["dataset"] = ds.name.lower()
 
@@ -246,7 +198,6 @@ def initialize_loss():
     weights = []
     loss_config = {}
     cs_transforms = []
-    metrics = []
 
     is_not_rgb = hparams["color_space"].name.casefold() != "rgb"
     F = hparams.pop("F")
@@ -256,11 +207,13 @@ def initialize_loss():
         for f in F:
             if threshold:  # Loss with thresholding
                 losses.append(
-                    FaceEmbeddingThresholdLoss(f=f, threshold=f.get_threshold())
+                    auramask.losses.FaceEmbeddingThresholdLoss(
+                        f=f, threshold=f.get_threshold()
+                    )
                 )
                 weights.append(rho)
             else:  # Loss as described by ReFace
-                losses.append(FaceEmbeddingLoss(f=f))
+                losses.append(auramask.losses.FaceEmbeddingLoss(f=f))
                 weights.append(rho / len(F))
             loss_config[losses[-1].name] = losses[-1].get_config() | {
                 "weight": weights[-1]
@@ -284,48 +237,50 @@ def initialize_loss():
 
         for loss_i, w_i in iters:
             if loss_i == "mse":
-                tmp_loss = ls.MeanSquaredError()
+                tmp_loss = keras.losses.MeanSquaredError()
                 cs_transforms.append(False)
             elif loss_i == "mae":
-                tmp_loss = ls.MeanAbsoluteError()
+                tmp_loss = keras.losses.MeanAbsoluteError()
                 cs_transforms.append(False)
             elif loss_i == "dsssim":
-                tmp_loss = DSSIMObjective()
+                tmp_loss = auramask.losses.DSSIMObjective()
                 cs_transforms.append(False)
             elif loss_i == "gsssim":
-                tmp_loss = GRAYSSIMObjective()
+                tmp_loss = auramask.losses.GRAYSSIMObjective()
                 cs_transforms.append(False)
             elif loss_i == "nima":
-                tmp_loss = AestheticLoss(name="NIMA-A", backbone="inceptionresnetv2")
+                tmp_loss = auramask.losses.AestheticLoss(
+                    name="NIMA-A", backbone="inceptionresnetv2"
+                )
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "exposure":
-                tmp_loss = ExposureControlLoss(mean_val=0.6)
+                tmp_loss = auramask.losses.ExposureControlLoss(mean_val=0.6)
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "color":
-                tmp_loss = ColorConstancyLoss()
+                tmp_loss = auramask.losses.ColorConstancyLoss()
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "illumination":
-                tmp_loss = IlluminationSmoothnessLoss()
+                tmp_loss = auramask.losses.IlluminationSmoothnessLoss()
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "spatial":
-                tmp_loss = SpatialConsistencyLoss()
+                tmp_loss = auramask.losses.SpatialConsistencyLoss()
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "style":
                 style = hparams.pop("style_ref")
-                tmp_loss = StyleLoss(reference=style)
+                tmp_loss = auramask.losses.StyleLoss(reference=style)
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "variation":
-                tmp_loss = VariationLoss()
+                tmp_loss = auramask.losses.VariationLoss()
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "content":
-                tmp_loss = ContentLoss()
+                tmp_loss = auramask.losses.ContentLoss()
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "histogram":
-                tmp_loss = HistogramMatchingLoss()
+                tmp_loss = auramask.losses.HistogramMatchingLoss()
                 cs_transforms.append(is_not_rgb)
             else:
                 spatial = hparams.pop("lpips_spatial")
-                tmp_loss = PerceptualLoss(
+                tmp_loss = auramask.losses.PerceptualLoss(
                     backbone=loss_i, spatial=spatial, tolerance=0.05
                 )
                 cs_transforms.append(is_not_rgb)
@@ -339,56 +294,22 @@ def initialize_loss():
 
     hparams["losses"] = loss_config
 
-    return losses, weights, cs_transforms, metrics
+    return losses, weights, cs_transforms
 
 
 def initialize_model():
-    eps = hparams["epsilon"]
-    base_model: BaseModels = hparams.pop("model_backbone")
-
-    losses, losses_w, losses_t, metrics = initialize_loss()
-
-    if base_model in [BaseModels.ZERODCE, BaseModels.RESZERODCE]:
-        from auramask.models.zero_dce import get_enhanced_image
-
-        postproc = get_enhanced_image
-
-        def preproc(inputs):
-            inputs = keras.layers.Rescaling(scale=2, offset=-1)(inputs)
-            return inputs
-
-    else:
-
-        def preproc(inputs):
-            inputs = keras.layers.Rescaling(scale=2, offset=-1)(inputs)
-            return inputs
-
-        def postproc(x: keras.KerasTensor, inputs: keras.KerasTensor):
-            x = ops.multiply(eps, x)
-            out = ops.add(x, inputs)
-            out = ops.clip(out, 0.0, 1.0)
-            return [out, x]
-
-    model_config: dict = hparams["model_config"]
+    losses, losses_w, losses_t = initialize_loss()
 
     # Allows modifying the config at calling with the AURAMASK_CONFIG environment variable
-    cfg_mod: dict = ast.literal_eval(os.getenv("AURAMASK_CONFIG", "{}"))
+    cfg_mod: dict = literal_eval(os.getenv("AURAMASK_CONFIG", "{}"))
     for key, val in cfg_mod.items():
         if isinstance(val, str) and val.lower() in ["true", "false"]:
             cfg_mod[key] = True if val.lower() == "true" else False
-    model_config.update(cfg_mod)
+    hparams["model_config"].update(cfg_mod)
 
-    hparams["model"] = base_model.name.lower()
-    model = base_model.build_backbone(
-        model_config=model_config,
-        input_shape=(224, 224, 3)
-        if keras.backend.image_data_format() == "channels_last"
-        else (3, 224, 224),
-        preprocess=preproc,
-        activation_fn=activations.tanh,
-        post_processing=postproc,
-        name=hparams["model"],
-    )
+    hparams["model"] = hparams.pop("model_backbone").name.lower()
+
+    model = auramask.AuraMask(hparams)
 
     # schedule = opts.schedules.ExponentialDecay(
     #     initial_learning_rate=hparams["alpha"],
@@ -396,7 +317,7 @@ def initialize_model():
     #     decay_rate=0.96,
     #     staircase=True,
     # )
-    optimizer = opts.Adam(learning_rate=hparams["alpha"], clipnorm=1.0)
+    optimizer = keras.optimizers.Adam(learning_rate=hparams["alpha"], clipnorm=1.0)
 
     model.compile(
         optimizer=optimizer,
@@ -404,7 +325,6 @@ def initialize_model():
         loss_weights=losses_w,
         loss_convert=losses_t,
         run_eagerly=hparams.pop("eager"),
-        metrics=metrics,
         jit_compile=False,
         auto_scale_loss=True,
     )
@@ -414,8 +334,8 @@ def initialize_model():
 
 def set_seed():
     seed = hparams["seed"]
-    seed = int(hashlib.sha256(seed.encode("utf-8")).hexdigest(), 16) % 10**8
-    utils.set_random_seed(seed)
+    seed = int(sha256(seed.encode("utf-8")).hexdigest(), 16) % 10**8
+    keras.utils.set_random_seed(seed)
 
 
 def get_sample_data(ds):
@@ -456,7 +376,7 @@ def init_callbacks(hparams: dict, sample, logdir, note: str = ""):
 
     if checkpoint:
         train_callbacks.append(
-            callbacks.AuramaskCheckpoint(
+            auramask.callbacks.AuramaskCheckpoint(
                 filepath=os.path.join(logdir, "checkpoints"),
                 freq_mode="epoch",
                 save_weights_only=True,
@@ -464,16 +384,16 @@ def init_callbacks(hparams: dict, sample, logdir, note: str = ""):
             )
         )
 
-    train_callbacks.append(callbacks.AuramaskWandbMetrics(log_freq="epoch"))
+    train_callbacks.append(auramask.callbacks.AuramaskWandbMetrics(log_freq="epoch"))
     train_callbacks.append(
-        callbacks.AuramaskCallback(
+        auramask.callbacks.AuramaskCallback(
             validation_data=sample,
             data_table_columns=["idx", "orig", "aug"],
             pred_table_columns=["epoch", "idx", "pred", "mask"],
             log_freq=int(os.getenv("AURAMASK_LOG_FREQ", 5)),
         )
     )
-    # train_callbacks.append(callbacks.AuramaskStopOnNaN())
+    # train_callbacks.append(auramask.callbacks.AuramaskStopOnNaN())
     # train_callbacks.append(keras.callbacks.LearningRateScheduler())
     return train_callbacks
 
