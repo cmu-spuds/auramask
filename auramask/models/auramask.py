@@ -1,5 +1,5 @@
 from typing import Any
-from keras import ops, backend, Model, Loss, metrics as m
+from keras import ops, backend, Model, metrics as m
 from auramask.losses.embeddistance import FaceEmbeddingLoss
 from auramask.losses.zero_dce import IlluminationSmoothnessLoss
 from auramask.metrics.facevalidate import FaceValidationAccuracy
@@ -12,9 +12,30 @@ class AuraMask(Model):
         **kwargs,
         # colorspace: tuple[Callable, Callable] = None,
     ):
-        self._custom_losses = []
+        self._my_losses = []
+        self._loss_weights = []
         # self.colorspace = colorspace
         super().__init__(*args, **kwargs)
+
+    @property
+    def losses(self):
+        return self._my_losses
+
+    @property
+    def metrics(self):
+        return self._metrics + self._loss_trackers
+
+    @property
+    def loss_weights(self):
+        return self._loss_weights
+
+    @loss_weights.setter
+    def loss_weights(self, value):
+        assert len(value) == len(self._loss_weights)
+        self._loss_weights = value
+
+    def get_loss_bundle(self):
+        return (self._losses, self._loss_weights, self._loss_trackers)
 
     def call(self, inputs, training=False):
         # if not training:
@@ -40,36 +61,21 @@ class AuraMask(Model):
         jit_compile: str = "auto",
         auto_scale_loss: bool = True,
     ):
-        self._metrics = metrics if metrics else []
-        if isinstance(loss, list):
-            weighted = isinstance(loss_weights, list)
-            conversion = isinstance(loss_convert, list)
-            w = 1.0
-            c = False
-            for _ in range(len(loss)):
-                loss_i = loss.pop(0)
-                if weighted:
-                    w = loss_weights.pop(0)
-                if conversion:
-                    c = loss_convert.pop(0)
-                if isinstance(loss_i, Loss):
-                    self._custom_losses.append((loss_i, m.Mean(name=loss_i.name), w, c))
-                else:
-                    loss.append(loss_i)
-                    if weighted:
-                        loss_weights.append(w)
-
-        return super().compile(
+        super().compile(
             optimizer=optimizer,
-            loss=loss,
-            loss_weights=loss_weights,
-            metrics=metrics,
-            weighted_metrics=weighted_metrics,
+            loss=None,
+            loss_weights=None,
+            metrics=None,
+            weighted_metrics=None,
             run_eagerly=run_eagerly,
             steps_per_execution=steps_per_execution,
             jit_compile=jit_compile,
             auto_scale_loss=auto_scale_loss,
         )
+        self._my_losses = loss
+        self._loss_weights = loss_weights
+        self._loss_trackers = [m.Mean(name=loss_i.name) for loss_i in loss]
+        self._metrics = metrics if metrics else []
 
     def compute_loss(self, x=None, y=None, y_pred=None, sample_weight=None):
         del sample_weight
@@ -78,23 +84,22 @@ class AuraMask(Model):
         tloss = 0  # tracked total loss
         adv_loss = 0  # tracked adversarial loss
 
-        for loss, metric, l_w, l_c in self._custom_losses:
+        for i, loss in enumerate(self._my_losses):
+            weight = self._loss_weights[i]
+            metric = self._loss_trackers[i]
             if isinstance(loss, FaceEmbeddingLoss):
                 tmp_loss = loss(ops.stop_gradient(x), y_pred)
                 metric.update_state(tmp_loss)
-                adv_loss = ops.add(adv_loss, ops.multiply(l_w, tmp_loss))
+                adv_loss = ops.add(adv_loss, ops.multiply(weight, tmp_loss))
                 continue
             elif isinstance(loss, IlluminationSmoothnessLoss):
                 tmp_pred = mask
                 tmp_y = y
             else:
-                tmp_y, tmp_pred = (
-                    (y, y_pred)
-                    # (x_rgb, y_pred_rgb) if l_c is True else (x_mod, y_pred)
-                )
+                tmp_y, tmp_pred = (y, y_pred)
             sim_loss = loss(tmp_y, tmp_pred)
             metric.update_state(sim_loss)
-            tloss = ops.add(tloss, ops.multiply(sim_loss, l_w))
+            tloss = ops.add(tloss, ops.multiply(sim_loss, weight))
 
         return tloss, adv_loss
 
@@ -106,23 +111,18 @@ class AuraMask(Model):
 
         y_pred, _ = y_pred
 
-        if self._metrics:
-            for metric in self._metrics:
-                if isinstance(metric, FaceValidationAccuracy):
-                    metric.update_state(x, y_pred)
-                else:
-                    metric.update_state(y, y_pred)
+        for metric in self._metrics:
+            if isinstance(metric, FaceValidationAccuracy):
+                metric.update_state(x, y_pred)
+            else:
+                metric.update_state(y, y_pred)
         return self.get_metrics_result()
 
     def get_metrics_result(self):
         all_metrics = {}
-        for _, metric, _, _ in self._custom_losses:
+        for metric in self.metrics:
             all_metrics[metric.name] = metric.result()
             metric.reset_state()
-        if self._metrics:
-            for metric in self._metrics:
-                all_metrics[metric.name] = metric.result()
-                metric.reset_state()
         return all_metrics
 
     def train_step(self, *args, **kwargs):

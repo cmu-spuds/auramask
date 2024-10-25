@@ -252,7 +252,6 @@ class DatasetEnum(Enum):
         test_ds = DataLoader(
             test_ds,
             batch,
-            persistent_workers=True,
             collate_fn=collate_test,
             num_workers=int(os.getenv("DL_TEST_WORKERS", 8)),
         )

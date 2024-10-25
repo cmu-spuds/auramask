@@ -6,6 +6,7 @@ os.environ["KERAS_BACKEND"] = "torch"
 import keras
 import wandb
 import auramask
+import softadapt
 import argparse
 from ast import literal_eval
 from pathlib import Path
@@ -300,6 +301,10 @@ def initialize_loss():
 def initialize_model():
     losses, losses_w, losses_t = initialize_loss()
 
+    adaptive_callback = softadapt.callbacks.AdaptiveLossCallback(
+        [lss.name for lss in losses], weights=losses_w, frequency="epoch"
+    )
+
     # Allows modifying the config at calling with the AURAMASK_CONFIG environment variable
     cfg_mod: dict = literal_eval(os.getenv("AURAMASK_CONFIG", "{}"))
     for key, val in cfg_mod.items():
@@ -329,7 +334,7 @@ def initialize_model():
         auto_scale_loss=True,
     )
 
-    return model
+    return model, adaptive_callback
 
 
 def set_seed():
@@ -438,7 +443,7 @@ def main():
     # Load the training and validation data
     t_ds, v_ds = load_data()
 
-    model = initialize_model()
+    model, adaptive_callback = initialize_model()
 
     v = get_sample_data(v_ds)
     model(v)
@@ -447,7 +452,7 @@ def main():
 
     training_history = model.fit(
         t_ds,
-        callbacks=callbacks,
+        callbacks=callbacks + [adaptive_callback],
         epochs=hparams["epochs"],
         verbose=verbose,
         validation_data=v_ds,
