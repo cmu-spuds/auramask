@@ -6,7 +6,6 @@ os.environ["KERAS_BACKEND"] = "torch"
 import keras
 import wandb
 import auramask
-import softadapt
 import argparse
 from ast import literal_eval
 from pathlib import Path
@@ -66,7 +65,6 @@ def parse_args():
     parser.add_argument("-p", "--rho", type=float, default=1.0)
     parser.add_argument("-a", "--alpha", type=float, default=2e-4)
     parser.add_argument("-e", "--epsilon", type=float, default=0.03)
-    parser.add_argument("-l", "--lambda", type=float, default=[1.0], nargs="+")
     parser.add_argument("-B", "--batch-size", dest="batch", type=int, default=32)
     parser.add_argument("-E", "--epochs", type=int, default=5)
     parser.add_argument("-s", "--steps-per-epoch", type=int, default=-1)
@@ -108,6 +106,13 @@ def parse_args():
             "none",
         ],
         nargs="+",
+    )
+    parser.add_argument("-l", "--lambda", type=float, default=[1.0], nargs="+")
+    parser.add_argument(
+        "--adaptive-loss",
+        type=str,
+        required=False,
+        choices=["loss-weighted", "normalized", "base"],
     )
     parser.add_argument(
         "--style-ref",
@@ -301,9 +306,14 @@ def initialize_loss():
 def initialize_model():
     losses, losses_w, losses_t = initialize_loss()
 
-    adaptive_callback = softadapt.callbacks.AdaptiveLossCallback(
-        [lss.name for lss in losses], weights=losses_w, frequency="epoch"
-    )
+    if hparams["adaptive_loss"] is not None:
+        adaptive_callback = auramask.callbacks.AdaptiveLossCallback(
+            [lss.name for lss in losses],
+            weights=losses_w,
+            frequency="epoch",
+            algorithm=hparams["adaptive_loss"],
+            clip_weights=True,
+        )
 
     # Allows modifying the config at calling with the AURAMASK_CONFIG environment variable
     cfg_mod: dict = literal_eval(os.getenv("AURAMASK_CONFIG", "{}"))

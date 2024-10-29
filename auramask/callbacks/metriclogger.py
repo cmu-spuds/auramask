@@ -23,6 +23,15 @@ class AuramaskWandbMetrics(WandbMetricsLogger):
             wandb.termerror(f"Unable to log learning rate: {e}", repeat=False)
             return None
 
+    def _get_loss_weights(self) -> dict[str, float] | None:
+        if hasattr(self.model, "loss_weights") and hasattr(self.model, "losses"):
+            weights = {}
+            for loss, weight in zip(self.model.losses, self.model.loss_weights):
+                weights["epoch/" + loss.name + "_weight"] = ops.convert_to_numpy(weight)
+            return weights
+        else:
+            return None
+
     def on_epoch_end(self, epoch: int, logs: Optional[Dict[str, Any]] = None) -> None:
         """Called at the end of an epoch."""
         logs = (
@@ -39,5 +48,10 @@ class AuramaskWandbMetrics(WandbMetricsLogger):
         lr = self._get_lr()
         if lr is not None:
             logs["epoch/learning_rate"] = lr
+
+        weights = self._get_loss_weights()
+
+        if weights is not None:
+            logs.update(weights)
 
         wandb.log(logs)
