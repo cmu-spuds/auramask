@@ -115,6 +115,9 @@ def parse_args():
         choices=["loss-weighted", "normalized", "base"],
     )
     parser.add_argument(
+        "--gradient-alteration", type=str, required=False, choices=["pc-grad"]
+    )
+    parser.add_argument(
         "--style-ref",
         type=auramask.losses.StyleRefs,
         action=auramask.constants.EnumAction,
@@ -306,14 +309,18 @@ def initialize_loss():
 def initialize_model():
     losses, losses_w, losses_t = initialize_loss()
 
+    adaptive_callback = []
+
     if hparams["adaptive_loss"] is not None:
-        adaptive_callback = auramask.callbacks.AdaptiveLossCallback(
-            [lss.name for lss in losses],
-            weights=losses_w,
-            frequency="epoch",
-            algorithm=hparams["adaptive_loss"],
-            clip_weights=True,
-        )
+        adaptive_callback = [
+            auramask.callbacks.AdaptiveLossCallback(
+                [lss.name for lss in losses],
+                weights=losses_w,
+                frequency="epoch",
+                algorithm=hparams["adaptive_loss"],
+                clip_weights=True,
+            )
+        ]
 
     # Allows modifying the config at calling with the AURAMASK_CONFIG environment variable
     cfg_mod: dict = literal_eval(os.getenv("AURAMASK_CONFIG", "{}"))
@@ -334,14 +341,19 @@ def initialize_model():
     # )
     optimizer = keras.optimizers.Adam(learning_rate=hparams["alpha"], clipnorm=1.0)
 
+    if hparams["gradient_alteration"] is not None:
+        grad_fn = auramask.pcgrad.compute_pc_grads
+    else:
+        grad_fn = None
+
     model.compile(
         optimizer=optimizer,
         loss=losses,
         loss_weights=losses_w,
-        loss_convert=losses_t,
         run_eagerly=hparams.pop("eager"),
         jit_compile=False,
         auto_scale_loss=True,
+        gradient_alter=grad_fn,
     )
 
     return model, adaptive_callback
@@ -453,16 +465,16 @@ def main():
     # Load the training and validation data
     t_ds, v_ds = load_data()
 
-    model, adaptive_callback = initialize_model()
+    model, callbacks = initialize_model()
 
     v = get_sample_data(v_ds)
     model(v)
 
-    callbacks = init_callbacks(hparams, v, logdir, note)
+    callbacks.extend(init_callbacks(hparams, v, logdir, note))
 
     training_history = model.fit(
         t_ds,
-        callbacks=callbacks + [adaptive_callback],
+        callbacks=callbacks,
         epochs=hparams["epochs"],
         verbose=verbose,
         validation_data=v_ds,

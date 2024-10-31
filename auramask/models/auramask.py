@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Callable
 from keras import ops, backend, Model, metrics as m
 from auramask.losses.embeddistance import FaceEmbeddingLoss
 from auramask.losses.zero_dce import IlluminationSmoothnessLoss
@@ -14,6 +14,7 @@ class AuraMask(Model):
     ):
         self._my_losses = []
         self._loss_weights = []
+        self._gradient_alteration = None
         # self.colorspace = colorspace
         super().__init__(*args, **kwargs)
 
@@ -53,7 +54,7 @@ class AuraMask(Model):
         optimizer: str = "rmsprop",
         loss: Any | None = None,
         loss_weights: Any | None = None,
-        loss_convert=None,
+        gradient_alter: Callable | None = None,
         metrics: Any | None = None,
         weighted_metrics: Any | None = None,
         run_eagerly: bool = False,
@@ -76,6 +77,7 @@ class AuraMask(Model):
         self._loss_weights = loss_weights
         self._loss_trackers = [m.Mean(name=loss_i.name) for loss_i in loss]
         self._metrics = metrics if metrics else []
+        self._gradient_alteration = gradient_alter
 
     def compute_loss(self, x=None, y=None, y_pred=None, sample_weight=None) -> list:
         del sample_weight
@@ -133,7 +135,6 @@ class AuraMask(Model):
         X, y = data  # X is input image data, y is the target image
 
         with GradientTape() as tape:
-            # X = self.colorspace[0](X)  # Convert to chosen colorspace
             y_pred = self(X, training=True)  # Forward pass with
             loss = self.compute_loss(x=X, y=y, y_pred=y_pred)  # Compute loss
             loss = ops.sum(loss)
@@ -152,6 +153,20 @@ class AuraMask(Model):
         metrics["loss"] = loss
         return metrics
 
+    def __compute_gradient(self, loss: list):
+        if self._gradient_alteration is None:
+            loss = ops.sum(loss)
+            scaled_loss = self.optimizer.scale_loss(loss)
+            scaled_loss.backward()
+            trainable_weights = [v for v in self.trainable_weights]
+            gradients = [v.value.grad for v in trainable_weights]
+        else:
+            scaled_loss = [self.optimizer.scale_loss(ls) for ls in loss]
+            gradients, trainable_weights = self._gradient_alteration(
+                scaled_loss, self.trainable_weights
+            )
+        return gradients, trainable_weights
+
     def _torch_train_step(self, data):
         import torch
 
@@ -162,20 +177,14 @@ class AuraMask(Model):
 
         y_pred = self(X, training=True)
         loss = self.compute_loss(x=X, y=y, y_pred=y_pred)
-        loss = ops.sum(loss)
 
-        scaled_loss = self.optimizer.scale_loss(loss)
-        scaled_loss.backward()
-
-        trainable_weights = [v for v in self.trainable_weights]
-
-        gradients = [v.value.grad for v in trainable_weights]
+        gradients, trainable_weights = self.__compute_gradient(loss)
 
         with torch.no_grad():
             self.optimizer.apply(gradients, trainable_weights)
             metrics = self.compute_metrics(x=X, y=y, y_pred=y_pred, sample_weight=None)
 
-        metrics["loss"] = loss
+        metrics["loss"] = ops.sum(loss)
         return metrics
 
     def test_step(self, *args, **kwargs):

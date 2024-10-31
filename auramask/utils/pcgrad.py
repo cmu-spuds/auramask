@@ -1,110 +1,86 @@
-import torch
+from typing import Optional
+from keras import ops, random, backend as K, KerasTensor
 import numpy as np
-import copy
-import random
 
 
-def pc_backward(self, objectives, optimizer):
+def __compute_gradients(ys, xs, retain_graph=True) -> list[KerasTensor]:
+    """_summary_
+
+    Args:
+        ys (_type_): _description_
+        xs (_type_): _description_
+        retain_graph (bool, optional): _description_. Defaults to True.
+
+    Raises:
+        NotImplementedError: _description_
+
+    Returns:
+        list[KerasTensor]: _description_
     """
-    calculate the gradient of the parameters
+    if K.backend() == "torch":
+        for v in xs:
+            v.value.grad = None
+        ys.backward(retain_graph=retain_graph)
+        grads = [v.value.grad for v in xs]
+        return grads
+    elif K.backend() == "tensorflow":
+        from tensorflow import gradients
 
-    input:
-    - objectives: a list of objectives
+        return gradients(ys, xs)
+    else:
+        raise NotImplementedError()
+
+
+def compute_pc_grads(loss: list, var_list: Optional[list] = None):
+    """_summary_
+
+    Args:
+        loss (list): _description_
+        var_list (Optional[list], optional): _description_. Defaults to None.
+
+    Returns:
+        _type_: _description_
     """
+    num_tasks = len(loss)
+    loss = ops.stack(loss)
+    loss = random.shuffle(loss)
 
-    grads, shapes, has_grads = self._pack_grad(objectives)
-    pc_grad = self._project_conflicting(grads, has_grads)
-    pc_grad = self._unflatten_grad(pc_grad, shapes[0])
-    return pc_grad
+    # Compute gradients for each task
+    grads_task = ops.map(
+        lambda lss: ops.concatenate(
+            [
+                ops.reshape(grad, [-1])
+                for grad in __compute_gradients(
+                    lss, var_list, retain_graph=(lss != loss[-1])
+                )
+                if grad is not None
+            ],
+            axis=0,
+        ),
+        loss,
+    )
 
+    # Compute gradient projections
+    def proj_grad(grad_task):
+        for k in range(num_tasks):
+            dot_product = ops.dot(grad_task, grads_task[k])
+            grad_task = grad_task - ops.minimum(dot_product, 0.0) * grads_task[k]
+        return grad_task
 
-def _project_conflicting(self, grads, has_grads, shapes=None):
-    shared = torch.stack(has_grads).prod(0).bool()
-    pc_grad, _ = copy.deepcopy(grads), len(grads)
-    for g_i in pc_grad:
-        random.shuffle(grads)
-        for g_j in grads:
-            g_i_g_j = torch.dot(g_i, g_j)
-            if g_i_g_j < 0:
-                g_i -= (g_i_g_j) * g_j / (g_j.norm() ** 2)
-    merged_grad = torch.zeros_like(grads[0]).to(grads[0].device)
-    merged_grad[shared] = torch.stack([g[shared] for g in pc_grad]).mean(dim=0)
+    proj_grads_flatten = ops.vectorized_map(proj_grad, grads_task)
 
-    merged_grad[~shared] = torch.stack([g[~shared] for g in pc_grad]).sum(dim=0)
-    return merged_grad
-
-
-def _set_grad(self, grads):
-    """
-    set the modified gradients to the network
-    """
-
-    idx = 0
-    for group in self._optim.param_groups:
-        for p in group["params"]:
-            # if p.grad is None: continue
-            p.grad = grads[idx]
-            idx += 1
-    return
-
-
-def _pack_grad(self, objectives):
-    """
-    pack the gradient of the parameters of the network for each objective
-
-    output:
-    - grad: a list of the gradient of the parameters
-    - shape: a list of the shape of the parameters
-    - has_grad: a list of mask represent whether the parameter has gradient
-    """
-
-    grads, shapes, has_grads = [], [], []
-    for obj in objectives:
-        self._optim.zero_grad(set_to_none=True)
-        obj.backward(retain_graph=True)
-        grad, shape, has_grad = self._retrieve_grad()
-        grads.append(self._flatten_grad(grad, shape))
-        has_grads.append(self._flatten_grad(has_grad, shape))
-        shapes.append(shape)
-    return grads, shapes, has_grads
-
-
-def _unflatten_grad(self, grads, shapes):
-    unflatten_grad, idx = [], 0
-    for shape in shapes:
-        length = np.prod(shape)
-        unflatten_grad.append(grads[idx : idx + length].view(shape).clone())
-        idx += length
-    return unflatten_grad
-
-
-def _flatten_grad(self, grads, shapes):
-    flatten_grad = torch.cat([g.flatten() for g in grads])
-    return flatten_grad
-
-
-def _retrieve_grad(self):
-    """
-    get the gradient of the parameters of the network with specific
-    objective
-
-    output:
-    - grad: a list of the gradient of the parameters
-    - shape: a list of the shape of the parameters
-    - has_grad: a list of mask represent whether the parameter has gradient
-    """
-
-    grad, shape, has_grad = [], [], []
-    for group in self._optim.param_groups:
-        for p in group["params"]:
-            # if p.grad is None: continue
-            # tackle the multi-head scenario
-            if p.grad is None:
-                shape.append(p.shape)
-                grad.append(torch.zeros_like(p).to(p.device))
-                has_grad.append(torch.zeros_like(p).to(p.device))
-                continue
-            shape.append(p.grad.shape)
-            grad.append(p.grad.clone())
-            has_grad.append(torch.ones_like(p).to(p.device))
-    return grad, shape, has_grad
+    # Unpack flattened projected gradients back to original shape
+    proj_grads = []
+    for j in range(num_tasks):
+        start_idx = 0
+        for idx, var in enumerate(var_list):
+            grad_shape = ops.shape(var)
+            flatten_dim = int(np.prod(grad_shape))
+            proj_grad = proj_grads_flatten[j][start_idx : start_idx + flatten_dim]
+            proj_grad = ops.copy(ops.reshape(proj_grad, grad_shape))
+            if len(proj_grads) < len(var_list):
+                proj_grads.append(proj_grad)
+            else:
+                proj_grads[idx] += proj_grad
+            start_idx += flatten_dim
+    return proj_grads, var_list
