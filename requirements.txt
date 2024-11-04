@@ -11,3 +11,4 @@ pilgram2
 albumentations
 ruff
 pre-commit
+softadapt_keras @ git+https://github.com/logasja/SoftAdapt-Keras.git@15f535167c58fea37cfb06cbc9ed132042cb0684
