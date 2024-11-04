@@ -1,5 +1,4 @@
 datasets[vision]
-keras_unet_collection
 numpy
 tensorflow
 keras
@@ -12,3 +11,4 @@ albumentations
 ruff
 pre-commit
 softadapt_keras @ git+https://github.com/logasja/SoftAdapt-Keras.git@15f535167c58fea37cfb06cbc9ed132042cb0684
+keras3_unets @ git+https://github.com/logasja/keras3-unets@fb439680e7fbb575138dce70e9f6a71dfc5d4cdb
