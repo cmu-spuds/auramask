@@ -94,7 +94,7 @@ class AuraMask(Model):
                 losses[i] = loss(y, mask)
             else:
                 losses[i] = loss(y, y_pred)
-            metric.update_state(losses[i])
+            metric.update_state(ops.stop_gradient(losses[i]))
             losses[i] = ops.multiply(losses[i], weight)
 
         return losses
