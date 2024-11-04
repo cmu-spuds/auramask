@@ -3,13 +3,12 @@ from keras import ops, random, backend as K, KerasTensor
 import numpy as np
 
 
-def __compute_gradients(ys, xs, retain_graph=True) -> list[KerasTensor]:
+def __compute_gradients(ys, xs) -> list[KerasTensor]:
     """_summary_
 
     Args:
         ys (_type_): _description_
         xs (_type_): _description_
-        retain_graph (bool, optional): _description_. Defaults to True.
 
     Raises:
         NotImplementedError: _description_
@@ -20,7 +19,7 @@ def __compute_gradients(ys, xs, retain_graph=True) -> list[KerasTensor]:
     if K.backend() == "torch":
         for v in xs:
             v.value.grad = None
-        ys.backward(retain_graph=retain_graph)
+        ys.backward(retain_graph=True)
         grads = [v.value.grad for v in xs]
         return grads
     elif K.backend() == "tensorflow":
@@ -50,9 +49,7 @@ def compute_pc_grads(loss: list, var_list: Optional[list] = None):
         lambda lss: ops.concatenate(
             [
                 ops.reshape(grad, [-1])
-                for grad in __compute_gradients(
-                    lss, var_list, retain_graph=(lss != loss[-1])
-                )
+                for grad in __compute_gradients(lss, var_list)
                 if grad is not None
             ],
             axis=0,

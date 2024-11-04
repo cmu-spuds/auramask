@@ -183,8 +183,7 @@ class AuraMask(Model):
         with torch.no_grad():
             self.optimizer.apply(gradients, trainable_weights)
             metrics = self.compute_metrics(x=X, y=y, y_pred=y_pred, sample_weight=None)
-
-        metrics["loss"] = ops.sum(loss)
+            metrics["loss"] = ops.sum(loss)
         return metrics
 
     def test_step(self, *args, **kwargs):
