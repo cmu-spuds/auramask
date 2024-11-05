@@ -90,9 +90,12 @@ class LPIPS(Model):
         )
 
         if backend.backend() == "tensorflow":
-            return ops.squeeze(self.net([y_true, y_pred]))
+            diff = ops.squeeze(self.net([y_true, y_pred]))
         elif backend.backend() == "torch":
             if backend.image_data_format() == "channels_last":
                 y_pred = ops.transpose(y_pred, [0, 3, 1, 2])
                 y_true = ops.transpose(y_true, [0, 3, 1, 2])
-            return self.net.forward(y_pred, y_true, normalize=True)
+            diff = self.net.forward(y_pred, y_true, normalize=True)
+        else:
+            NotImplementedError("This backend is not supported")
+        return ops.reshape(diff, (shape[0], -1))
