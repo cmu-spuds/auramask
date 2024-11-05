@@ -1,5 +1,5 @@
-from typing import Any
-from keras import ops, backend, Model, Loss, metrics as m
+from typing import Any, Callable
+from keras import ops, backend, Model, metrics as m
 from auramask.losses.embeddistance import FaceEmbeddingLoss
 from auramask.losses.zero_dce import IlluminationSmoothnessLoss
 from auramask.metrics.facevalidate import FaceValidationAccuracy
@@ -12,9 +12,31 @@ class AuraMask(Model):
         **kwargs,
         # colorspace: tuple[Callable, Callable] = None,
     ):
-        self._custom_losses = []
+        self._my_losses = []
+        self._loss_weights = []
+        self._gradient_alteration = None
         # self.colorspace = colorspace
         super().__init__(*args, **kwargs)
+
+    @property
+    def losses(self):
+        return self._my_losses
+
+    @property
+    def metrics(self):
+        return self._metrics + self._loss_trackers
+
+    @property
+    def loss_weights(self):
+        return self._loss_weights
+
+    @loss_weights.setter
+    def loss_weights(self, value):
+        assert len(value) == len(self._loss_weights)
+        self._loss_weights = value
+
+    def get_loss_bundle(self):
+        return (self._losses, self._loss_weights, self._loss_trackers)
 
     def call(self, inputs, training=False):
         # if not training:
@@ -32,7 +54,7 @@ class AuraMask(Model):
         optimizer: str = "rmsprop",
         loss: Any | None = None,
         loss_weights: Any | None = None,
-        loss_convert=None,
+        gradient_alter: Callable | None = None,
         metrics: Any | None = None,
         weighted_metrics: Any | None = None,
         run_eagerly: bool = False,
@@ -40,63 +62,42 @@ class AuraMask(Model):
         jit_compile: str = "auto",
         auto_scale_loss: bool = True,
     ):
-        self._metrics = metrics
-        if isinstance(loss, list):
-            weighted = isinstance(loss_weights, list)
-            conversion = isinstance(loss_convert, list)
-            w = 1.0
-            c = False
-            for _ in range(len(loss)):
-                loss_i = loss.pop(0)
-                if weighted:
-                    w = loss_weights.pop(0)
-                if conversion:
-                    c = loss_convert.pop(0)
-                if isinstance(loss_i, Loss):
-                    self._custom_losses.append((loss_i, m.Mean(name=loss_i.name), w, c))
-                else:
-                    loss.append(loss_i)
-                    if weighted:
-                        loss_weights.append(w)
-
-        return super().compile(
+        super().compile(
             optimizer=optimizer,
-            loss=loss,
-            loss_weights=loss_weights,
-            metrics=metrics,
-            weighted_metrics=weighted_metrics,
+            loss=None,
+            loss_weights=None,
+            metrics=None,
+            weighted_metrics=None,
             run_eagerly=run_eagerly,
             steps_per_execution=steps_per_execution,
             jit_compile=jit_compile,
             auto_scale_loss=auto_scale_loss,
         )
+        self._my_losses = loss
+        self._loss_weights = loss_weights
+        self._loss_trackers = [m.Mean(name=loss_i.name) for loss_i in loss]
+        self._metrics = metrics if metrics else []
+        self._gradient_alteration = gradient_alter
 
-    def compute_loss(self, x=None, y=None, y_pred=None, sample_weight=None):
+    def compute_loss(self, x=None, y=None, y_pred=None, sample_weight=None) -> list:
         del sample_weight
         # Predictions are passed as tuple (y_pred, mask)
         y_pred, mask = y_pred
-        tloss = 0  # tracked total loss
-        adv_loss = 0  # tracked adversarial loss
+        losses = [0.0] * len(self._my_losses)
 
-        for loss, metric, l_w, l_c in self._custom_losses:
+        for i, loss in enumerate(self._my_losses):
+            weight = self._loss_weights[i]
+            metric = self._loss_trackers[i]
             if isinstance(loss, FaceEmbeddingLoss):
-                tmp_loss = loss(ops.stop_gradient(x), y_pred)
-                metric.update_state(tmp_loss)
-                adv_loss = ops.add(adv_loss, ops.multiply(l_w, tmp_loss))
-                continue
+                losses[i] = loss(ops.stop_gradient(x), y_pred)
             elif isinstance(loss, IlluminationSmoothnessLoss):
-                tmp_pred = mask
-                tmp_y = y
+                losses[i] = loss(y, mask)
             else:
-                tmp_y, tmp_pred = (
-                    (y, y_pred)
-                    # (x_rgb, y_pred_rgb) if l_c is True else (x_mod, y_pred)
-                )
-            sim_loss = loss(tmp_y, tmp_pred)
-            metric.update_state(sim_loss)
-            tloss = ops.add(tloss, ops.multiply(sim_loss, l_w))
+                losses[i] = loss(y, y_pred)
+            metric.update_state(ops.stop_gradient(losses[i]))
+            losses[i] = ops.multiply(losses[i], weight)
 
-        return tloss, adv_loss
+        return losses
 
     # def save(self, filepath, overwrite=True, **kwargs):
     #     return self.model.save(filepath, overwrite, **kwargs)
@@ -115,10 +116,7 @@ class AuraMask(Model):
 
     def get_metrics_result(self):
         all_metrics = {}
-        for _, metric, _, _ in self._custom_losses:
-            all_metrics[metric.name] = metric.result()
-            metric.reset_state()
-        for metric in self._metrics:
+        for metric in self.metrics:
             all_metrics[metric.name] = metric.result()
             metric.reset_state()
         return all_metrics
@@ -137,12 +135,9 @@ class AuraMask(Model):
         X, y = data  # X is input image data, y is the target image
 
         with GradientTape() as tape:
-            # X = self.colorspace[0](X)  # Convert to chosen colorspace
             y_pred = self(X, training=True)  # Forward pass with
-            img_loss, adv_loss = self.compute_loss(
-                x=X, y=y, y_pred=y_pred
-            )  # Compute loss
-            loss = ops.add(img_loss, adv_loss)
+            loss = self.compute_loss(x=X, y=y, y_pred=y_pred)  # Compute loss
+            loss = ops.sum(loss)
             scaled_loss = self.optimizer.scale_loss(loss)
 
         # Compute Gradients
@@ -158,6 +153,20 @@ class AuraMask(Model):
         metrics["loss"] = loss
         return metrics
 
+    def __compute_gradient(self, loss: list):
+        if self._gradient_alteration is None:
+            loss = ops.sum(loss)
+            scaled_loss = self.optimizer.scale_loss(loss)
+            scaled_loss.backward()
+            trainable_weights = [v for v in self.trainable_weights]
+            gradients = [v.value.grad for v in trainable_weights]
+        else:
+            scaled_loss = [self.optimizer.scale_loss(ls) for ls in loss]
+            gradients, trainable_weights = self._gradient_alteration(
+                scaled_loss, self.trainable_weights
+            )
+        return gradients, trainable_weights
+
     def _torch_train_step(self, data):
         import torch
 
@@ -167,22 +176,14 @@ class AuraMask(Model):
         self.zero_grad()
 
         y_pred = self(X, training=True)
-        img_loss, adv_loss = self.compute_loss(x=X, y=y, y_pred=y_pred)
+        loss = self.compute_loss(x=X, y=y, y_pred=y_pred)
 
-        loss = ops.add(img_loss, adv_loss)
-
-        scaled_loss = self.optimizer.scale_loss(loss)
-        scaled_loss.backward()
-
-        trainable_weights = [v for v in self.trainable_weights]
-
-        gradients = [v.value.grad for v in trainable_weights]
+        gradients, trainable_weights = self.__compute_gradient(loss)
 
         with torch.no_grad():
             self.optimizer.apply(gradients, trainable_weights)
             metrics = self.compute_metrics(x=X, y=y, y_pred=y_pred, sample_weight=None)
-
-        metrics["loss"] = loss
+            metrics["loss"] = ops.sum(loss)
         return metrics
 
     def test_step(self, *args, **kwargs):
@@ -205,8 +206,8 @@ class AuraMask(Model):
             y_pred = self(X, training=False)
 
             # Updates stateful loss metrics.
-            img_loss, adv_loss = self.compute_loss(x=X, y=y, y_pred=y_pred)
-            loss = ops.add(img_loss, adv_loss)
+            loss = self.compute_loss(x=X, y=y, y_pred=y_pred)
+            loss = ops.sum(loss)
             metrics = self.compute_metrics(x=X, y=y, y_pred=y_pred, sample_weight=None)
         metrics["loss"] = loss
         return metrics

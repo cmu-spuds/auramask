@@ -141,25 +141,24 @@ class DatasetEnum(Enum):
                 return examples
 
             def transform_test(examples):
+                examples.update(prefilter(examples["image"]))
                 examples = DatasetEnum.data_collater(
                     examples, {"w": dims[0], "h": dims[1]}
                 )
-                if "target" not in examples.keys():
-                    examples["target"] = np.copy(examples["image"])
                 return examples
         else:
 
             def transform_train(examples):
-                examples["target"] = [
-                    utils.array_to_img(
+                examples["target"] = np.stack(
+                    [
                         clahe(
                             utils.img_to_array(ex, dtype="uint8"),
                             clip_limit=1.0,
                             tile_grid_size=(8, 8),
                         )
-                    )
-                    for ex in examples["image"]
-                ]
+                        for ex in examples["image"]
+                    ]
+                )
                 examples = DatasetEnum.data_collater(
                     examples, {"w": dims[0], "h": dims[1]}
                 )
@@ -168,7 +167,7 @@ class DatasetEnum(Enum):
                     {"augs_per_image": 1, "rate": 0.2, "magnitude": 0.5},
                 )
 
-                examples["image"], examples["target"] = self.data_augmenter(
+                examples = self.data_augmenter(
                     examples, augmenters["geom"], augmenters["aug"]
                 )
                 return examples
@@ -203,15 +202,18 @@ class DatasetEnum(Enum):
         elif backend.backend() == "torch":
             ds["train"] = (
                 ds["train"]
-                .flatten_indices(num_proc=8)
-                .to_iterable_dataset(num_shards=1024)
+                .flatten_indices(num_proc=os.cpu_count())
+                .to_iterable_dataset(num_shards=int(os.getenv("DL_TRAIN_WORKERS", 8)))
                 .shuffle()
             )
             ds["test"] = (
                 ds["test"]
-                .flatten_indices(num_proc=8)
-                .to_iterable_dataset(num_shards=1024)
+                .flatten_indices(num_proc=os.cpu_count())
+                .to_iterable_dataset(num_shards=int(os.getenv("DL_TEST_WORKERS", 8)))
             )
+
+            # ds["train"] = ds["train"].with_transform(transform_train, columns=["image"])
+            # ds["test"] = ds["test"].with_transform(transform_test, columns=["image"])
 
             train_ds, test_ds = self._load_data_torch(
                 ds["train"], ds["test"], batch, transform_train, transform_test
@@ -238,7 +240,6 @@ class DatasetEnum(Enum):
             train_ds,
             batch,
             drop_last=True,
-            persistent_workers=True,
             collate_fn=collate_train,
             num_workers=int(os.getenv("DL_TRAIN_WORKERS", 8)),
         )
@@ -251,7 +252,6 @@ class DatasetEnum(Enum):
         test_ds = DataLoader(
             test_ds,
             batch,
-            persistent_workers=True,
             collate_fn=collate_test,
             num_workers=int(os.getenv("DL_TEST_WORKERS", 8)),
         )
