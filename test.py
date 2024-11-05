@@ -9,11 +9,11 @@ from datetime import datetime
 
 import wandb
 import datasets
+import tqdm
 
 os.environ["KERAS_BACKEND"] = "torch"
 
 import keras
-import numpy as np
 from keras import utils
 from auramask.metrics.facevalidate import FaceValidationAccuracy
 
@@ -161,27 +161,21 @@ def load_pairs_ds() -> datasets.Dataset:
     batch = hparams["batch"]
 
     if insta:
-        ds = ds.map(
-            lambda x: {"img_0": insta.filter_transform(x)["target"]},
-            input_columns=["img_0"],
-            batched=True,
-            batch_size=batch,
-            load_from_cache_file=False,
-            num_proc=os.cpu_count(),
-        )
 
-    def v_transform(examples):
-        examples = DatasetEnum.data_collater(examples, {"w": dims[0], "h": dims[1]})
+        def transform(examples):
+            examples["img_0"] = insta.filter_transform(examples["img_0"])["target"]
+            examples = DatasetEnum.data_collater(examples, {"w": dims[0], "h": dims[1]})
+            return examples
 
-        print(examples["img_0"][0])
+    else:
 
-        examples["pair"] = np.stack(examples["pair"], dtype="int8")
-        examples["img_0"] = np.stack(examples["img_0"], dtype="float32")
-        examples["img_1"] = np.stack(examples["img_1"], dtype="float32")
+        def transform(examples):
+            examples = DatasetEnum.data_collater(examples, {"w": dims[0], "h": dims[1]})
+            return examples
 
-        return examples
+    ds.set_transform(transform)
 
-    ds = ds.batch(batch_size=batch, num_proc=os.cpu_count())
+    ds = ds.iter(batch_size=batch)
 
     return ds
 
@@ -224,13 +218,6 @@ def main():
 
     ds = load_pairs_ds()
 
-    for batch in ds:
-        print(batch.keys())
-        print(batch["img_0"])
-        break
-
-    exit()
-
     # Get the logged weights
     api = wandb.Api(overrides={"entity": "spuds", "project": "auramask"})
     train_run: wandb.Run = api.run(hparams["run_id"])
@@ -259,9 +246,12 @@ def main():
     run = wandb.init(project="auramask", job_type="evaluation", dir=logdir)
     run.use_model(model_artifact)
 
-    # model = load_model(train_run.config, logged_weights)
+    model = load_model(train_run.config, logged_weights)
 
     # metrics = initialize_metrics()
+
+    for example in tqdm.tqdm(ds):
+        adv_img_0, _ = model(example["img_0"], training=False)
 
 
 if __name__ == "__main__":

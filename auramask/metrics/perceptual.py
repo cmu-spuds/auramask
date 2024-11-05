@@ -1,8 +1,8 @@
-from keras import Metric, ops
+from keras import metrics
 from auramask.models.lpips import LPIPS
 
 
-class PerceptualSimilarity(Metric):
+class PerceptualSimilarity(metrics.MeanMetricWrapper):
     def __init__(
         self,
         backbone="alex",
@@ -11,26 +11,21 @@ class PerceptualSimilarity(Metric):
         name="Lpips",
         **kwargs,
     ):
-        super().__init__(name=name, **kwargs)
         if model:
             self.model = model
         else:
             self.model = LPIPS(backbone, spatial)
 
-        self.similarity = self.add_weight(name="similarity", initializer="zeros")
+        def perceptual_similarity(y_true, y_pred):
+            diff = self.model([y_true, y_pred])
+            return diff
+
+        super().__init__(fn=perceptual_similarity, name=name, **kwargs)
+
+        self._direction = "down"
 
     def get_config(self):
         return {
             "name": self.name,
             "model": self.model.get_config(),
         }
-
-    def update_state(self, y_true, y_pred, sample_weight=None):
-        out = ops.mean(self.model([y_true, y_pred]))
-        self.similarity.assign_add(out)
-
-    def result(self):
-        return self.similarity
-
-    def reset_states(self):
-        self.similarity.assign(0)

@@ -29,7 +29,7 @@ class PerceptualLoss(Loss):
         y_true,  # reference_img
         y_pred,  # compared_img
     ):
-        loss = ops.squeeze(self.model([y_true, y_pred]))  # in [0, 1]
+        loss = self.model([y_true, y_pred])  # in [0, 1]
         loss = ops.subtract(loss, self.tolerance)
         if self.tolerance > 0:
             loss = ops.leaky_relu(loss, negative_slope=(0.2 / self.tolerance))

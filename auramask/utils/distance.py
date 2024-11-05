@@ -1,5 +1,7 @@
 from keras import ops, KerasTensor, utils, backend as K
 
+# from torch import cosine_similarity as t_cosine_similirity, _euclidean_dist, pairwise_distance
+
 
 def cosine_similarity(y_true: KerasTensor, y_pred: KerasTensor, axis=-1) -> KerasTensor:
     """Computes the cosine similarity between labels and predictions.
@@ -13,9 +15,12 @@ def cosine_similarity(y_true: KerasTensor, y_pred: KerasTensor, axis=-1) -> Kera
     Returns:
       Cosine similarity value.
     """
+    y_true = ops.convert_to_tensor(y_true, dtype="float32")
+    y_pred = ops.convert_to_tensor(y_pred, dtype="float32")
     y_true = utils.normalize(y_true, axis=axis, order=2)
     y_pred = utils.normalize(y_pred, axis=axis, order=2)
-    return ops.sum(y_true * y_pred, axis=axis)
+    sim = ops.sum(y_true * y_pred, axis=axis)
+    return ops.cast(sim, K.floatx())
 
 
 def cosine_distance(y_true: KerasTensor, y_pred: KerasTensor, axis=-1) -> KerasTensor:
