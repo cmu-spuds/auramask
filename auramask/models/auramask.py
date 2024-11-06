@@ -2,7 +2,6 @@ from typing import Any, Callable
 from keras import ops, backend, Model, metrics as m
 from auramask.losses.embeddistance import FaceEmbeddingLoss
 from auramask.losses.zero_dce import IlluminationSmoothnessLoss
-from auramask.metrics.facevalidate import FaceValidationAccuracy
 
 
 class AuraMask(Model):
@@ -12,11 +11,11 @@ class AuraMask(Model):
         **kwargs,
         # colorspace: tuple[Callable, Callable] = None,
     ):
-        self._my_losses = []
-        self._loss_weights = []
-        self._gradient_alteration = None
-        # self.colorspace = colorspace
         super().__init__(*args, **kwargs)
+        self._my_losses = []
+        self._gradient_alteration = None
+        self._loss_weights = None
+        # self.colorspace = colorspace
 
     @property
     def losses(self):
@@ -28,12 +27,16 @@ class AuraMask(Model):
 
     @property
     def loss_weights(self):
-        return self._loss_weights
+        return list(self._loss_weights.value)
 
     @loss_weights.setter
     def loss_weights(self, value):
-        assert len(value) == len(self._loss_weights)
-        self._loss_weights = value
+        if self._loss_weights is None:
+            self._loss_weights = self.add_weight(
+                shape=(len(value),), initializer="zeros", trainable=False
+            )
+        assert len(value) == len(self._loss_weights.value)
+        self._loss_weights.assign(value)
 
     def get_loss_bundle(self):
         return (self._losses, self._loss_weights, self._loss_trackers)
@@ -74,7 +77,7 @@ class AuraMask(Model):
             auto_scale_loss=auto_scale_loss,
         )
         self._my_losses = loss
-        self._loss_weights = loss_weights
+        self.loss_weights = loss_weights
         self._loss_trackers = [m.Mean(name=loss_i.name) for loss_i in loss]
         self._metrics = metrics if metrics else []
         self._gradient_alteration = gradient_alter
@@ -86,7 +89,7 @@ class AuraMask(Model):
         losses = [0.0] * len(self._my_losses)
 
         for i, loss in enumerate(self._my_losses):
-            weight = self._loss_weights[i]
+            weight = self.loss_weights[i]
             metric = self._loss_trackers[i]
             if isinstance(loss, FaceEmbeddingLoss):
                 losses[i] = loss(ops.stop_gradient(x), y_pred)
@@ -108,10 +111,7 @@ class AuraMask(Model):
         y_pred, _ = y_pred
 
         for metric in self._metrics:
-            if isinstance(metric, FaceValidationAccuracy):
-                metric.update_state(x, y_pred)
-            else:
-                metric.update_state(y, y_pred)
+            metric.update_state(y, y_pred)
         return self.get_metrics_result()
 
     def get_metrics_result(self):
