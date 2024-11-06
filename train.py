@@ -319,6 +319,7 @@ def initialize_model():
                 frequency="epoch",
                 algorithm=hparams["adaptive_loss"],
                 clip_weights=True,
+                backup_dir=os.path.join(hparams["log_dir"], "backup"),
             )
         ]
 
@@ -431,7 +432,7 @@ def main():
     hparams["input"] = (256, 256)
     hparams.update(parse_args().__dict__)
     log = hparams.pop("log")
-    logdir = hparams.pop("log_dir")
+    logdir = hparams["log_dir"]
     note = hparams.pop("note")
     verbose = hparams.pop("verbose")
     mixed_precision = hparams["mixed_precision"]
@@ -459,7 +460,7 @@ def main():
     else:
         logdir = Path(os.path.join(logdir))
     logdir.mkdir(parents=True, exist_ok=True)
-    logdir = str(logdir)
+    hparams["log_dir"] = str(logdir)
 
     set_seed()
     # Load the training and validation data
@@ -470,7 +471,7 @@ def main():
     v = get_sample_data(v_ds)
     model(v)
 
-    callbacks.extend(init_callbacks(hparams, v, logdir, note))
+    callbacks.extend(init_callbacks(hparams, v, hparams.pop("log_dir"), note))
 
     training_history = model.fit(
         t_ds,

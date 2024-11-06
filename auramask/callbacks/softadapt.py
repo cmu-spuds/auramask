@@ -14,10 +14,19 @@ class AdaptiveLossCallback(callbacks.AdaptiveLossCallback):
         algorithm: Literal["loss-weighted"]
         | Literal["normalized"]
         | Literal["base"] = "base",
+        calculate_on_validation=False,
         clip_weights: bool = False,
+        backup_dir: str = None,
     ):
         super().__init__(
-            components, weights, frequency, beta, accuracy_order, algorithm
+            components,
+            weights,
+            frequency,
+            beta,
+            accuracy_order,
+            algorithm,
+            calculate_on_validation,
+            backup_dir,
         )
         # self.debug = True
         self.clip_weights = clip_weights
