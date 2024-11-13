@@ -4,10 +4,12 @@ from keras import ops, Loss
 class VariationLoss(Loss):
     def __init__(
         self,
+        constant_scalar: float = 1e-6,
         name="VariationLoss",
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
+        self.constant_scalar = constant_scalar
 
     def call(self, y_true, y_pred):
         del y_true
@@ -41,4 +43,4 @@ class VariationLoss(Loss):
             ops.sum(width_var, axis=sum_axes), ops.sum(height_var, axis=sum_axes)
         )
 
-        return loss
+        return ops.multiply(self.constant_scalar, loss)

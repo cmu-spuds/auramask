@@ -58,12 +58,14 @@ class StyleLoss(Loss):
             "block4_conv1",
             "block5_conv1",
         ],
+        constant_scalar: float = 1e-7,
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
 
         self.reference = reference
         self.distance = distance
+        self.constant_scalar = constant_scalar
 
         global model_obj
 
@@ -128,4 +130,4 @@ class StyleLoss(Loss):
             sl = ops.divide(sl, self.denom)
             loss = ops.add(loss, ops.divide(sl, self.N))
 
-        return loss
+        return ops.multiply(self.constant_scalar, loss)
