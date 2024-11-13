@@ -7,9 +7,12 @@ class ContentLoss(Loss):
         name="ContentLoss",
         content_layer: list[str] = "block5_conv2",
         distance: Loss = losses.MeanSquaredError(),
+        constant_scalar: float = 2.5e-7,
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
+
+        self.constant_scalar = constant_scalar
 
         global model_obj
 
@@ -55,4 +58,4 @@ class ContentLoss(Loss):
         # Add content loss
         loss = self.distance(X_features, pred_features)
 
-        return loss
+        return ops.multiply(self.constant_scalar, loss)
