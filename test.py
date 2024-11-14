@@ -6,16 +6,16 @@ from pathlib import Path
 from random import choice
 from string import ascii_uppercase
 from datetime import datetime
-
+from typing import Any
+import itertools
+import tqdm
 import wandb
 import datasets
-import tqdm
 
 os.environ["KERAS_BACKEND"] = "torch"
 
 import keras
-from keras import utils
-from auramask.metrics.facevalidate import FaceValidationAccuracy
+from keras import utils, ops
 
 from auramask.utils.constants import (
     EnumAction,
@@ -81,6 +81,7 @@ def parse_args():
         choices=[
             "mse",
             "mae",
+            "lpips",
             "none",
         ],
         nargs="+",
@@ -125,14 +126,17 @@ def load_model(config: dict, weights_path: str) -> keras.Model:
     return model
 
 
-def initialize_metrics():
-    metrics = []
+def initialize_metrics(img_pairs: list[tuple[str, str]]) -> dict[str, keras.Metric]:
+    metrics = {}
     metric_config = {}
 
-    F = hparams.pop("F")
-    if F:
-        for f in F:
-            metrics.append(FaceValidationAccuracy(f=f, threshold=f.get_threshold()))
+    if hparams["F"] is not None:
+        for f in hparams["F"]:
+            tmp_metric = auramask.metrics.EmbeddingsDistanceMetric(
+                threshold=f.get_threshold(), name=f.name.lower()
+            )
+            metrics[f.name.lower()] = tmp_metric
+            metric_config[tmp_metric.name] = tmp_metric.get_config()
 
     if "none" not in hparams["metrics"]:
         metrics_in = hparams.pop("metrics")
@@ -142,15 +146,27 @@ def initialize_metrics():
                 tmp_metric = keras.metrics.MeanSquaredError()
             elif metric == "mae":
                 tmp_metric = keras.metrics.MeanAbsoluteError()
+            elif metric == "lpips":
+                tmp_metric = auramask.metrics.PerceptualSimilarity()
             else:
                 raise Exception("Metric not recognized")
 
-            metrics.append(tmp_metric)
+            metrics[metric] = tmp_metric
             metric_config[tmp_metric.name] = tmp_metric.get_config()
 
-    hparams["metrics"] = metric_config
-
+        hparams["metrics"] = metric_config
     return metrics
+
+
+def initialize_embeddings() -> dict[str, keras.Model]:
+    embeddings: dict[str, keras.Model] = {}
+    F: list[FaceEmbedEnum] | None = hparams["F"]
+
+    if F is not None:
+        for f in F:
+            embeddings[f.name] = f.get_model()
+
+    return embeddings
 
 
 def load_pairs_ds() -> datasets.Dataset:
@@ -158,12 +174,10 @@ def load_pairs_ds() -> datasets.Dataset:
     insta: InstaFilterEnum = hparams["instagram_filter"]
     dims: tuple[int] = hparams["input"]
 
-    batch = hparams["batch"]
-
     if insta:
-
+        # If an instagram filter given, then we are evaluating the effect of simply applying the filter
         def transform(examples):
-            examples["img_0"] = insta.filter_transform(examples["img_0"])["target"]
+            examples["adv_img_0"] = insta.filter_transform(examples["img_0"])["target"]
             examples = DatasetEnum.data_collater(examples, {"w": dims[0], "h": dims[1]})
             return examples
 
@@ -174,8 +188,6 @@ def load_pairs_ds() -> datasets.Dataset:
             return examples
 
     ds.set_transform(transform)
-
-    ds = ds.iter(batch_size=batch)
 
     return ds
 
@@ -218,40 +230,110 @@ def main():
 
     ds = load_pairs_ds()
 
-    # Get the logged weights
-    api = wandb.Api(overrides={"entity": "spuds", "project": "auramask"})
-    train_run: wandb.Run = api.run(hparams["run_id"])
-    model_artifact = None
-    for logged_artifact in train_run.logged_artifacts():
-        if logged_artifact.type == "model":
-            if hparams["alias"] in logged_artifact.aliases + [logged_artifact.version]:
-                model_artifact = logged_artifact
-                break
-    if not model_artifact:
-        raise Exception(
-            "Unable to find an artifact with alias or version {0}".format(
-                hparams["alias"]
+    embedding_fns = initialize_embeddings()
+
+    if hparams["run_id"]:
+        run = wandb.init(project="auramask", job_type="evaluation", dir=logdir)
+        # Get the logged weights if a wandb run is given
+        api = wandb.Api(overrides={"entity": "spuds", "project": "auramask"})
+        train_run: wandb.Run = api.run(hparams["run_id"])
+        model_artifact = None
+        for logged_artifact in train_run.logged_artifacts():
+            if logged_artifact.type == "model":
+                if hparams["alias"] in logged_artifact.aliases + [
+                    logged_artifact.version
+                ]:
+                    model_artifact = logged_artifact
+                    break
+        if not model_artifact:
+            raise Exception(
+                "Unable to find an artifact with alias or version {0}".format(
+                    hparams["alias"]
+                )
             )
-        )
-    logged_weights = None
-    for file in model_artifact.manifest.entries.keys():
-        if "h5" in file:
-            logged_weights = model_artifact.get_entry(file)
-            break
-        elif "keras" in file:
-            logged_weights = model_artifact.get_entry(file)
-            break
-    logged_weights = logged_weights.download()
+        logged_weights = None
+        for file in model_artifact.manifest.entries.keys():
+            if "h5" in file:
+                logged_weights = model_artifact.get_entry(file)
+                break
+            elif "keras" in file:
+                logged_weights = model_artifact.get_entry(file)
+                break
+        logged_weights = logged_weights.download()
+        run.use_model(model_artifact)
+        model = load_model(train_run.config, logged_weights)
 
-    run = wandb.init(project="auramask", job_type="evaluation", dir=logdir)
-    run.use_model(model_artifact)
+        def extract_values(example):
+            adv_img0 = model(example["img_0"], training=False)
+            return (example["pair"], example["img_0"], example["img_1"], adv_img0)
+    elif hparams["instagram_filter"]:
 
-    model = load_model(train_run.config, logged_weights)
+        def extract_values(example):
+            return (
+                example["pair"],
+                example["img_0"],
+                example["img_1"],
+                example["adv_img_0"],
+            )
+    else:
 
-    # metrics = initialize_metrics()
+        def extract_values(example):
+            return (
+                example["pair"],
+                example["img_0"],
+                example["img_1"],
+                example["img_0"],
+            )
 
-    for example in tqdm.tqdm(ds):
-        adv_img_0, _ = model(example["img_0"], training=False)
+    def compute_embeddings(example: dict[str, Any], keys: list[str]):
+        embeddings = {}
+        imgs = ops.concatenate([example[k] for k in keys])
+        for name, fn in embedding_fns.items():
+            embeds = fn(imgs)
+            embeddings[name.lower()] = {
+                (k): v for k, v in zip(keys, ops.split(embeds, len(keys)))
+            }
+        return embeddings
+
+    img_list = ["img_0", "img_1"]
+    if hparams["instagram_filter"] or hparams["run_id"]:
+        img_list += ["adv_img_0"]
+
+    img_pairs = list(itertools.combinations(img_list, 2))
+
+    metrics = initialize_metrics(img_pairs)
+
+    def compute_metrics(
+        example: dict[str, Any], img_pairs_keys: list[list[str]]
+    ) -> dict[str, Any]:
+        metric_vals = {}
+
+        for name, metric in tqdm.tqdm(metrics.items(), position=1, leave=False):
+            for a, b in img_pairs_keys:
+                if isinstance(metric, auramask.metrics.EmbeddingsDistanceMetric):
+                    metric.update_state(
+                        ops.stack([example[name][a], example[name][b]]), example["pair"]
+                    )
+                    metric_vals[str((a, b))] = metric.result()
+                else:
+                    metric.update_state(example[a], example[b])
+                    metric_vals[name + "-" + a + "|" + b] = metric.result()
+        return metric_vals
+
+    prog = tqdm.tqdm(total=len(ds))
+
+    batch: int = int(hparams["batch"])
+
+    for example in ds.iter(batch_size=batch):
+        if embedding_fns:
+            # Compute the embeddings for each of the chosen embedding algorithms
+            example.update(compute_embeddings(example, img_list))
+        vals = compute_metrics(example, img_pairs_keys=img_pairs)
+        prog.set_description(str(vals))
+        prog.update(batch)
+    prog.close()
+
+    print(ds)
 
 
 if __name__ == "__main__":
