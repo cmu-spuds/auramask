@@ -86,14 +86,19 @@ def parse_args():
         type=str,
         default=["none"],
         choices=[
+            "lpips",
             "alex",
             "vgg",
             "squeeze",
             "mse",
             "mae",
+            "ssimc",
+            "cwssim",
             "dsssim",
             "gsssim",
             "nima",
+            "iqanima",
+            "psnr",
             "ffl",
             "exposure",
             "color",
@@ -103,6 +108,8 @@ def parse_args():
             "content",
             "variation",
             "histogram",
+            "topiq",
+            "topiqnr",
             "none",
         ],
         nargs="+",
@@ -251,6 +258,12 @@ def initialize_loss():
             elif loss_i == "mae":
                 tmp_loss = keras.losses.MeanAbsoluteError()
                 cs_transforms.append(False)
+            elif loss_i == "ssimc":
+                tmp_loss = auramask.losses.IQASSIMC()
+                cs_transforms.append(False)
+            elif loss_i == "cwssim":
+                tmp_loss = auramask.losses.IQACWSSIM()
+                cs_transforms.append(False)
             elif loss_i == "dsssim":
                 tmp_loss = auramask.losses.DSSIMObjective()
                 cs_transforms.append(False)
@@ -261,6 +274,9 @@ def initialize_loss():
                 tmp_loss = auramask.losses.AestheticLoss(
                     name="NIMA-A", backbone="inceptionresnetv2"
                 )
+                cs_transforms.append(is_not_rgb)
+            elif loss_i == "iqanima":
+                tmp_loss = auramask.losses.IQAAestheticLoss()
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "exposure":
                 tmp_loss = auramask.losses.ExposureControlLoss(mean_val=0.6)
@@ -284,8 +300,20 @@ def initialize_loss():
             elif loss_i == "content":
                 tmp_loss = auramask.losses.ContentLoss()
                 cs_transforms.append(is_not_rgb)
+            elif loss_i == "topiq":
+                tmp_loss = auramask.losses.TopIQ()
+                cs_transforms.append(is_not_rgb)
+            elif loss_i == "topiqnr":
+                tmp_loss = auramask.losses.TopIQ(full_reference=False)
+                cs_transforms.append(is_not_rgb)
             elif loss_i == "histogram":
                 tmp_loss = auramask.losses.HistogramMatchingLoss()
+                cs_transforms.append(is_not_rgb)
+            elif loss_i == "psnr":
+                tmp_loss = auramask.losses.IQAPSNR()
+                cs_transforms.append(is_not_rgb)
+            elif loss_i == "lpips":
+                tmp_loss = auramask.losses.IQAPerceptual()
                 cs_transforms.append(is_not_rgb)
             else:
                 spatial = hparams.pop("lpips_spatial")
