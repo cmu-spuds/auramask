@@ -8,6 +8,7 @@ torchvision
 lpips
 pilgram2
 albumentations
+pyiqa
 ruff
 pre-commit
 softadapt_keras @ git+https://github.com/logasja/SoftAdapt-Keras@9171ae67bbe955b9b4dfac9dbd03e40dea5ba2e2
