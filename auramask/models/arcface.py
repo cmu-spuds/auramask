@@ -2,10 +2,7 @@ from keras import Model, utils, layers, backend, ops
 from keras.src.applications.imagenet_utils import obtain_input_shape
 import os
 
-WEIGHTS_PATH = (
-    "https://github.com/serengil/deepface_models/releases/download/"
-    "v1.0/arcface_weights.h5"
-)
+WEIGHTS_PATH = "https://huggingface.co/logasja/ArcFace/resolve/main/" "model.weights.h5"
 
 
 def preprocess_input(x):
@@ -178,7 +175,7 @@ def ArcFace(
 
     if weights == "deepface":
         weights_path = utils.get_file(
-            "arcface.h5",
+            "arcface.weights.h5",
             WEIGHTS_PATH,
             cache_subdir="models",
         )
