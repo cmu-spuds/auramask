@@ -1,8 +1,6 @@
 from enum import Enum
 from typing import Literal
-
-# from deepface.modules.verification import find_threshold
-from keras import layers, backend
+from keras import layers, backend, KerasTensor
 
 from auramask.models.arcface import ArcFace
 from auramask.models.facenet import FaceNet
@@ -10,6 +8,24 @@ from auramask.models.deepid import DeepID
 from auramask.models.vggface import VggFace
 # from auramask.models.openface import OpenFace
 # from auramask.utils.preprocessing import rgb_to_bgr
+
+
+def resize_center_pad(x: KerasTensor, shape: tuple):
+    if shape[0] != shape[1]:
+        h = shape[0]
+        w = shape[1]
+        if w > h:
+            diff = int((w - h) / 2)
+            x = layers.Resizing(h, h)(x)
+            x = layers.ZeroPadding2D((0, diff))(x)
+        else:
+            diff = int((h - w) / 2)
+            x = layers.Resizing(w, w)(x)
+            x = layers.ZeroPadding2D((diff, 0))(x)
+    else:
+        x = layers.Resizing(shape[0], shape[1])(x)
+
+    return x
 
 
 class FaceEmbedEnum(str, Enum):
@@ -33,28 +49,26 @@ class FaceEmbedEnum(str, Enum):
             else:
                 input = layers.Input((3, None, None))
             x = layers.Rescaling(255, offset=0)(input)  # convert to [0, 255]
-            # x = layers.Lambda(rgb_to_bgr)(x)
 
             if self == FaceEmbedEnum.VGGFACE:
-                x = layers.Resizing(224, 224, name="vggface-resize")(x)
+                x = resize_center_pad(x, (224, 224))
                 model = VggFace(
                     include_top=False, input_tensor=x, preprocess=True, name=self.name
                 )
             elif self == FaceEmbedEnum.FACENET:
-                x = layers.Resizing(160, 160, name="facenet-resize")(x)
+                x = resize_center_pad(x, (160, 160))
                 model = FaceNet(input_tensor=x, preprocess=True, name=self.name)
             elif self == FaceEmbedEnum.FACENET512:
-                x = layers.Resizing(160, 160, name="facenet-resize")(x)
+                x = resize_center_pad(x, (160, 160))
                 model = FaceNet(
                     input_tensor=x, classes=512, preprocess=True, name=self.name
                 )
             elif self == FaceEmbedEnum.ARCFACE:
+                x = resize_center_pad(x, (112, 112))
                 x = layers.Resizing(112, 112, name="arcface-resize")(x)
                 model = ArcFace(input_tensor=x, preprocess=True, name=self.name)
             elif self == FaceEmbedEnum.DEEPID:
-                x = layers.Resizing(
-                    55, 47, name="deepid-resize", pad_to_aspect_ratio=True, fill_value=0
-                )(x)
+                x = resize_center_pad(x, (55, 47))
                 model = DeepID(input_tensor=x, preprocess=True, name=self.name)
             # elif self == FaceEmbedEnum.OPENFACE:
             #     x = layers.Resizing(96, 96, name="openface-resize")(x)

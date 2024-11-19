@@ -1,14 +1,11 @@
 from keras import Model, utils, layers, backend, ops
 import os
 
-WEIGHTS_PATH = (
-    "https://github.com/serengil/deepface_models/releases/download/"
-    "v1.0/deepid_keras_weights.h5"
-)
+WEIGHTS_PATH = "https://huggingface.co/logasja/DeepID/resolve/main/" "model.weights.h5"
 
 
 def preprocess_input(x):
-    return ops.divide(x, 255)
+    return ops.divide(x, 255.0)
     # return layers.Rescaling(scale=1.0 / 255, offset=0)(x)
 
 
@@ -86,7 +83,7 @@ def DeepID(
 
     if weights == "deepface":
         weights_path = utils.get_file(
-            "deepid.h5",
+            "deepid.weights.h5",
             WEIGHTS_PATH,
             cache_subdir="models",
         )

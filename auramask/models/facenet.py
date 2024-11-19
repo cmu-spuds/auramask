@@ -4,13 +4,11 @@ import os
 from functools import partial
 
 WEIGHTS_PATH_128 = (
-    "https://github.com/serengil/deepface_models/releases/download/"
-    "v1.0/facenet_weights.h5"
+    "https://huggingface.co/logasja/FaceNet/resolve/main/" "model.weights.h5"
 )
 
 WEIGHTS_PATH_512 = (
-    "https://github.com/serengil/deepface_models/releases/download/"
-    "v1.0/facenet512_weights.h5"
+    "https://huggingface.co/logasja/FaceNet512/resolve/main/" "model.weights.h5"
 )
 
 
@@ -86,14 +84,14 @@ def FaceNet(
 
     if weights == "deepface" and classes == 128:
         weights_path = utils.get_file(
-            "facenet128.h5",
+            "facenet128.weights.h5",
             WEIGHTS_PATH_128,
             cache_subdir="models",
         )
         model.load_weights(weights_path)
     elif weights == "deepface" and classes == 512:
         weights_path = utils.get_file(
-            "facenet512.h5",
+            "facenet512.weights.h5",
             WEIGHTS_PATH_512,
             cache_subdir="models",
         )

@@ -7,11 +7,10 @@ os.environ["KERAS_BACKEND"] = "torch"
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
 import unittest
-from keras import utils, ops, KerasTensor, layers, config, backend
+from keras import utils, ops, KerasTensor, config, backend, layers
 from PIL import Image
 
 import requests
-import cv2
 
 import numpy as np
 
@@ -70,18 +69,35 @@ def represent(
 
 
 def test_same_embed_batch(obj: unittest.TestCase, img_paths: list):
-    rs = layers.Rescaling(scale=1.0 / 255)
-    rsiz = layers.Resizing(obj._image_shape[0], obj._image_shape[1])
+    scale = layers.Rescaling(scale=1 / 255.0)
+    if obj._image_shape[0] != obj._image_shape[1]:
+        h = obj._image_shape[0]
+        w = obj._image_shape[1]
+        if w > h:
+            diff = int((w - h) / 2)
+            resize = layers.Resizing(h, h)
+            padding = layers.ZeroPadding2D((0, diff))
+        else:
+            diff = int((h - w) / 2)
+            resize = layers.Resizing(w, w)
+            padding = layers.ZeroPadding2D((diff, 0))
+    else:
+        resize = layers.Resizing(obj._image_shape[0], obj._image_shape[1])
 
     a = []
     for img_path in img_paths:
         file = utils.get_file(origin=img_path, cache_subdir="tst_imgs")
         img = utils.load_img(file)
-        a.append(rsiz(utils.img_to_array(img)))
+        img = utils.img_to_array(img)
+        img = scale(img)
+        img = resize(img)
+
+        a.append(img)
 
     a = ops.stack(a)
 
-    a = rs(rsiz(a))
+    if obj._image_shape[0] != obj._image_shape[1]:
+        a = padding(a)
 
     my_embed = obj._embed_model(a, training=False)
 
@@ -105,16 +121,32 @@ def test_same_embed_batch(obj: unittest.TestCase, img_paths: list):
 
 
 def test_same_embed(obj: unittest.TestCase, img_path: str):
-    rs = layers.Rescaling(scale=1.0 / 255)
-    rsiz = layers.Resizing(obj._image_shape[0], obj._image_shape[1])
+    scale = layers.Rescaling(scale=1 / 255.0)
+    if obj._image_shape[0] != obj._image_shape[1]:
+        h = obj._image_shape[0]
+        w = obj._image_shape[1]
+        if w > h:
+            diff = int((w - h) / 2)
+            resize = layers.Resizing(h, h)
+            padding = layers.ZeroPadding2D((0, diff))
+        else:
+            diff = int((h - w) / 2)
+            resize = layers.Resizing(w, w)
+            padding = layers.ZeroPadding2D((diff, 0))
+    else:
+        resize = layers.Resizing(obj._image_shape[0], obj._image_shape[1])
 
     file = utils.get_file(origin=img_path, cache_subdir="tst_imgs")
     a = utils.load_img(file)
     a = utils.img_to_array(a)
-    a = rs(rsiz(a))
-    # utils.array_to_img(a).save("Altered.png")
+    a = ops.expand_dims(a, axis=0)
+    a = scale(a)
+    a = resize(a)
 
-    my_embed = obj._embed_model(ops.expand_dims(a, axis=0), training=False)
+    if obj._image_shape[0] != obj._image_shape[1]:
+        a = padding(a)
+
+    my_embed = obj._embed_model(a, training=False)
 
     df_embed = represent(
         img_path,
@@ -133,18 +165,32 @@ def test_same_embed(obj: unittest.TestCase, img_path: str):
 
 
 def test_diff_embed(obj: unittest.TestCase, img_path_a, img_path_b):
-    rs = layers.Rescaling(scale=1.0 / 255)
-    rsiz = layers.Resizing(obj._image_shape[0], obj._image_shape[1])
+    scale = layers.Rescaling(scale=1 / 255.0)
+    if obj._image_shape[0] != obj._image_shape[1]:
+        h = obj._image_shape[0]
+        w = obj._image_shape[1]
+        if w > h:
+            diff = int((w - h) / 2)
+            resize = layers.Resizing(h, h)
+            padding = layers.ZeroPadding2D((0, diff))
+        else:
+            diff = int((h - w) / 2)
+            resize = layers.Resizing(w, w)
+            padding = layers.ZeroPadding2D((diff, 0))
+    else:
+        resize = layers.Resizing(obj._image_shape[0], obj._image_shape[1])
 
-    print(obj._image_shape)
+    a = utils.get_file(origin=img_path_a, cache_subdir="tst_imgs")
+    a = utils.load_img(a)
+    a = utils.img_to_array(a)
+    a = ops.expand_dims(a, axis=0)
+    a = scale(a)
+    a = resize(a)
 
-    print(rs)
-    print(rsiz)
+    if obj._image_shape[0] != obj._image_shape[1]:
+        a = padding(a)
 
-    file_a = utils.get_file(origin=img_path_a, cache_subdir="tst_imgs")
-    a = rs(rsiz(cv2.imread(file_a)))
-
-    my_embed = obj._embed_model(ops.expand_dims(a, axis=0), training=False)
+    my_embed = obj._embed_model(a, training=False)
 
     df_embed = represent(
         img_path_b,
