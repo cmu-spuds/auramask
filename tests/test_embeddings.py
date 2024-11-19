@@ -238,7 +238,9 @@ class TestArcFaceEmbedding(unittest.TestCase):
 
 class TestVGGFaceEmbedding(unittest.TestCase):
     def setUp(self) -> None:
-        self._embed_model = VggFace(preprocess=PREPROC, include_top=False)
+        self._embed_model = VggFace(
+            preprocess=PREPROC, include_top=False, pooling="l2_norm"
+        )
         self._embed_model_name = "VGG-Face"
         self._embed_model_norm = "VGGFace"
         self._image_shape = (224, 224, 3)
@@ -256,20 +258,20 @@ class TestVGGFaceEmbedding(unittest.TestCase):
     def test_preprocess_input(self):
         file = utils.get_file(origin=FDF_IMG, cache_subdir="tst_imgs")
         a: Image = utils.load_img(file, target_size=(self._image_shape))
-        a = utils.img_to_array(a) / 255.0
+        a = utils.img_to_array(a)
         a = ops.expand_dims(a, axis=0)
         from auramask.models.vggface import preprocess_input
 
         a_transformed = preprocess_input(a)
 
         np.testing.assert_allclose(
-            a[..., 0], a_transformed[..., 0] + 93.540, atol=self.atol, rtol=self.rtol
+            a[..., 2], a_transformed[..., 0] + 91.4953, atol=self.atol, rtol=self.rtol
         )
         np.testing.assert_allclose(
-            a[..., 1], a_transformed[..., 1] + 104.7624, atol=self.atol, rtol=self.rtol
+            a[..., 1], a_transformed[..., 1] + 103.8827, atol=self.atol, rtol=self.rtol
         )
         np.testing.assert_allclose(
-            a[..., 2], a_transformed[..., 2] + 129.1863, atol=self.atol, rtol=self.rtol
+            a[..., 0], a_transformed[..., 2] + 131.0912, atol=self.atol, rtol=self.rtol
         )
 
     def test_preprocess_input_batch(self):
@@ -288,17 +290,16 @@ class TestVGGFaceEmbedding(unittest.TestCase):
         a_transformed = preprocess_input(a).numpy()
 
         np.testing.assert_allclose(
-            a[..., 0], a_transformed[..., 0] + 93.540, atol=self.atol, rtol=self.rtol
+            a[..., 2], a_transformed[..., 0] + 91.4953, atol=self.atol, rtol=self.rtol
         )
         np.testing.assert_allclose(
-            a[..., 1], a_transformed[..., 1] + 104.7624, atol=self.atol, rtol=self.rtol
+            a[..., 1], a_transformed[..., 1] + 103.8827, atol=self.atol, rtol=self.rtol
         )
         np.testing.assert_allclose(
-            a[..., 2], a_transformed[..., 2] + 129.1863, atol=self.atol, rtol=self.rtol
+            a[..., 0], a_transformed[..., 2] + 131.0912, atol=self.atol, rtol=self.rtol
         )
 
-    # Test Same CD: 0
-    def test_same_embed_fdf(self):
+        # Test Same CD: 0    def test_same_embed_fdf(self):
         test_same_embed(self, FDF_IMG)
 
     def test_same_embed_lfw(self):
