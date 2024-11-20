@@ -18,4 +18,5 @@ from auramask.losses.zero_dce import (
 )
 from auramask.losses.histogram import HistogramMatchingLoss
 from auramask.losses.psnr import IQAPSNR
-from auramask.losses.topiq import TopIQ
+from auramask.losses.topiq import TopIQFR, TopIQNR
+from auramask.losses.ms_swd import MSSWD

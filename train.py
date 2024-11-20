@@ -110,6 +110,7 @@ def parse_args():
             "histogram",
             "topiq",
             "topiqnr",
+            "ms_swd",
             "none",
         ],
         nargs="+",
@@ -301,10 +302,10 @@ def initialize_loss():
                 tmp_loss = auramask.losses.ContentLoss()
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "topiq":
-                tmp_loss = auramask.losses.TopIQ()
+                tmp_loss = auramask.losses.TopIQFR()
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "topiqnr":
-                tmp_loss = auramask.losses.TopIQ(full_reference=False)
+                tmp_loss = auramask.losses.TopIQNR()
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "histogram":
                 tmp_loss = auramask.losses.HistogramMatchingLoss()
@@ -314,6 +315,10 @@ def initialize_loss():
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "lpips":
                 tmp_loss = auramask.losses.IQAPerceptual()
+                cs_transforms.append(is_not_rgb)
+            elif loss_i == "ms_swd":
+                style = hparams.pop("style_ref")
+                tmp_loss = auramask.losses.MSSWD(reference=style)
                 cs_transforms.append(is_not_rgb)
             else:
                 spatial = hparams.pop("lpips_spatial")

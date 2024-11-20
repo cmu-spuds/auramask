@@ -26,7 +26,7 @@ class FaceEmbeddingLoss(Loss):
         reduction="sum_over_batch_size",
         **kwargs,
     ):
-        super().__init__(name=name + f.value, reduction=reduction)
+        super().__init__(name=name + f.value, reduction=reduction, **kwargs)
         self.f = f
         self.d = d
         self.net = self.f.get_model()

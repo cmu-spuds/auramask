@@ -1,4 +1,4 @@
-from keras import Loss, ops, backend
+from keras import Loss, ops, backend as K
 
 
 class DSSIMObjective(Loss):
@@ -93,12 +93,12 @@ class IQASSIMC(Loss):
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
-        if backend.backend() != "torch":
+        if K.backend() != "torch":
             raise Exception("IQA cannot be used in non-torch backend context")
 
         import pyiqa
 
-        self.model = pyiqa.create_metric("ssimc", as_loss=True, channels=3)
+        self.model = pyiqa.create_metric("ssimc", as_loss=True)
 
     def get_config(self):
         return super().get_config()
@@ -109,7 +109,9 @@ class IQASSIMC(Loss):
         y_pred,  # compared_img
     ):
         # Library only supports channels first so change incoming data
-        if backend.image_data_format() == "channels_last":
+        y_true = ops.multiply(y_true, 255.0)
+        y_pred = ops.multiply(y_pred, 255.0)
+        if K.image_data_format() == "channels_last":
             y_true = ops.moveaxis(y_true, -1, 1)
             y_pred = ops.moveaxis(y_pred, -1, 1)
         return 1 - self.model(y_true, y_pred)
@@ -122,7 +124,7 @@ class IQACWSSIM(Loss):
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
-        if backend.backend() != "torch":
+        if K.backend() != "torch":
             raise Exception("IQA cannot be used in non-torch backend context")
 
         import pyiqa
@@ -138,7 +140,7 @@ class IQACWSSIM(Loss):
         y_pred,  # compared_img
     ):
         # Library only supports channels first so change incoming data
-        if backend.image_data_format() == "channels_last":
+        if K.image_data_format() == "channels_last":
             y_true = ops.moveaxis(y_true, -1, 1)
             y_pred = ops.moveaxis(y_pred, -1, 1)
         return 1 - self.model(y_true, y_pred)
