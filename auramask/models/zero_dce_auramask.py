@@ -3,6 +3,80 @@ from typing import Literal
 from keras import layers, Model, backend, utils, KerasTensor
 from auramask.layers.ResBlock import ResBlock2D, ResBlock2DTranspose
 
+# def ResBlock(inputs: KerasTensor,
+#             filters: int,
+#             kernel_size: int,
+#             depth: int = 2,
+#             strides: Any = (2, 2),
+#             padding: str = "same",
+#             activation: Any | None = None,
+#             kernel_initializer: str = "glorot_uniform",
+#             kernel_regularizer: Any | None = None,
+#             batch_normalization: bool = False,
+#             block_activation: Any | None = None,
+#             conv_shortcut: bool = False,
+#             name=None,
+#             **kwargs: Any):
+#     if backend.image_data_format() == "channels_last":
+#         bn_axis = 3
+#     else:
+#         bn_axis = 1
+
+#     if conv_shortcut:
+#         shortcut = layers.Conv2D(
+#             filters, 1, strides=strides, name=name + "_0_conv"
+#         )(inputs)
+#     else:
+#         shortcut = (
+#             layers.MaxPooling2D(1, strides=strides, name=name+"_maxpool")(inputs) if (isinstance(strides, int) and strides > 1) or (strides[0] > 1 or strides[1] > 1) else inputs
+#         )
+#     x = inputs
+#     for i in range(depth):
+#         x = layers.Conv2D(filters,
+#                           kernel_size=kernel_size,
+#                           padding=padding,
+#                           strides=strides if i == 0 else 1,
+#                           use_bias=False,
+#                           kernel_regularizer=kernel_regularizer,
+#                           kernel_initializer=kernel_initializer,
+#                           name=name + f"_{i+1}_conv",
+#                           **kwargs)(x)
+#         if batch_normalization:
+#             x = layers.BatchNormalization(axis=bn_axis, epsilon=backend.epsilon(), name=name + f"_{i+1}_bn")(x)
+#         if i < depth - 1:
+#             x = layers.Activation(activation, name=name + f"_{i+1}_activate")(x)
+#     x = layers.Add(name=name + "_out")([shortcut, x])
+
+#     if block_activation:
+#         x = layers.Activation(activation=block_activation)
+
+#     return x
+
+# def ResBlockTranspose(
+#             inputs: KerasTensor,
+#             filters: int,
+#             kernel_size: int,
+#             depth: int = 2,
+#             strides: Any = (1, 1),
+#             padding: str = "valid",
+#             activation: Any | None = None,
+#             kernel_initializer: str = "glorot_uniform",
+#             kernel_regularizer: Any | None = None,
+#             **kwargs: Any
+# ):
+#     x = inputs
+#     for i in range(depth):
+#         x = layers.Conv2DTranspose(filters,
+#                         kernel_size=kernel_size,
+#                         padding=padding,
+#                         strides=strides,
+#                         activation=activation,
+#                         kernel_initializer=kernel_initializer,
+#                         kernel_regularizer=kernel_regularizer,
+#                         **kwargs)(x)
+#     x = layers.Add()([inputs, x])
+#     return x
+
 
 def build_res_dce_net(
     input_shape: tuple | NoneType = None,

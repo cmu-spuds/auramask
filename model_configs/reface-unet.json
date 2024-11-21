@@ -5,6 +5,6 @@
     "n_labels": 3,
     "activation":"relu",
     "output_activation": null,
-    "batch_norm":true,
+    "batch_norm":false,
     "kernel_reg": "l2"
 }

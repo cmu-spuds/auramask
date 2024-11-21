@@ -367,6 +367,8 @@ def initialize_model():
 
     model = auramask.AuraMask(hparams)
 
+    # keras.utils.plot_model(model, expand_nested=True, show_shapes=True)
+
     # schedule = opts.schedules.ExponentialDecay(
     #     initial_learning_rate=hparams["alpha"],
     #     decay_steps=1000,

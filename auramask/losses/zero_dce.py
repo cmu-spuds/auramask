@@ -1,4 +1,5 @@
 from keras import Loss, ops, KerasTensor, backend as K
+from typing import Optional
 # Implementations pulled from https://github.com/keras-team/keras-io/blob/master/examples/vision/zero_dce.py
 
 """
@@ -236,3 +237,37 @@ class SpatialConsistencyLoss(Loss):
         d_up = ops.square(ops.subtract(d_original_up, d_enhanced_up))
         d_down = ops.square(ops.subtract(d_original_down, d_enhanced_down))
         return ops.add(ops.add(d_left, d_right), ops.add(d_up, d_down))
+
+
+class ZeroDCEEnsemble(Loss):
+    def __init__(
+        self, weights: Optional[list] = None, name="ZeroDCE Ensemble", **kwargs
+    ):
+        super().__init__(name=name, **kwargs)
+
+        self.losses: list[Loss] = [
+            ColorConstancyLoss(),
+            IlluminationSmoothnessLoss(),
+            ExposureControlLoss(),
+            SpatialConsistencyLoss(),
+        ]
+
+        if not weights:
+            self.weights: list[float] = [2.5, 100.0, 5.0, 1.0]
+        else:
+            self.weights = weights
+
+    def call(self, y_true: KerasTensor, y_pred: KerasTensor) -> KerasTensor:
+        total_loss = 0.0
+        for i, lss in enumerate(self.losses):
+            tmp_loss = ops.multiply(self.weights[i], lss(y_true, y_pred))
+            total_loss = ops.add(total_loss, tmp_loss)
+        return total_loss
+
+    def get_config(self):
+        base_config = super().get_config()
+        config = {
+            k.name: k.get_config | {"weight": w}
+            for k, w in zip(self.losses, self.weights)
+        }
+        return {**base_config, **config}

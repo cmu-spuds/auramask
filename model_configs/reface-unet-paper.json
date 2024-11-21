@@ -4,7 +4,7 @@
     "D": [1, 1, 1, 1, 1],
     "n_labels": 3,
     "activation":"relu",
-    "batch_norm":true,
+    "batch_norm":false,
     "kernel_reg": "l2",
     "output_activation": null
 }
