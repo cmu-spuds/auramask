@@ -9,6 +9,8 @@ from auramask.models.vggface import VggFace
 # from auramask.models.openface import OpenFace
 # from auramask.utils.preprocessing import rgb_to_bgr
 
+PREPROCESS = True
+
 
 def resize_center_pad(x: KerasTensor, shape: tuple):
     if shape[0] != shape[1]:
@@ -45,31 +47,34 @@ class FaceEmbedEnum(str, Enum):
 
         if self.name not in model_obj.keys():
             if backend.image_data_format() == "channels_last":
-                input = layers.Input((None, None, 3))
+                inp = layers.Input((None, None, 3))
             else:
-                input = layers.Input((3, None, None))
-            x = layers.Rescaling(255, offset=0)(input)  # convert to [0, 255]
+                inp = layers.Input((3, None, None))
+            x = layers.Rescaling(255, offset=0)(inp)  # convert to [0, 255]
 
             if self == FaceEmbedEnum.VGGFACE:
                 x = resize_center_pad(x, (224, 224))
                 model = VggFace(
-                    include_top=False, input_tensor=x, preprocess=True, name=self.name
+                    include_top=False,
+                    input_tensor=x,
+                    preprocess=PREPROCESS,
+                    name=self.name,
                 )
             elif self == FaceEmbedEnum.FACENET:
                 x = resize_center_pad(x, (160, 160))
-                model = FaceNet(input_tensor=x, preprocess=True, name=self.name)
+                model = FaceNet(input_tensor=x, preprocess=PREPROCESS, name=self.name)
             elif self == FaceEmbedEnum.FACENET512:
                 x = resize_center_pad(x, (160, 160))
                 model = FaceNet(
-                    input_tensor=x, classes=512, preprocess=True, name=self.name
+                    input_tensor=x, classes=512, preprocess=PREPROCESS, name=self.name
                 )
             elif self == FaceEmbedEnum.ARCFACE:
                 x = resize_center_pad(x, (112, 112))
                 x = layers.Resizing(112, 112, name="arcface-resize")(x)
-                model = ArcFace(input_tensor=x, preprocess=True, name=self.name)
+                model = ArcFace(input_tensor=x, preprocess=PREPROCESS, name=self.name)
             elif self == FaceEmbedEnum.DEEPID:
                 x = resize_center_pad(x, (55, 47))
-                model = DeepID(input_tensor=x, preprocess=True, name=self.name)
+                model = DeepID(input_tensor=x, preprocess=PREPROCESS, name=self.name)
             # elif self == FaceEmbedEnum.OPENFACE:
             #     x = layers.Resizing(96, 96, name="openface-resize")(x)
             #     model = OpenFace(input_tensor=x, preprocess=True, name=self.name)

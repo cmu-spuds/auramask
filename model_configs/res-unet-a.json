@@ -1,12 +1,12 @@
 {
     "filter_num": [32, 64, 128, 256, 512],
+    "dilation_num": [1, 3, 15, 31],
+    "aspp_num_down": 256,
+    "aspp_num_up": 128,
     "n_labels": 3,
-    "stack_num_down":4,
-    "stack_num_up":1,
-    "recur_num":2,
     "activation":"ReLU",
     "output_activation":null,
-    "batch_norm":false,
+    "batch_norm":true,
     "pool":false,
     "unpool":false
 }

@@ -68,7 +68,7 @@ def gen_non_geometric_aug_layers(
         [
             A.SomeOf(
                 [
-                    A.ColorJitter(),
+                    # A.ColorJitter(),
                     A.GaussianBlur(),
                     A.GaussNoise(var_limit=0.05),
                 ],

@@ -2,10 +2,10 @@
     "filter_num": [64, 128, 256, 512, 512],
     "n_labels": 3,
     "res_num_ini": 1,
-    "res_num_max": 5,
+    "res_num_max": 3,
     "activation": "ReLU",
     "output_activation": null,
-    "batch_norm": true,
+    "batch_norm": false,
     "pool": false,
     "unpool": false
 }

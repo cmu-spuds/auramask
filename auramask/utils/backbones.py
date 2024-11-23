@@ -9,6 +9,7 @@ from auramask.models import zero_dce, reface_unet, zero_dce_auramask, auramask
 class BaseModels(Enum):
     UNET = (unet_models.unet_2d, False)
     R2UNET = (unet_models.r2_unet_2d, False)
+    RESUNET = (unet_models.resunet_a_2d, False)
     ATTUNET = (unet_models.att_unet_2d, False)
     VNET = (unet_models.vnet_2d, False)
     ZERODCE = (zero_dce.build_dce_net, True)
@@ -36,13 +37,15 @@ class BaseModels(Enum):
 
         # Integrated preprocessing (e.g., color transform, scaling, normalizing)
         if preprocess:
-            inputs = preprocess(inputs)
+            xx = preprocess(inputs)
+        else:
+            xx = inputs
 
         if self.value[1]:
-            x = self.value[0](input_tensor=inputs, **model_config).output[0]
+            x = self.value[0](input_tensor=xx, **model_config).output[0]
         else:
             # Get model using config dict
-            x = self.value[0](input_size=input_shape, **model_config)(inputs)[0]
+            x = self.value[0](input_size=input_shape, **model_config)(xx)[0]
 
         # Use activation function if not defined by builder
         if activation_fn:

@@ -1,5 +1,4 @@
-from types import FunctionType, NoneType
-from typing import Literal
+from typing import Literal, Optional, Callable
 from keras import layers, Model, backend, utils, KerasTensor
 from auramask.layers.ResBlock import ResBlock2D, ResBlock2DTranspose
 
@@ -9,13 +8,13 @@ from auramask.layers.ResBlock import ResBlock2D, ResBlock2DTranspose
 #             depth: int = 2,
 #             strides: Any = (2, 2),
 #             padding: str = "same",
-#             activation: Any | None = None,
+#             activation: Optional[Any] = None,
 #             kernel_initializer: str = "glorot_uniform",
-#             kernel_regularizer: Any | None = None,
+#             kernel_regularizer: Optional[Any] = None,
 #             batch_normalization: bool = False,
-#             block_activation: Any | None = None,
+#             block_activation: Optional[Any] = None,
 #             conv_shortcut: bool = False,
-#             name=None,
+#             name: str="res_block",
 #             **kwargs: Any):
 #     if backend.image_data_format() == "channels_last":
 #         bn_axis = 3
@@ -52,6 +51,7 @@ from auramask.layers.ResBlock import ResBlock2D, ResBlock2DTranspose
 
 #     return x
 
+
 # def ResBlockTranspose(
 #             inputs: KerasTensor,
 #             filters: int,
@@ -79,10 +79,10 @@ from auramask.layers.ResBlock import ResBlock2D, ResBlock2DTranspose
 
 
 def build_res_dce_net(
-    input_shape: tuple | NoneType = None,
-    input_tensor: KerasTensor | NoneType = None,
+    input_shape: Optional[tuple] = None,
+    input_tensor: Optional[KerasTensor] = None,
     filters: int | list = 32,
-    layer_activations: str | FunctionType = "relu",
+    layer_activations: str | Callable = "relu",
     pooling: bool | Literal["max"] | Literal["avg"] = False,
     unpooling: bool
     | Literal["nearest"]
@@ -90,7 +90,7 @@ def build_res_dce_net(
     | Literal["bicubic"]
     | Literal["lanczos3"]
     | Literal["lanczos5"] = False,
-    kernel_size=(3, 3),
+    kernel_size: int = 3,
     padding="same",
     block_count: int | list[int] = 2,
     block_depth=2,

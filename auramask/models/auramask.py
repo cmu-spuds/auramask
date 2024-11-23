@@ -27,16 +27,12 @@ class AuraMask(Model):
 
     @property
     def loss_weights(self):
-        return list(self._loss_weights.value)
+        return list(self._loss_weights)
 
     @loss_weights.setter
     def loss_weights(self, value):
-        if self._loss_weights is None:
-            self._loss_weights = self.add_weight(
-                shape=(len(value),), initializer="zeros", trainable=False
-            )
-        assert len(value) == len(self._loss_weights.value)
-        self._loss_weights.assign(value)
+        assert len(value) == len(self._loss_weights)
+        self._loss_weights = ops.convert_to_tensor(value)
 
     def get_loss_bundle(self):
         return (self._losses, self._loss_weights, self._loss_trackers)
@@ -77,7 +73,7 @@ class AuraMask(Model):
             auto_scale_loss=auto_scale_loss,
         )
         self._my_losses = loss
-        self.loss_weights = loss_weights
+        self._loss_weights = ops.convert_to_tensor(loss_weights)
         self._loss_trackers = [m.Mean(name=loss_i.name) for loss_i in loss]
         self._metrics = metrics if metrics else []
         self._gradient_alteration = gradient_alter
@@ -92,11 +88,11 @@ class AuraMask(Model):
             weight = self.loss_weights[i]
             metric = self._loss_trackers[i]
             if isinstance(loss, FaceEmbeddingLoss):
-                losses[i] = loss(ops.stop_gradient(x), y_pred)
+                losses[i] = loss(y_true=ops.stop_gradient(x), y_pred=y_pred)
             elif isinstance(loss, IlluminationSmoothnessLoss):
-                losses[i] = loss(y, mask)
+                losses[i] = loss(y_true=y, y_pred=mask)
             else:
-                losses[i] = loss(y, y_pred)
+                losses[i] = loss(y_true=y, y_pred=y_pred)
             metric.update_state(ops.stop_gradient(losses[i]))
             losses[i] = ops.multiply(losses[i], weight)
 

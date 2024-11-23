@@ -123,6 +123,9 @@ def parse_args():
         choices=["loss-weighted", "normalized", "base"],
     )
     parser.add_argument(
+        "--adaptive-loss-frequency", type=str, required=False, default="epoch"
+    )
+    parser.add_argument(
         "--gradient-alteration", type=str, required=False, choices=["pc-grad"]
     )
     parser.add_argument(
@@ -344,18 +347,6 @@ def initialize_model():
 
     adaptive_callback = []
 
-    if hparams["adaptive_loss"] is not None:
-        adaptive_callback = [
-            auramask.callbacks.AdaptiveLossCallback(
-                [lss.name for lss in losses],
-                weights=losses_w,
-                frequency="epoch",
-                algorithm=hparams["adaptive_loss"],
-                clip_weights=True,
-                backup_dir=os.path.join(hparams["log_dir"], "backup"),
-            )
-        ]
-
     # Allows modifying the config at calling with the AURAMASK_CONFIG environment variable
     cfg_mod: dict = literal_eval(os.getenv("AURAMASK_CONFIG", "{}"))
     for key, val in cfg_mod.items():
@@ -367,7 +358,7 @@ def initialize_model():
 
     model = auramask.AuraMask(hparams)
 
-    # keras.utils.plot_model(model, expand_nested=True, show_shapes=True)
+    keras.utils.plot_model(model, expand_nested=True, show_shapes=True)
 
     # schedule = opts.schedules.ExponentialDecay(
     #     initial_learning_rate=hparams["alpha"],
@@ -376,6 +367,23 @@ def initialize_model():
     #     staircase=True,
     # )
     optimizer = keras.optimizers.Adam(learning_rate=hparams["alpha"], clipnorm=1.0)
+
+    if hparams["adaptive_loss"] is not None:
+        try:
+            freq = int(hparams["adaptive_loss_frequency"])
+        except ValueError:
+            freq = hparams["adaptive_loss_frequency"]
+
+        adaptive_callback = [
+            auramask.callbacks.AdaptiveLossCallback(
+                [lss.name for lss in losses],
+                weights=losses_w,
+                frequency=freq,
+                algorithm=hparams["adaptive_loss"],
+                clip_weights=True,
+                backup_dir=os.path.join(hparams["log_dir"], "backup"),
+            )
+        ]
 
     if hparams["gradient_alteration"] is not None:
         grad_fn = auramask.pcgrad.compute_pc_grads

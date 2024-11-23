@@ -1,7 +1,7 @@
 {
     "filters": 32,
     "layer_activations": "gelu",
-    "kernel_size": [3,3],
+    "kernel_size": 3,
     "padding": "same",
     "block_count": [2, 3, 5, 1, 1, 1],
     "block_depth": 2,

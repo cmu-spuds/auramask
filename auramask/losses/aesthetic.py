@@ -65,6 +65,6 @@ class IQAAestheticLoss(Loss):
         # Library only supports channels first so change incoming data
         if K.image_data_format() == "channels_last":
             y_pred = ops.moveaxis(y_pred, -1, 1)
-        score = self.model(y_pred)
+        score = self.model(target=y_pred)
         score = ops.divide(score, 10.0)
         return ops.subtract(1, score)

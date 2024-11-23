@@ -43,4 +43,4 @@ class MSSWD(Loss):
         if K.image_data_format() == "channels_last":
             y_true = ops.moveaxis(y_true, -1, 1)
             y_pred = ops.moveaxis(y_pred, -1, 1)
-        return self.model(y_true, y_pred)
+        return self.model(ref=y_true, target=y_pred)

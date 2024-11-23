@@ -1,6 +1,7 @@
 from typing import Optional
 from keras import ops, random, backend as K, KerasTensor
 import numpy as np
+import torch
 
 
 def __compute_gradients(ys, xs) -> list[KerasTensor]:
@@ -42,7 +43,7 @@ def compute_pc_grads(loss: list, var_list: Optional[list] = None):
     """
     num_tasks = len(loss)
     loss = ops.stack(loss)
-    loss = random.shuffle(loss)
+    loss = random.shuffle(loss, seed=random.SeedGenerator())
 
     # Compute gradients for each task
     grads_task = ops.map(
@@ -57,27 +58,28 @@ def compute_pc_grads(loss: list, var_list: Optional[list] = None):
         loss,
     )
 
-    # Compute gradient projections
-    def proj_grad(grad_task):
-        for k in range(num_tasks):
-            dot_product = ops.dot(grad_task, grads_task[k])
-            grad_task = grad_task - ops.minimum(dot_product, 0.0) * grads_task[k]
-        return grad_task
+    with torch.no_grad():
+        # Compute gradient projections
+        def proj_grad(grad_task):
+            for k in range(num_tasks):
+                dot_product = ops.dot(grad_task, grads_task[k])
+                grad_task = grad_task - ops.minimum(dot_product, 0.0) * grads_task[k]
+            return grad_task
 
-    proj_grads_flatten = ops.vectorized_map(proj_grad, grads_task)
+        proj_grads_flatten = ops.vectorized_map(proj_grad, grads_task)
 
-    # Unpack flattened projected gradients back to original shape
-    proj_grads = []
-    for j in range(num_tasks):
-        start_idx = 0
-        for idx, var in enumerate(var_list):
-            grad_shape = ops.shape(var)
-            flatten_dim = int(np.prod(grad_shape))
-            proj_grad = proj_grads_flatten[j][start_idx : start_idx + flatten_dim]
-            proj_grad = ops.copy(ops.reshape(proj_grad, grad_shape))
-            if len(proj_grads) < len(var_list):
-                proj_grads.append(proj_grad)
-            else:
-                proj_grads[idx] += proj_grad
-            start_idx += flatten_dim
+        # Unpack flattened projected gradients back to original shape
+        proj_grads = []
+        for j in range(num_tasks):
+            start_idx = 0
+            for idx, var in enumerate(var_list):
+                grad_shape = ops.shape(var)
+                flatten_dim = int(np.prod(grad_shape))
+                proj_grad = proj_grads_flatten[j][start_idx : start_idx + flatten_dim]
+                proj_grad = ops.copy(ops.reshape(proj_grad, grad_shape))
+                if len(proj_grads) < len(var_list):
+                    proj_grads.append(proj_grad)
+                else:
+                    proj_grads[idx] += proj_grad
+                start_idx += flatten_dim
     return proj_grads, var_list

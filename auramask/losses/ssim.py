@@ -33,7 +33,7 @@ class DSSIMObjective(Loss):
         self.c1 = (self.k1 * self.max_value) ** 2
         self.c2 = (self.k2 * self.max_value) ** 2
 
-    def __call__(self, y_true, y_pred):
+    def call(self, y_true, y_pred):
         patches_pred = ops.image.extract_patches(
             y_pred, self.kernel_size, self.kernel_size, padding="valid"
         )
@@ -101,7 +101,9 @@ class IQASSIMC(Loss):
         self.model = pyiqa.create_metric("ssimc", as_loss=True)
 
     def get_config(self):
-        return super().get_config()
+        base_config = super().get_config()
+        config = {"lower_better": self.model.lower_better}
+        return {**base_config, **config}
 
     def call(
         self,
@@ -109,12 +111,10 @@ class IQASSIMC(Loss):
         y_pred,  # compared_img
     ):
         # Library only supports channels first so change incoming data
-        y_true = ops.multiply(y_true, 255.0)
-        y_pred = ops.multiply(y_pred, 255.0)
         if K.image_data_format() == "channels_last":
             y_true = ops.moveaxis(y_true, -1, 1)
             y_pred = ops.moveaxis(y_pred, -1, 1)
-        return 1 - self.model(y_true, y_pred)
+        return 1 - self.model(ref=y_true, target=y_pred)
 
 
 class IQACWSSIM(Loss):
@@ -129,10 +129,12 @@ class IQACWSSIM(Loss):
 
         import pyiqa
 
-        self.model = pyiqa.create_metric("cw_ssim", as_loss=True, channels=3)
+        self.model = pyiqa.create_metric("cw_ssim", as_loss=True)
 
     def get_config(self):
-        return super().get_config()
+        base_config = super().get_config()
+        config = {"lower_better": self.model.lower_better}
+        return {**base_config, **config}
 
     def call(
         self,
@@ -143,4 +145,4 @@ class IQACWSSIM(Loss):
         if K.image_data_format() == "channels_last":
             y_true = ops.moveaxis(y_true, -1, 1)
             y_pred = ops.moveaxis(y_pred, -1, 1)
-        return 1 - self.model(y_true, y_pred)
+        return 1 - self.model(ref=y_true, target=y_pred)

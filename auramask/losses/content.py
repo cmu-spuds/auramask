@@ -48,9 +48,9 @@ class ContentLoss(Loss):
         }
         return {**base_config, **config}
 
-    def call(self, X, y_pred):
+    def call(self, y_true, y_pred):
         y_pred = ops.multiply(y_pred, 255.0)
-        X = ops.multiply(X, 255.0)
+        X = ops.multiply(y_true, 255.0)
 
         X_features = self.feature_extractor(X, training=False)
         pred_features = self.feature_extractor(y_pred, training=False)
