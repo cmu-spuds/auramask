@@ -68,6 +68,7 @@ def parse_args():
     parser.add_argument("-B", "--batch-size", dest="batch", type=int, default=32)
     parser.add_argument("-E", "--epochs", type=int, default=5)
     parser.add_argument("-s", "--steps-per-epoch", type=int, default=-1)
+    parser.add_argument("-d", "--dims", type=int, default=256)
     parser.add_argument(
         "--lpips-spatial",
         type=bool,
@@ -233,7 +234,7 @@ def initialize_loss():
                 )
                 weights.append(rho)
             else:  # Loss as described by ReFace
-                losses.append(auramask.losses.FaceEmbeddingLoss(f=f))
+                losses.append(auramask.losses.FaceEmbeddingAbsoluteLoss(f=f))
                 weights.append(rho / len(F))
             loss_config[losses[-1].name] = losses[-1].get_config() | {
                 "weight": weights[-1]
@@ -305,7 +306,7 @@ def initialize_loss():
                 tmp_loss = auramask.losses.ContentLoss()
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "topiq":
-                tmp_loss = auramask.losses.TopIQFR()
+                tmp_loss = auramask.losses.SoftTopIQFR()
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "topiqnr":
                 tmp_loss = auramask.losses.TopIQNR()
@@ -358,14 +359,8 @@ def initialize_model():
 
     model = auramask.AuraMask(hparams)
 
-    keras.utils.plot_model(model, expand_nested=True, show_shapes=True)
+    # keras.utils.plot_model(model, expand_nested=True, show_shapes=True)
 
-    # schedule = opts.schedules.ExponentialDecay(
-    #     initial_learning_rate=hparams["alpha"],
-    #     decay_steps=1000,
-    #     decay_rate=0.96,
-    #     staircase=True,
-    # )
     optimizer = keras.optimizers.Adam(learning_rate=hparams["alpha"], clipnorm=1.0)
 
     if hparams["adaptive_loss"] is not None:
@@ -412,10 +407,10 @@ def set_seed():
 def get_sample_data(ds):
     if keras.backend.backend() == "tensorflow":
         for x in ds.take(1):
-            inp = x[0][:8]
+            inp = x[0]
     else:
         for batch in ds:
-            inp = batch[0][:8]
+            inp = batch[0]
             break
 
     return inp
@@ -464,16 +459,23 @@ def init_callbacks(hparams: dict, sample, logdir, note: str = ""):
             log_freq=int(os.getenv("AURAMASK_LOG_FREQ", 5)),
         )
     )
+    train_callbacks.append(
+        keras.callbacks.ReduceLROnPlateau(
+            monitor="val_loss", patience=10, verbose=1, cooldown=5, min_lr=2e-9
+        )
+    )
     # train_callbacks.append(auramask.callbacks.AuramaskStopOnNaN())
-    # train_callbacks.append(keras.callbacks.LearningRateScheduler())
     return train_callbacks
 
 
 def main():
     # Constant Defaults
     hparams["optimizer"] = "adam"
-    hparams["input"] = (256, 256)
+    # hparams["input"] = (256, 256)
+    # hparams["input"] = (512, 512)
     hparams.update(parse_args().__dict__)
+    dims = hparams.pop("dims")
+    hparams["input"] = (dims, dims)
     log = hparams.pop("log")
     logdir = hparams["log_dir"]
     note = hparams.pop("note")

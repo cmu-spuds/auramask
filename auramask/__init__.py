@@ -38,11 +38,13 @@ def AuraMask(config: dict, weights: Optional[str] = None):
 
             activation_fn = keras.activations.sigmoid
 
+    dim = int(config["input"][0] * 0.875)
+
     model = base_model.build_backbone(
         model_config=model_config,
-        input_shape=(224, 224, 3)
+        input_shape=(dim, dim, 3)
         if keras.backend.image_data_format() == "channels_last"
-        else (3, 224, 224),
+        else (3, dim, dim),
         preprocess=preproc,
         activation_fn=activation_fn,
         post_processing=postproc,
@@ -50,9 +52,9 @@ def AuraMask(config: dict, weights: Optional[str] = None):
     )
 
     if keras.backend.image_data_format() == "channels_last":
-        model.build_from_config({"input_shape": (None, 224, 224, 3)})
+        model.build_from_config({"input_shape": (None, dim, dim, 3)})
     else:
-        model.build_from_config({"input_shape": (None, 3, 224, 224)})
+        model.build_from_config({"input_shape": (None, 3, dim, dim)})
 
     if weights:
         model.load_weights(weights)

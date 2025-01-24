@@ -5,6 +5,7 @@ from auramask.losses.perceptual import PerceptualLoss, IQAPerceptual
 from auramask.losses.embeddistance import (
     FaceEmbeddingLoss,
     FaceEmbeddingThresholdLoss,
+    FaceEmbeddingAbsoluteLoss,
 )
 from auramask.losses.aesthetic import AestheticLoss, IQAAestheticLoss
 from auramask.losses.ssim import DSSIMObjective, GRAYSSIMObjective, IQASSIMC, IQACWSSIM
@@ -18,5 +19,5 @@ from auramask.losses.zero_dce import (
 )
 from auramask.losses.histogram import HistogramMatchingLoss
 from auramask.losses.psnr import IQAPSNR
-from auramask.losses.topiq import TopIQFR, TopIQNR
+from auramask.losses.topiq import TopIQFR, TopIQNR, SoftTopIQFR
 from auramask.losses.ms_swd import MSSWD
