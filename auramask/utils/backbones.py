@@ -28,7 +28,7 @@ class BaseModels(Enum):
         input_shape = obtain_input_shape(
             input_shape,
             default_size=224,
-            min_size=127,
+            min_size=112,
             data_format=backend.image_data_format(),
             require_flatten=False,
         )
