@@ -34,6 +34,7 @@ def AuraMask(config: dict, weights: Optional[str] = None):
         else:
 
             def postproc(x: keras.KerasTensor, inputs: keras.KerasTensor):
+                inputs = keras.ops.stop_gradient(inputs)
                 return [x, keras.ops.subtract(inputs, x)]
 
             activation_fn = keras.activations.sigmoid

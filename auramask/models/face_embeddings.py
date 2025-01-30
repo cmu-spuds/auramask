@@ -70,7 +70,6 @@ class FaceEmbedEnum(str, Enum):
                 )
             elif self == FaceEmbedEnum.ARCFACE:
                 x = resize_center_pad(x, (112, 112))
-                x = layers.Resizing(112, 112, name="arcface-resize")(x)
                 model = ArcFace(input_tensor=x, preprocess=PREPROCESS, name=self.name)
             elif self == FaceEmbedEnum.DEEPID:
                 x = resize_center_pad(x, (55, 47))

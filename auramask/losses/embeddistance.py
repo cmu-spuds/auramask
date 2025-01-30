@@ -57,6 +57,7 @@ class FaceEmbeddingThresholdLoss(FaceEmbeddingLoss):
         self,
         f: FaceEmbedEnum,
         threshold: float,
+        negative_slope: float = 0.2,
         d: Callable = cosine_distance,
         name="FET_",
         reduction="sum_over_batch_size",
@@ -64,16 +65,17 @@ class FaceEmbeddingThresholdLoss(FaceEmbeddingLoss):
     ):
         super().__init__(f=f, d=d, name=name, reduction=reduction, **kwargs)
         self.threshold = threshold
+        self.negative_slope = negative_slope
 
     def get_config(self) -> dict:
         base_config = super().get_config()
-        config = {"threshold": self.threshold}
+        config = {"threshold": self.threshold, "negative_slope": self.negative_slope}
         return {**base_config, **config}
 
     def call(self, y_true: KerasTensor, y_pred: KerasTensor) -> KerasTensor:
         dist = super().call(y_true, y_pred)
         dist_thresh = ops.divide(dist, self.threshold)
-        return ops.nn.leaky_relu(dist_thresh, negative_slope=0.01)
+        return ops.nn.leaky_relu(dist_thresh, negative_slope=self.negative_slope)
 
 
 class FaceEmbeddingAbsoluteLoss(FaceEmbeddingLoss):

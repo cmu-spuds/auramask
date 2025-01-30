@@ -36,13 +36,15 @@ class SoftTopIQFR(TopIQFR):
     def __init__(
         self,
         name="TopIQ",
+        tolerance=0.5,
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
+        self.tolerance = tolerance
 
     def get_config(self):
         base_config = super().get_config()
-        config = {"scaled": True}
+        config = {"scaled": True, "tolerance": self.tolerance}
         return {**base_config, **config}
 
     def call(
@@ -51,7 +53,7 @@ class SoftTopIQFR(TopIQFR):
         y_pred,  # compared_img
     ):
         score = super().call(y_true, y_pred)
-        return ops.multiply(2.0, score) - 1
+        return ops.subtract(score, self.tolerance)
 
 
 class TopIQNR(Loss):

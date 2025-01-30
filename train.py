@@ -229,7 +229,9 @@ def initialize_loss():
             if threshold:  # Loss with thresholding
                 losses.append(
                     auramask.losses.FaceEmbeddingThresholdLoss(
-                        f=f, threshold=f.get_threshold()
+                        f=f,
+                        threshold=f.get_threshold(),
+                        negative_slope=2e-2,
                     )
                 )
                 weights.append(rho)
@@ -306,7 +308,7 @@ def initialize_loss():
                 tmp_loss = auramask.losses.ContentLoss()
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "topiq":
-                tmp_loss = auramask.losses.SoftTopIQFR()
+                tmp_loss = auramask.losses.SoftTopIQFR(tolerance=0.4)
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "topiqnr":
                 tmp_loss = auramask.losses.TopIQNR()
@@ -356,7 +358,6 @@ def initialize_model():
     hparams["model_config"].update(cfg_mod)
 
     hparams["model"] = hparams.pop("model_backbone").name.lower()
-
     model = auramask.AuraMask(hparams)
 
     # keras.utils.plot_model(model, expand_nested=True, show_shapes=True)
@@ -459,20 +460,18 @@ def init_callbacks(hparams: dict, sample, logdir, note: str = ""):
             log_freq=int(os.getenv("AURAMASK_LOG_FREQ", 5)),
         )
     )
-    train_callbacks.append(
-        keras.callbacks.ReduceLROnPlateau(
-            monitor="val_loss", patience=10, verbose=1, cooldown=5, min_lr=2e-9
-        )
-    )
-    # train_callbacks.append(auramask.callbacks.AuramaskStopOnNaN())
+    # train_callbacks.append(
+    #     keras.callbacks.ReduceLROnPlateau(
+    #         monitor="val_loss", patience=10, verbose=1, cooldown=50, min_lr=2e-9,
+    #     )
+    # )
+    train_callbacks.append(auramask.callbacks.AuramaskStopOnNaN())
     return train_callbacks
 
 
 def main():
     # Constant Defaults
     hparams["optimizer"] = "adam"
-    # hparams["input"] = (256, 256)
-    # hparams["input"] = (512, 512)
     hparams.update(parse_args().__dict__)
     dims = hparams.pop("dims")
     hparams["input"] = (dims, dims)

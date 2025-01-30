@@ -39,6 +39,7 @@ def gen_geometric_aug_layers(augs_per_image: int, rate: float = 10 / 11):
         [
             A.SomeOf(
                 [
+                    # A.RandomRotate90(),
                     A.VerticalFlip(),
                     A.HorizontalFlip(),
                 ],
