@@ -231,7 +231,7 @@ def initialize_loss():
                     auramask.losses.FaceEmbeddingThresholdLoss(
                         f=f,
                         threshold=f.get_threshold(),
-                        negative_slope=2e-2,
+                        negative_slope=1.0,
                     )
                 )
                 weights.append(rho)
