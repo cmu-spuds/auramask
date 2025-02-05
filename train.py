@@ -190,7 +190,7 @@ def parse_args():
     return args
 
 
-def load_data():
+def load_data() -> Tuple:
     ds: auramask.constants.DatasetEnum = hparams["dataset"]
     train_size, test_size = hparams["training"], hparams["testing"]
 
@@ -437,10 +437,6 @@ def init_callbacks(hparams: dict, sample, logdir, note: str = ""):
         resume="allow",
     )
 
-    train_callbacks.append(
-        keras.callbacks.BackupAndRestore(backup_dir=os.path.join(logdir, "backup"))
-    )
-
     if checkpoint:
         train_callbacks.append(
             auramask.callbacks.AuramaskCheckpoint(
@@ -507,15 +503,28 @@ def main():
     hparams["log_dir"] = str(logdir)
 
     set_seed()
-    # Load the training and validation data
-    t_ds, v_ds = load_data()
 
     model, callbacks = initialize_model()
 
+    bkup_callback = keras.callbacks.BackupAndRestore(double_checkpoint=True, delete_checkpoint=False, backup_dir=os.path.join(hparams['log_dir'], "backup"))
+
+    if file_utils.exists(bkup_callback._training_metadata_path):
+        with file_utils.File(bkup_callback._training_metadata_path, "r") as f:
+            training_metadata = json.loads(f.read())
+        epoch = training_metadata["epoch"]
+    else:
+        epoch = 0
+
+    # Load the training and validation data
+    t_ds, v_ds = load_data()
     v = get_sample_data(v_ds)
+
+    print(t_ds.dataset)
+
     model(v)
 
     callbacks.extend(init_callbacks(hparams, v, hparams.pop("log_dir"), note))
+    callbacks.append(bkup_callback)
 
     training_history = model.fit(
         t_ds,
