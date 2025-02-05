@@ -121,6 +121,7 @@ def set_seed():
 
 
 def load_model(config: dict, weights_path: str) -> keras.Model:
+    config[]
     model = auramask.AuraMask(config, weights_path)
     return model
 
@@ -182,7 +183,6 @@ def load_pairs_ds() -> datasets.Dataset:
 
 def main():
     # Constant Defaults
-    hparams["input"] = (256, 256)
     hparams.update(parse_args().__dict__)
     log = hparams.pop("log")
     logdir = hparams.pop("log_dir")
@@ -221,6 +221,7 @@ def main():
     # Get the logged weights
     api = wandb.Api(overrides={"entity": "spuds", "project": "auramask"})
     train_run: wandb.Run = api.run(hparams["run_id"])
+    train_run.config['input'] = eval(train_run.config['input'])
     model_artifact = None
     for logged_artifact in train_run.logged_artifacts():
         if logged_artifact.type == "model":
