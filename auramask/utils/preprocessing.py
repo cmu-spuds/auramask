@@ -16,8 +16,8 @@ def gen_image_loading_layers(w: int, h: int):
     """
     return A.Compose(
         [
-            A.FancyPCA(always_apply=True),
-            A.ToFloat(max_value=255, always_apply=True),
+            A.FancyPCA(p=1.0),
+            A.ToFloat(max_value=255, p=1),
             A.LongestMaxSize(np.maximum(h, w)),
             A.CenterCrop(int(h * 0.875), int(w * 0.875)),
         ]
@@ -39,7 +39,7 @@ def gen_geometric_aug_layers(augs_per_image: int, rate: float = 10 / 11):
         [
             A.SomeOf(
                 [
-                    A.RandomRotate90(),
+                    # A.RandomRotate90(),
                     A.VerticalFlip(),
                     A.HorizontalFlip(),
                 ],
@@ -70,7 +70,8 @@ def gen_non_geometric_aug_layers(
                 [
                     # A.ColorJitter(),
                     A.GaussianBlur(),
-                    A.GaussNoise(var_limit=0.05),
+                    A.GaussNoise(std_range=(0.05, 0.1)),
+                    A.Sharpen(),
                 ],
                 n=augs_per_image,
                 p=rate,
