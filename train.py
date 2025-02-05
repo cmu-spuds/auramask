@@ -4,9 +4,11 @@ import os
 os.environ["KERAS_BACKEND"] = "torch"
 
 import keras
+from keras.src.utils import file_utils
 import wandb
 import auramask
 import argparse
+import json
 from ast import literal_eval
 from pathlib import Path
 from random import choice
@@ -190,7 +192,7 @@ def parse_args():
     return args
 
 
-def load_data() -> Tuple:
+def load_data():
     ds: auramask.constants.DatasetEnum = hparams["dataset"]
     train_size, test_size = hparams["training"], hparams["testing"]
 
@@ -506,7 +508,11 @@ def main():
 
     model, callbacks = initialize_model()
 
-    bkup_callback = keras.callbacks.BackupAndRestore(double_checkpoint=True, delete_checkpoint=False, backup_dir=os.path.join(hparams['log_dir'], "backup"))
+    bkup_callback = keras.callbacks.BackupAndRestore(
+        double_checkpoint=True,
+        delete_checkpoint=False,
+        backup_dir=os.path.join(hparams["log_dir"], "backup"),
+    )
 
     if file_utils.exists(bkup_callback._training_metadata_path):
         with file_utils.File(bkup_callback._training_metadata_path, "r") as f:
@@ -519,8 +525,9 @@ def main():
     t_ds, v_ds = load_data()
     v = get_sample_data(v_ds)
 
-    print(t_ds.dataset)
-
+    # On resume, make sure the iterable dataset is shuffled according to the HF scheme
+    t_ds.dataset.set_epoch(epoch)
+    v_ds.dataset.set_epoch(0)
     model(v)
 
     callbacks.extend(init_callbacks(hparams, v, hparams.pop("log_dir"), note))
