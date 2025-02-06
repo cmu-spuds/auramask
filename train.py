@@ -444,7 +444,7 @@ def init_callbacks(hparams: dict, sample, logdir, note: str = ""):
             auramask.callbacks.AuramaskCheckpoint(
                 filepath=os.path.join(logdir, "checkpoints"),
                 freq_mode="epoch",
-                save_weights_only=True,
+                save_weights_only=False,
                 save_freq=int(os.getenv("AURAMASK_CHECKPOINT_FREQ", 100)),
             )
         )
