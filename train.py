@@ -66,6 +66,7 @@ def parse_args():
     )
     parser.add_argument("-p", "--rho", type=float, default=1.0)
     parser.add_argument("-a", "--alpha", type=float, default=2e-4)
+    parser.add_argument("--optimizer", type=str, default="adam")
     parser.add_argument("-e", "--epsilon", type=float, default=0.03)
     parser.add_argument("-B", "--batch-size", dest="batch", type=int, default=32)
     parser.add_argument("-E", "--epochs", type=int, default=5)
@@ -364,7 +365,14 @@ def initialize_model():
 
     # keras.utils.plot_model(model, expand_nested=True, show_shapes=True)
 
-    optimizer = keras.optimizers.Adam(learning_rate=hparams["alpha"], clipnorm=1.0)
+    if hparams["optimizer"] == "adam":
+        optimizer = keras.optimizers.Adam(learning_rate=hparams["alpha"], clipnorm=1.0)
+    elif hparams["optimizer"] == "adamw":
+        optimizer = keras.optimizers.AdamW(learning_rate=hparams["alpha"])
+    else:
+        raise Exception("Unrecognized optimizer")
+
+    hparams["optimizer"] = optimizer.get_config()
 
     if hparams["adaptive_loss"] is not None:
         try:
@@ -444,7 +452,7 @@ def init_callbacks(hparams: dict, sample, logdir, note: str = ""):
             auramask.callbacks.AuramaskCheckpoint(
                 filepath=os.path.join(logdir, "checkpoints"),
                 freq_mode="epoch",
-                save_weights_only=False,
+                save_weights_only=True,
                 save_freq=int(os.getenv("AURAMASK_CHECKPOINT_FREQ", 100)),
             )
         )
@@ -469,7 +477,6 @@ def init_callbacks(hparams: dict, sample, logdir, note: str = ""):
 
 def main():
     # Constant Defaults
-    hparams["optimizer"] = "adam"
     hparams.update(parse_args().__dict__)
     dims = hparams.pop("dims")
     hparams["input"] = (dims, dims)
@@ -507,6 +514,8 @@ def main():
     set_seed()
 
     model, callbacks = initialize_model()
+
+    hparams["model_config"] = model.get_config()
 
     bkup_callback = keras.callbacks.BackupAndRestore(
         double_checkpoint=True,
