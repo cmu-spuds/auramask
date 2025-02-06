@@ -310,7 +310,7 @@ def initialize_loss():
                 tmp_loss = auramask.losses.ContentLoss()
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "topiq":
-                tmp_loss = auramask.losses.SoftTopIQFR(tolerance=0.4)
+                tmp_loss = auramask.losses.TopIQFR()
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "topiqnr":
                 tmp_loss = auramask.losses.TopIQNR()

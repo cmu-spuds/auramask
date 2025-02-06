@@ -34,10 +34,8 @@ def AuraMask(config: dict, weights: Optional[str] = None):
         else:
 
             def postproc(x: keras.KerasTensor, inputs: keras.KerasTensor):
-                inputs = keras.ops.stop_gradient(inputs)
-                return [x, keras.ops.subtract(inputs, x)]
-
-            activation_fn = keras.activations.sigmoid
+                x = keras.layers.Rescaling(scale=1 / 2.0, offset=0.5)(x)
+                return [x, keras.ops.stop_gradient(keras.ops.subtract(inputs, x))]
 
     dim = int(config["input"][0] * 0.875)
 
