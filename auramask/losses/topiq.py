@@ -17,7 +17,11 @@ class TopIQFR(Loss):
 
     def get_config(self):
         base_config = super().get_config()
-        config = {"full_ref": True, "lower_better": self.model.lower_better}
+        config = {
+            "full_ref": True,
+            "lower_better": self.model.lower_better,
+            "score_range": self.model.score_range,
+        }
         return {**base_config, **config}
 
     def call(
@@ -29,7 +33,7 @@ class TopIQFR(Loss):
         if backend.image_data_format() == "channels_last":
             y_true = ops.moveaxis(y_true, -1, 1)
             y_pred = ops.moveaxis(y_pred, -1, 1)
-        return ops.subtract(1.0, self.model(ref=y_true, target=y_pred))
+        return ops.subtract(1.0, self.model(target=y_pred, ref=y_true))
 
 
 class SoftTopIQFR(TopIQFR):

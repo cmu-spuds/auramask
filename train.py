@@ -4,9 +4,11 @@ import os
 os.environ["KERAS_BACKEND"] = "torch"
 
 import keras
+from keras.src.utils import file_utils
 import wandb
 import auramask
 import argparse
+import json
 from ast import literal_eval
 from pathlib import Path
 from random import choice
@@ -64,6 +66,7 @@ def parse_args():
     )
     parser.add_argument("-p", "--rho", type=float, default=1.0)
     parser.add_argument("-a", "--alpha", type=float, default=2e-4)
+    parser.add_argument("--optimizer", type=str, default="adam")
     parser.add_argument("-e", "--epsilon", type=float, default=0.03)
     parser.add_argument("-B", "--batch-size", dest="batch", type=int, default=32)
     parser.add_argument("-E", "--epochs", type=int, default=5)
@@ -308,7 +311,7 @@ def initialize_loss():
                 tmp_loss = auramask.losses.ContentLoss()
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "topiq":
-                tmp_loss = auramask.losses.SoftTopIQFR(tolerance=0.4)
+                tmp_loss = auramask.losses.TopIQFR()
                 cs_transforms.append(is_not_rgb)
             elif loss_i == "topiqnr":
                 tmp_loss = auramask.losses.TopIQNR()
@@ -362,7 +365,14 @@ def initialize_model():
 
     # keras.utils.plot_model(model, expand_nested=True, show_shapes=True)
 
-    optimizer = keras.optimizers.Adam(learning_rate=hparams["alpha"], clipnorm=1.0)
+    if hparams["optimizer"] == "adam":
+        optimizer = keras.optimizers.Adam(learning_rate=hparams["alpha"], clipnorm=1.0)
+    elif hparams["optimizer"] == "adamw":
+        optimizer = keras.optimizers.AdamW(learning_rate=hparams["alpha"])
+    else:
+        raise Exception("Unrecognized optimizer")
+
+    hparams["optimizer"] = optimizer.get_config()
 
     if hparams["adaptive_loss"] is not None:
         try:
@@ -437,10 +447,6 @@ def init_callbacks(hparams: dict, sample, logdir, note: str = ""):
         resume="allow",
     )
 
-    train_callbacks.append(
-        keras.callbacks.BackupAndRestore(backup_dir=os.path.join(logdir, "backup"))
-    )
-
     if checkpoint:
         train_callbacks.append(
             auramask.callbacks.AuramaskCheckpoint(
@@ -471,7 +477,6 @@ def init_callbacks(hparams: dict, sample, logdir, note: str = ""):
 
 def main():
     # Constant Defaults
-    hparams["optimizer"] = "adam"
     hparams.update(parse_args().__dict__)
     dims = hparams.pop("dims")
     hparams["input"] = (dims, dims)
@@ -507,15 +512,35 @@ def main():
     hparams["log_dir"] = str(logdir)
 
     set_seed()
-    # Load the training and validation data
-    t_ds, v_ds = load_data()
 
     model, callbacks = initialize_model()
 
+    hparams["model_config"] = model.get_config()
+
+    bkup_callback = keras.callbacks.BackupAndRestore(
+        double_checkpoint=True,
+        delete_checkpoint=False,
+        backup_dir=os.path.join(hparams["log_dir"], "backup"),
+    )
+
+    if file_utils.exists(bkup_callback._training_metadata_path):
+        with file_utils.File(bkup_callback._training_metadata_path, "r") as f:
+            training_metadata = json.loads(f.read())
+        epoch = training_metadata["epoch"]
+    else:
+        epoch = 0
+
+    # Load the training and validation data
+    t_ds, v_ds = load_data()
     v = get_sample_data(v_ds)
+
+    # On resume, make sure the iterable dataset is shuffled according to the HF scheme
+    t_ds.dataset.set_epoch(epoch)
+    v_ds.dataset.set_epoch(0)
     model(v)
 
     callbacks.extend(init_callbacks(hparams, v, hparams.pop("log_dir"), note))
+    callbacks.append(bkup_callback)
 
     training_history = model.fit(
         t_ds,

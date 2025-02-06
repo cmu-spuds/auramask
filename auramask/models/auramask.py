@@ -82,19 +82,22 @@ class AuraMask(Model):
         del sample_weight
         # Predictions are passed as tuple (y_pred, mask)
         y_pred, mask = y_pred
-        losses = [0.0] * len(self._my_losses)
+        losses = [0.0]
 
         for i, loss in enumerate(self._my_losses):
             weight = self.loss_weights[i]
             metric = self._loss_trackers[i]
+            tmp_loss = 0.0
             if isinstance(loss, FaceEmbeddingLoss):
-                losses[i] = loss(y_true=ops.stop_gradient(x), y_pred=y_pred)
+                tmp_loss = loss(y_true=ops.stop_gradient(x), y_pred=y_pred)
+                losses[0] = ops.add(losses[0], ops.multiply(tmp_loss, weight))
             elif isinstance(loss, IlluminationSmoothnessLoss):
-                losses[i] = loss(y_true=y, y_pred=mask)
+                tmp_loss = loss(y_true=y, y_pred=mask)
+                losses.append(ops.multiply(tmp_loss, weight))
             else:
-                losses[i] = loss(y_true=y, y_pred=y_pred)
-            metric.update_state(ops.stop_gradient(losses[i]))
-            losses[i] = ops.multiply(losses[i], weight)
+                tmp_loss = loss(y_true=y, y_pred=y_pred)
+                losses.append(ops.multiply(tmp_loss, weight))
+            metric.update_state(ops.stop_gradient(tmp_loss))
 
         return losses
 

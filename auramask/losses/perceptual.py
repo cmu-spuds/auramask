@@ -22,7 +22,9 @@ class PerceptualLoss(Loss):
         self.model.trainable = False
 
     def get_config(self):
-        return self.model.get_config()
+        base_config = super().get_config()
+        config = {"model": self.model.get_config(), "spatial": self.spatial}
+        return {**base_config, **config}
 
     def call(
         self,
@@ -30,9 +32,9 @@ class PerceptualLoss(Loss):
         y_pred,  # compared_img
     ):
         loss = self.model([y_true, y_pred])  # in [0, 1]
-        loss = ops.subtract(loss, self.tolerance)
-        if self.tolerance > 0:
-            loss = ops.leaky_relu(loss, negative_slope=(0.2 / self.tolerance))
+        # loss = ops.subtract(loss, self.tolerance)
+        # if self.tolerance > 0:
+        #     loss = ops.leaky_relu(loss, negative_slope=(0.2 / self.tolerance))
         return loss
 
 
@@ -53,7 +55,13 @@ class IQAPerceptual(Loss):
         self.model = pyiqa.create_metric("lpips", as_loss=True)
 
     def get_config(self):
-        return super().get_config()
+        base_config = super().get_config()
+        config = {
+            "full_ref": True,
+            "lower_better": self.model.lower_better,
+            "score_range": self.model.score_range,
+        }
+        return {**base_config, **config}
 
     def call(
         self,
@@ -64,4 +72,4 @@ class IQAPerceptual(Loss):
         if backend.image_data_format() == "channels_last":
             y_true = ops.moveaxis(y_true, -1, 1)
             y_pred = ops.moveaxis(y_pred, -1, 1)
-        return ops.subtract(1, self.model(ref=y_true, target=y_pred))
+        return self.model(ref=y_true, target=y_pred)

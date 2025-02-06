@@ -204,7 +204,7 @@ class DatasetEnum(Enum):
                 ds["train"]
                 .flatten_indices(num_proc=os.cpu_count())
                 .to_iterable_dataset(num_shards=int(os.getenv("DL_TRAIN_WORKERS", 8)))
-                .shuffle()
+                .shuffle(buffer_size=10_000)
             )
             ds["test"] = (
                 ds["test"]

@@ -1,6 +1,6 @@
 from enum import Enum
 from types import NoneType, FunctionType
-from keras import Input, backend
+from keras import Input, backend, layers
 from keras.src.applications.imagenet_utils import obtain_input_shape
 from keras_unet_collection import models as unet_models
 from auramask.models import zero_dce, reface_unet, zero_dce_auramask, auramask
@@ -22,7 +22,7 @@ class BaseModels(Enum):
         input_shape: tuple,
         name: str = None,
         preprocess: FunctionType | NoneType = None,
-        activation_fn: FunctionType | NoneType = None,
+        activation_fn: FunctionType | str | NoneType = None,
         post_processing: FunctionType | NoneType = None,
     ):
         input_shape = obtain_input_shape(
@@ -49,7 +49,7 @@ class BaseModels(Enum):
 
         # Use activation function if not defined by builder
         if activation_fn:
-            x = activation_fn(x)
+            x = layers.Activation(activation_fn)(x)
 
         # Integrated post-processing (e.g., scaling, mutiplying, adding to input, clipping)
         if post_processing:
