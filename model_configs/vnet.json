@@ -4,7 +4,7 @@
     "res_num_ini": 1,
     "res_num_max": 3,
     "activation": "ReLU",
-    "output_activation": null,
+    "output_activation": "tanh",
     "batch_norm": false,
     "pool": false,
     "unpool": false
