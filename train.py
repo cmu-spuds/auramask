@@ -515,6 +515,8 @@ def main():
 
     model, callbacks = initialize_model()
 
+    hparams["auramask_params"] = hparams["model_config"]
+
     hparams["model_config"] = model.get_config()
 
     bkup_callback = keras.callbacks.BackupAndRestore(
