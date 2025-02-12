@@ -75,7 +75,7 @@ def parse_args():
     parser.add_argument(
         "--lpips-spatial",
         type=bool,
-        default=True,
+        required=False,
         action=argparse.BooleanOptionalAction,
     )
     parser.add_argument(
@@ -183,6 +183,9 @@ def parse_args():
         action=auramask.constants.EnumAction,
         required=False,
     )
+    parser.add_argument(
+        "--metric", type=bool, default=False, action=argparse.BooleanOptionalAction
+    )
 
     args = parser.parse_args()
 
@@ -222,25 +225,31 @@ def initialize_loss():
     weights = []
     loss_config = {}
     cs_transforms = []
+    metrics = []
 
     is_not_rgb = hparams["color_space"].name.casefold() != "rgb"
     F = hparams.pop("F")
     threshold = hparams.pop("threshold")
     rho = hparams.pop("rho")
+    metr = hparams.pop("metric")
     if F:
         for f in F:
             if threshold:  # Loss with thresholding
                 losses.append(
-                    auramask.losses.FaceEmbeddingThresholdLoss(
+                    auramask.losses.FaceEmbeddingAbsoluteThresholdLoss(
                         f=f,
                         threshold=f.get_threshold(),
-                        negative_slope=1.0,
+                        # negative_slope=0.5,
                     )
                 )
                 weights.append(rho)
             else:  # Loss as described by ReFace
                 losses.append(auramask.losses.FaceEmbeddingAbsoluteLoss(f=f))
                 weights.append(rho / len(F))
+
+            if metr:
+                metrics.append(auramask.metrics.FaceEmbeddingMetric(f=f))
+
             loss_config[losses[-1].name] = losses[-1].get_config() | {
                 "weight": weights[-1]
             }
@@ -345,11 +354,11 @@ def initialize_loss():
 
     hparams["losses"] = loss_config
 
-    return losses, weights, cs_transforms
+    return losses, weights, cs_transforms, metrics
 
 
 def initialize_model():
-    losses, losses_w, losses_t = initialize_loss()
+    losses, losses_w, losses_t, metrics = initialize_loss()
 
     adaptive_callback = []
 
@@ -400,6 +409,7 @@ def initialize_model():
         optimizer=optimizer,
         loss=losses,
         loss_weights=losses_w,
+        metrics=metrics,
         run_eagerly=hparams.pop("eager"),
         jit_compile=False,
         auto_scale_loss=True,

@@ -2,7 +2,7 @@
 from typing import Callable
 from keras import ops, Loss, KerasTensor
 from auramask.models.face_embeddings import FaceEmbedEnum
-from auramask.utils.distance import cosine_distance
+from auramask.utils.distance import cosine_distance, cosine_similarity
 
 
 class FaceEmbeddingLoss(Loss):
@@ -46,10 +46,10 @@ class FaceEmbeddingLoss(Loss):
         y_true: KerasTensor,
         y_pred: KerasTensor,
     ) -> KerasTensor:
-        emb_adv = self.net(y_pred, training=False)
-        emb_true = self.net(y_true, training=False)
+        emb_adv = self.net(y_true, training=False)
+        emb_true = self.net(y_pred, training=False)
         distance = self.d(emb_true, emb_adv, -1)
-        return ops.subtract(self.threshold, distance)
+        return distance
 
 
 class FaceEmbeddingThresholdLoss(FaceEmbeddingLoss):
@@ -58,7 +58,7 @@ class FaceEmbeddingThresholdLoss(FaceEmbeddingLoss):
         f: FaceEmbedEnum,
         threshold: float,
         negative_slope: float = 1.0,
-        d: Callable = cosine_distance,
+        d: Callable = cosine_similarity,
         name="FET_",
         reduction="sum_over_batch_size",
         **kwargs,
@@ -73,15 +73,39 @@ class FaceEmbeddingThresholdLoss(FaceEmbeddingLoss):
         return {**base_config, **config}
 
     def call(self, y_true: KerasTensor, y_pred: KerasTensor) -> KerasTensor:
-        dist_thresh = super().call(y_true, y_pred)
-        return ops.nn.leaky_relu(dist_thresh, negative_slope=self.negative_slope)
+        dist = super().call(y_true, y_pred)
+        dist = dist - (1.0 - self.threshold)
+        return ops.nn.leaky_relu(dist, negative_slope=self.negative_slope)
+
+
+class FaceEmbeddingAbsoluteThresholdLoss(FaceEmbeddingLoss):
+    def __init__(
+        self,
+        f: FaceEmbedEnum,
+        threshold: float,
+        d: Callable = cosine_similarity,
+        name="FEAT_",
+        reduction="sum_over_batch_size",
+        **kwargs,
+    ):
+        super().__init__(f=f, d=d, name=name, reduction=reduction, **kwargs)
+        self.threshold = threshold
+
+    def get_config(self) -> dict:
+        base_config = super().get_config()
+        config = {"threshold": self.threshold}
+        return {**base_config, **config}
+
+    def call(self, y_true: KerasTensor, y_pred: KerasTensor) -> KerasTensor:
+        dist = super().call(y_true, y_pred)
+        return ops.abs(dist) - (1.0 - self.threshold)
 
 
 class FaceEmbeddingAbsoluteLoss(FaceEmbeddingLoss):
     def __init__(
         self,
         f: FaceEmbedEnum,
-        d: Callable = cosine_distance,
+        d: Callable = cosine_similarity,
         name="FEA_",
         reduction="sum_over_batch_size",
         **kwargs,

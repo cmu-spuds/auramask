@@ -5,6 +5,7 @@ from auramask.losses.perceptual import PerceptualLoss, IQAPerceptual
 from auramask.losses.embeddistance import (
     FaceEmbeddingLoss,
     FaceEmbeddingThresholdLoss,
+    FaceEmbeddingAbsoluteThresholdLoss,
     FaceEmbeddingAbsoluteLoss,
 )
 from auramask.losses.aesthetic import AestheticLoss, IQAAestheticLoss
