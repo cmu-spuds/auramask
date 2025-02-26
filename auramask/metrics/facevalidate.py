@@ -56,7 +56,7 @@ class FaceValidationMetrics(metrics.Metric):
         emb_adv = self.net(X, training=False)
         emb_y = self.net(y, training=False)
         y_pred = self.d(emb_y, emb_adv, -1)
-        y_pred = ops.cast(ops.less_equal(y_pred, self.threshold), "uint8")
+        y_pred = ops.cast(ops.less(y_pred, self.threshold), "uint8")
         for metric in self._metrics:
             metric.update_state(y_true, y_pred)
 

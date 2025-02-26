@@ -15,7 +15,7 @@ os.environ["KERAS_BACKEND"] = "torch"
 
 import keras
 from keras import utils
-from auramask.metrics.facevalidate import FaceValidationAccuracy
+from auramask.metrics import FaceEmbeddingMetric, FaceValidationMetrics
 
 from auramask.utils.constants import (
     EnumAction,
@@ -55,17 +55,16 @@ def dir_path(path):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        prog="AuraMask Testing",
-        description="An evaluation script for pairwise comparison",
+        prog="AuraMask Validation",
+        description="An evaluation script to compute metrics on validation data.",
     )
-    parser.add_argument("--run-id", type=str)
-    parser.add_argument("--alias", type=str, default="latest")
+    parser.add_argument("--run-id", type=str, required=False)
+    parser.add_argument("--hf-model", type=str, required=False)
+    parser.add_argument("--version", type=str, default="latest")
     parser.add_argument(
         "-F", type=FaceEmbedEnum, nargs="+", required=False, action=EnumAction
     )
-    parser.add_argument(
-        "--threshold", default=True, type=bool, action=argparse.BooleanOptionalAction
-    )
+    parser.add_argument("-d", "--dims", type=int, default=256)
     parser.add_argument("-B", "--batch-size", dest="batch", type=int, default=32)
     parser.add_argument(
         "--mixed-precision",
@@ -81,6 +80,10 @@ def parse_args():
         choices=[
             "mse",
             "mae",
+            "lpips",
+            "ssimc",
+            "dsssim",
+            "topiq",
             "none",
         ],
         nargs="+",
@@ -101,12 +104,9 @@ def parse_args():
     )
     parser.add_argument(
         "-D",
-        "--pairs-dataset",
-        default="logasja/lfw",
+        "--dataset",
+        default="logasja/fdf",
         type=str,
-    )
-    parser.add_argument(
-        "--instagram-filter", type=InstaFilterEnum, action=EnumAction, required=False
     )
 
     args = parser.parse_args()
@@ -120,8 +120,41 @@ def set_seed():
     utils.set_random_seed(seed)
 
 
-def load_model(config: dict, weights_path: str) -> keras.Model:
-    model = auramask.AuraMask(config, weights_path)
+def load_model() -> keras.Model:
+    if hparams["run_id"] and hparams["hf-model"]:
+        raise ValueError("Either choose run_id or hf-model")
+    elif hparams["run_id"]:
+        # Get the logged weights
+        api = wandb.Api(overrides={"entity": "spuds", "project": "auramask"})
+        train_run: wandb.Run = api.run(hparams["run_id"])
+        model_artifact = None
+        for logged_artifact in train_run.logged_artifacts():
+            if logged_artifact.type == "model":
+                if hparams["version"] in logged_artifact.aliases + [logged_artifact.version]:
+                    model_artifact = logged_artifact
+                    break
+        if not model_artifact:
+            raise Exception(
+                "Unable to find an artifact with alias or version {0}".format(
+                    hparams["version"]
+                )
+            )
+        logged_weights = None
+        for file in model_artifact.manifest.entries.keys():
+            if "h5" in file:
+                logged_weights = model_artifact.get_entry(file)
+                break
+            elif "keras" in file:
+                logged_weights = model_artifact.get_entry(file)
+                break
+        logged_weights = logged_weights.download()
+        run.use_model(model_artifact)
+        model = keras.Model.from_config(train_run.config["model_config"])
+        model.load_weights(weights_path)
+    elif hparams["hf-model"]:
+        model = keras.saving.load_model(f"hf://{hparams["hf-model"]}")
+    else:
+        raise ValueError("No value given for run_id or for hf-model")
     return model
 
 
@@ -132,7 +165,8 @@ def initialize_metrics():
     F = hparams.pop("F")
     if F:
         for f in F:
-            metrics.append(FaceValidationAccuracy(f=f, threshold=f.get_threshold()))
+            metrics.append(FaceValidationMetrics(f=f, threshold=f.get_threshold()))
+            metrics.append(FaceEmbeddingMetric(f=f))
 
     if "none" not in hparams["metrics"]:
         metrics_in = hparams.pop("metrics")
@@ -153,8 +187,8 @@ def initialize_metrics():
     return metrics
 
 
-def load_pairs_ds() -> datasets.Dataset:
-    ds = datasets.load_dataset(hparams["pairs_dataset"], "pairs", split="test")
+def load_dataset() -> datasets.Dataset:
+    ds = datasets.load_dataset(hparams["dataset"], hparams["dataset_config"], split=hparams["dataset_split"])
     insta: InstaFilterEnum = hparams["instagram_filter"]
     dims: tuple[int] = hparams["input"]
 
@@ -182,7 +216,8 @@ def load_pairs_ds() -> datasets.Dataset:
 
 def main():
     # Constant Defaults
-    hparams["input"] = (256, 256)
+    dims = hparams.pop("dims")
+    hparams["input"] = (dims, dims)
     hparams.update(parse_args().__dict__)
     log = hparams.pop("log")
     logdir = hparams.pop("log_dir")
@@ -218,37 +253,11 @@ def main():
 
     ds = load_pairs_ds()
 
-    # Get the logged weights
-    api = wandb.Api(overrides={"entity": "spuds", "project": "auramask"})
-    train_run: wandb.Run = api.run(hparams["run_id"])
-    model_artifact = None
-    for logged_artifact in train_run.logged_artifacts():
-        if logged_artifact.type == "model":
-            if hparams["alias"] in logged_artifact.aliases + [logged_artifact.version]:
-                model_artifact = logged_artifact
-                break
-    if not model_artifact:
-        raise Exception(
-            "Unable to find an artifact with alias or version {0}".format(
-                hparams["alias"]
-            )
-        )
-    logged_weights = None
-    for file in model_artifact.manifest.entries.keys():
-        if "h5" in file:
-            logged_weights = model_artifact.get_entry(file)
-            break
-        elif "keras" in file:
-            logged_weights = model_artifact.get_entry(file)
-            break
-    logged_weights = logged_weights.download()
-
     run = wandb.init(project="auramask", job_type="evaluation", dir=logdir)
-    run.use_model(model_artifact)
 
-    model = load_model(train_run.config, logged_weights)
+    model = load_model()
 
-    # metrics = initialize_metrics()
+    metrics = initialize_metrics()
 
     for example in tqdm.tqdm(ds):
         adv_img_0, _ = model(example["img_0"], training=False)
