@@ -14,12 +14,10 @@ import tqdm
 os.environ["KERAS_BACKEND"] = "torch"
 
 import keras
-from keras import utils
-from auramask.metrics import FaceEmbeddingMetric, FaceValidationMetrics
+from auramask import metrics as aura_metrics
 
 from auramask.utils.constants import (
     EnumAction,
-    InstaFilterEnum,
     FaceEmbedEnum,
     DatasetEnum,
 )
@@ -29,8 +27,6 @@ hparams: dict = {}
 keras.config.disable_traceback_filtering()
 # Normalize network to use channels last ordering
 keras.backend.set_image_data_format("channels_last")
-
-import auramask
 
 ARTIFACT_URL = "run_{0}_model:{1}"
 
@@ -81,9 +77,16 @@ def parse_args():
             "mse",
             "mae",
             "lpips",
+            "alex",
             "ssimc",
-            "dsssim",
-            "topiq",
+            "dssim",
+            "topiq_fr",
+            "topiq_nr",
+            "cwssim",
+            "facevalidation",
+            "cosine",
+            "euclidean",
+            "euclidean_l2",
             "none",
         ],
         nargs="+",
@@ -108,6 +111,22 @@ def parse_args():
         default="logasja/fdf",
         type=str,
     )
+    parser.add_argument(
+        "-V",
+        "--validation",
+        default="validation",
+        type=str,
+        nargs=3,
+        help="The config, split, and column that maps to validation images."
+    )
+    parser.add_argument(
+        "-P",
+        "--predictions",
+        required=False,
+        type=str,
+        nargs=3,
+        help="(Optional) The config, split, and column that maps to precomputed images."
+    )
 
     args = parser.parse_args()
 
@@ -117,7 +136,7 @@ def parse_args():
 def set_seed():
     seed = hparams["seed"]
     seed = int(hashlib.sha256(seed.encode("utf-8")).hexdigest(), 16) % 10**8
-    utils.set_random_seed(seed)
+    keras.utils.set_random_seed(seed)
 
 
 def load_model() -> keras.Model:
@@ -163,10 +182,6 @@ def initialize_metrics():
     metric_config = {}
 
     F = hparams.pop("F")
-    if F:
-        for f in F:
-            metrics.append(FaceValidationMetrics(f=f, threshold=f.get_threshold()))
-            metrics.append(FaceEmbeddingMetric(f=f))
 
     if "none" not in hparams["metrics"]:
         metrics_in = hparams.pop("metrics")
@@ -176,6 +191,48 @@ def initialize_metrics():
                 tmp_metric = keras.metrics.MeanSquaredError()
             elif metric == "mae":
                 tmp_metric = keras.metrics.MeanAbsoluteError()
+            elif metric == "ssimc":
+                tmp_metric = aura_metrics.IQASSIMC()
+            elif metric == "cwssim":
+                tmp_metric = aura_metrics.IQACWSSIM()
+            elif metric == "dssim":
+                tmp_metric = aura_metrics.DSSIMObjective()
+            elif metric == "topiq_fr":
+                tmp_metric = aura_metrics.TOPIQFR()
+            elif metric == "topiq_nr":
+                tmp_metric = aura_metrics.TOPIQNR()
+            elif metric == "lpips":
+                tmp_metric = aura_metrics.IQAPerceptual()
+            elif metric == "alex":
+                tmp_metric = aura_metrics.PerceptualSimilarity(backbone="alex")
+            elif metric == "facevalidation":
+                if not F:
+                    raise Exception("Face validation requires embeddings to be chosen with -F")
+                for f in F:
+                    metrics.append(aura_metrics.FaceValidationMetrics(f=f, threshold=f.get_threshold()))
+                    metric_config[metrics[-1].name] = metrics[-1].get_config()
+                continue
+            elif metric == "cosine":
+                if not F:
+                    raise Exception("Embedding distance requires embeddings to be chosen with -F")
+                for f in F:
+                    metrics.append(aura_metrics.CosineDistance(f=f))
+                    metric_config[metrics[-1].name] = metrics[-1].get_config()
+                continue
+            elif metric == "euclidean":
+                if not F:
+                    raise Exception("Embedding distance requires embeddings to be chosen with -F")
+                for f in F:
+                    metrics.append(aura_metrics.EuclideanDistance(f=f))
+                    metric_config[metrics[-1].name] = metrics[-1].get_config()
+                continue       
+            elif metric == "euclidean_l2":
+                if not F:
+                    raise Exception("Embedding distance requires embeddings to be chosen with -F")
+                for f in F:
+                    metrics.append(aura_metrics.EuclideanL2Distance(f=f))
+                    metric_config[metrics[-1].name] = metrics[-1].get_config()    
+                continue     
             else:
                 raise Exception("Metric not recognized")
 
@@ -188,31 +245,37 @@ def initialize_metrics():
 
 
 def load_dataset() -> datasets.Dataset:
-    ds = datasets.load_dataset(hparams["dataset"], hparams["dataset_config"], split=hparams["dataset_split"])
-    insta: InstaFilterEnum = hparams["instagram_filter"]
-    dims: tuple[int] = hparams["input"]
+    v_config, v_split, v_column = hparams["validation"]
+    ds = datasets.load_dataset(hparams["dataset"], name=v_config, split=v_split).rename_column(v_column, "target").select_columns("target")
 
+    dims: tuple[int] = hparams["input"]
     batch = hparams["batch"]
 
-    if insta:
-
+    if hparams["predictions"]:
+        p_config, p_split, p_column = hparams["predictions"]
+        v_ds = datasets.load_dataset(hparams["dataset"], name=p_config, split=p_split).rename_column(p_column, "prediction").select_columns("prediction")
+        ds = datasets.concatenate_datasets([ds, v_ds], axis=1)
         def transform(examples):
-            examples["img_0"] = insta.filter_transform(examples["img_0"])["target"]
-            examples = DatasetEnum.data_collater(examples, {"w": dims[0], "h": dims[1]})
-            return examples
+            true_col = keras.ops.stack([keras.utils.img_to_array(img) for img in examples["target"]])
+            true_col = keras.ops.divide_no_nan(true_col, 255.)
+            true_col = keras.ops.image.resize(true_col, dims)
+            predictions = keras.ops.stack([keras.utils.img_to_array(img) for img in examples["predictions"]])
+            predictions = keras.ops.divide_no_nan(predictions, 255.)
+            predictions = keras.ops.image.resize(predictions, dims)
+            return {"target": true_col, "prediction": predictions}
+        ds = ds.map(transform, batched=True, batch_size=batch, num_proc=8)
 
-    else:
+    else:    # Load the model for computing filtered outputs if not precomputed in dataset
+        model = load_model()
+        def compute_examples(examples):
+            true_col = keras.ops.stack([keras.utils.img_to_array(img) for img in examples["target"]])
+            true_col = keras.ops.divide_no_nan(true_col, 255.)
+            true_col = keras.ops.image.resize(true_col, dims)
 
-        def transform(examples):
-            examples = DatasetEnum.data_collater(examples, {"w": dims[0], "h": dims[1]})
-            return examples
-
-    ds.set_transform(transform)
-
-    ds = ds.iter(batch_size=batch)
-
+            predictions = model(true_col, training=False)[0]
+            return {"target": true_col, "prediction": predictions}
+        ds = ds.map(compute_examples, batched=True, batch_size=batch)
     return ds
-
 
 def main():
     # Constant Defaults
@@ -251,11 +314,9 @@ def main():
 
     set_seed()
 
-    ds = load_pairs_ds()
-
     run = wandb.init(project="auramask", job_type="evaluation", dir=logdir)
 
-    model = load_model()
+    ds = load_dataset()
 
     metrics = initialize_metrics()
 
