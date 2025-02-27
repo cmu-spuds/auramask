@@ -248,7 +248,7 @@ def initialize_loss():
                 weights.append(rho / len(F))
 
             if metr:
-                metrics.append(auramask.metrics.FaceEmbeddingMetric(f=f))
+                metrics.append(auramask.metrics.CosineDistance(f=f))
 
             loss_config[losses[-1].name] = losses[-1].get_config() | {
                 "weight": weights[-1]
