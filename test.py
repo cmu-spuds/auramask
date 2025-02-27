@@ -191,17 +191,25 @@ def initialize_metrics() -> list[keras.Metric]:
 
         for metric in metrics_in:
             if metric == "mse":
-                tmp_metric = keras.metrics.MeanMetricWrapper(
-                    lambda y_true, y_pred: keras.ops.mean(
+
+                def mse(y_true, y_pred):
+                    return keras.ops.mean(
                         keras.ops.square(y_true - y_pred), axis=[1, 2, 3]
-                    ),
+                    )
+
+                tmp_metric = keras.metrics.MeanMetricWrapper(
+                    mse,
                     name=metric,
                 )
             elif metric == "mae":
-                tmp_metric = keras.metrics.MeanMetricWrapper(
-                    lambda y_true, y_pred: keras.ops.mean(
+
+                def mae(y_true, y_pred):
+                    return keras.ops.mean(
                         keras.ops.absolute(y_true - y_pred), axis=[1, 2, 3]
-                    ),
+                    )
+
+                tmp_metric = keras.metrics.MeanMetricWrapper(
+                    mae,
                     name=metric,
                 )
             elif metric == "ssimc":
@@ -276,7 +284,7 @@ def load_dataset() -> datasets.Dataset:
             hparams["dataset"], name=v_config, split=v_split, num_proc=8
         )
         .rename_column(v_column, "target")
-        .select_columns("target")
+        .select_columns(["path", "target"])
     )
 
     dims: tuple[int] = hparams["input"]
@@ -297,7 +305,9 @@ def load_dataset() -> datasets.Dataset:
             .rename_column(p_column, "prediction")
             .select_columns("prediction")
         )
-        ds = datasets.concatenate_datasets([ds, v_ds], axis=1)
+        ds = datasets.concatenate_datasets([ds, v_ds], axis=1).filter(
+            lambda x: x["prediction"] is not None
+        )
 
         def transform(batch):
             true_col = np.stack(
@@ -316,7 +326,11 @@ def load_dataset() -> datasets.Dataset:
                     for img in batch["prediction"]
                 ]
             )
-            return {"target": true_col, "prediction": predictions}
+            return {
+                "path": batch["path"],
+                "target": true_col,
+                "prediction": predictions,
+            }
     else:  # Load the model for computing filtered outputs if not precomputed in dataset
 
         def transform(batch):
@@ -328,7 +342,7 @@ def load_dataset() -> datasets.Dataset:
                     for img in batch["target"]
                 ]
             )
-            return {"target": true_col}
+            return {"path": batch["path"], "target": true_col}
 
     ds = ds.with_transform(transform)
     return ds
@@ -370,7 +384,7 @@ def main():
 
     set_seed()
 
-    wandb.init(project="auramask", job_type="evaluation", dir=logdir, config=hparams)
+    wandb.init(project="auramask", job_type="evaluation", dir=logdir)
 
     ds = load_dataset()
 
@@ -383,12 +397,15 @@ def main():
 
     compute_output = (model is not None) and (hparams["predictions"] is None)
 
-    validation_tab = wandb.Table(["input", "prediction"] + [m.name for m in metrics])
+    validation_tab = wandb.Table(["image_name"] + [m.name for m in metrics])
+
+    wandb.run.config.update(hparams)
 
     for example in (
         pbar := tqdm.tqdm(
             ds.iter(batch_size=hparams["batch"]),
             total=int(np.ceil(ds.num_rows / hparams["batch"])),
+            position=0,
         )
     ):
         target_batch = keras.ops.stop_gradient(
@@ -409,19 +426,16 @@ def main():
             keras.metrics.Mean.update_state(
                 metric, values
             )  # Hacky way to update state without having to recompute
-            pbar.set_description(metric.name + ":\t" + str(metric.result()))
-            met_vals.append([v for v in keras.ops.convert_to_numpy(values)])
+            met_vals.append(
+                [v for v in keras.ops.convert_to_numpy(keras.ops.squeeze(values))]
+            )
             metric.reset_state()
 
         B = keras.ops.shape(target_batch)[0]
 
-        target_batch = keras.ops.convert_to_numpy(target_batch)
-        pred_batch = keras.ops.convert_to_numpy(pred_batch)
-
         for i in range(B):
             validation_tab.add_data(
-                wandb.Image(target_batch[i]),
-                wandb.Image(pred_batch[i]),
+                example["path"][i],
                 *[v[i] for v in met_vals],
             )
 
