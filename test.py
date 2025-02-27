@@ -14,14 +14,13 @@ import tqdm
 os.environ["KERAS_BACKEND"] = "torch"
 
 import keras
-from keras import utils
-from auramask.metrics.facevalidate import FaceValidationAccuracy
+import numpy as np
+import albumentations as A
+from auramask import metrics as aura_metrics
 
 from auramask.utils.constants import (
     EnumAction,
-    InstaFilterEnum,
     FaceEmbedEnum,
-    DatasetEnum,
 )
 
 # Global hparams object
@@ -29,8 +28,6 @@ hparams: dict = {}
 keras.config.disable_traceback_filtering()
 # Normalize network to use channels last ordering
 keras.backend.set_image_data_format("channels_last")
-
-import auramask
 
 ARTIFACT_URL = "run_{0}_model:{1}"
 
@@ -55,17 +52,16 @@ def dir_path(path):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        prog="AuraMask Testing",
-        description="An evaluation script for pairwise comparison",
+        prog="AuraMask Validation",
+        description="An evaluation script to compute metrics on validation data.",
     )
-    parser.add_argument("--run-id", type=str)
-    parser.add_argument("--alias", type=str, default="latest")
+    parser.add_argument("--run-id", type=str, required=False)
+    parser.add_argument("--hf-model", type=str, required=False)
+    parser.add_argument("--version", type=str, default="latest")
     parser.add_argument(
         "-F", type=FaceEmbedEnum, nargs="+", required=False, action=EnumAction
     )
-    parser.add_argument(
-        "--threshold", default=True, type=bool, action=argparse.BooleanOptionalAction
-    )
+    parser.add_argument("-d", "--dims", type=int, default=256)
     parser.add_argument("-B", "--batch-size", dest="batch", type=int, default=32)
     parser.add_argument(
         "--mixed-precision",
@@ -81,6 +77,17 @@ def parse_args():
         choices=[
             "mse",
             "mae",
+            "lpips",
+            "alex",
+            "ssimc",
+            "dssim",
+            "topiq_fr",
+            "topiq_nr",
+            "cwssim",
+            "facevalidation",
+            "cosine",
+            "euclidean",
+            "euclidean_l2",
             "none",
         ],
         nargs="+",
@@ -101,12 +108,25 @@ def parse_args():
     )
     parser.add_argument(
         "-D",
-        "--pairs-dataset",
-        default="logasja/lfw",
+        "--dataset",
+        default="logasja/fdf",
         type=str,
     )
     parser.add_argument(
-        "--instagram-filter", type=InstaFilterEnum, action=EnumAction, required=False
+        "-V",
+        "--validation",
+        default="validation",
+        type=str,
+        nargs=3,
+        help="The config, split, and column that maps to validation images.",
+    )
+    parser.add_argument(
+        "-P",
+        "--predictions",
+        required=False,
+        type=str,
+        nargs=3,
+        help="(Optional) The config, split, and column that maps to precomputed images.",
     )
 
     args = parser.parse_args()
@@ -117,31 +137,135 @@ def parse_args():
 def set_seed():
     seed = hparams["seed"]
     seed = int(hashlib.sha256(seed.encode("utf-8")).hexdigest(), 16) % 10**8
-    utils.set_random_seed(seed)
+    keras.utils.set_random_seed(seed)
 
 
-def load_model(config: dict, weights_path: str) -> keras.Model:
-    model = auramask.AuraMask(config, weights_path)
+def load_model() -> keras.Model:
+    if hparams["run_id"] and hparams["hf_model"]:
+        raise ValueError("Either choose run_id or hf-model")
+    elif hparams["run_id"]:
+        # Get the logged weights
+        api = wandb.Api(overrides={"entity": "spuds", "project": "auramask"})
+        train_run: wandb.Run = api.run(hparams["run_id"])
+        model_artifact = None
+        for logged_artifact in train_run.logged_artifacts():
+            if logged_artifact.type == "model":
+                if hparams["version"] in logged_artifact.aliases + [
+                    logged_artifact.version
+                ]:
+                    model_artifact = logged_artifact
+                    break
+        if not model_artifact:
+            raise Exception(
+                "Unable to find an artifact with alias or version {0}".format(
+                    hparams["version"]
+                )
+            )
+        logged_weights = None
+        for file in model_artifact.manifest.entries.keys():
+            if "h5" in file:
+                logged_weights = model_artifact.get_entry(file)
+                break
+            elif "keras" in file:
+                logged_weights = model_artifact.get_entry(file)
+                break
+        logged_weights = logged_weights.download()
+        wandb.use_model(model_artifact)
+        model = keras.Model.from_config(train_run.config["model_config"])
+        model.load_weights(logged_weights)
+    elif hparams["hf_model"]:
+        model = keras.saving.load_model(f"hf://{hparams["hf_model"]}")
+    else:
+        raise ValueError("No value given for run_id or for hf-model")
     return model
 
 
-def initialize_metrics():
+def initialize_metrics() -> list[keras.Metric]:
     metrics = []
     metric_config = {}
 
     F = hparams.pop("F")
-    if F:
-        for f in F:
-            metrics.append(FaceValidationAccuracy(f=f, threshold=f.get_threshold()))
 
     if "none" not in hparams["metrics"]:
         metrics_in = hparams.pop("metrics")
 
         for metric in metrics_in:
             if metric == "mse":
-                tmp_metric = keras.metrics.MeanSquaredError()
+
+                def mse(y_true, y_pred):
+                    return keras.ops.mean(
+                        keras.ops.square(y_true - y_pred), axis=[1, 2, 3]
+                    )
+
+                tmp_metric = keras.metrics.MeanMetricWrapper(
+                    mse,
+                    name=metric,
+                )
             elif metric == "mae":
-                tmp_metric = keras.metrics.MeanAbsoluteError()
+
+                def mae(y_true, y_pred):
+                    return keras.ops.mean(
+                        keras.ops.absolute(y_true - y_pred), axis=[1, 2, 3]
+                    )
+
+                tmp_metric = keras.metrics.MeanMetricWrapper(
+                    mae,
+                    name=metric,
+                )
+            elif metric == "ssimc":
+                tmp_metric = aura_metrics.IQASSIMC()
+            elif metric == "cwssim":
+                tmp_metric = aura_metrics.IQACWSSIM()
+            elif metric == "dssim":
+                tmp_metric = aura_metrics.DSSIMObjective()
+            elif metric == "topiq_fr":
+                tmp_metric = aura_metrics.TOPIQFR()
+            elif metric == "topiq_nr":
+                tmp_metric = aura_metrics.TOPIQNR()
+            elif metric == "lpips":
+                tmp_metric = aura_metrics.IQAPerceptual()
+            elif metric == "alex":
+                tmp_metric = aura_metrics.PerceptualSimilarity(backbone="alex")
+            elif metric == "facevalidation":
+                if not F:
+                    raise Exception(
+                        "Face validation requires embeddings to be chosen with -F"
+                    )
+                for f in F:
+                    metrics.append(
+                        aura_metrics.FaceValidationMetrics(
+                            f=f, threshold=f.get_threshold()
+                        )
+                    )
+                    metric_config[metrics[-1].name] = metrics[-1].get_config()
+                continue
+            elif metric == "cosine":
+                if not F:
+                    raise Exception(
+                        "Embedding distance requires embeddings to be chosen with -F"
+                    )
+                for f in F:
+                    metrics.append(aura_metrics.CosineDistance(f=f))
+                    metric_config[metrics[-1].name] = metrics[-1].get_config()
+                continue
+            elif metric == "euclidean":
+                if not F:
+                    raise Exception(
+                        "Embedding distance requires embeddings to be chosen with -F"
+                    )
+                for f in F:
+                    metrics.append(aura_metrics.EuclideanDistance(f=f))
+                    metric_config[metrics[-1].name] = metrics[-1].get_config()
+                continue
+            elif metric == "euclidean_l2":
+                if not F:
+                    raise Exception(
+                        "Embedding distance requires embeddings to be chosen with -F"
+                    )
+                for f in F:
+                    metrics.append(aura_metrics.EuclideanL2Distance(f=f))
+                    metric_config[metrics[-1].name] = metrics[-1].get_config()
+                continue
             else:
                 raise Exception("Metric not recognized")
 
@@ -153,37 +277,81 @@ def initialize_metrics():
     return metrics
 
 
-def load_pairs_ds() -> datasets.Dataset:
-    ds = datasets.load_dataset(hparams["pairs_dataset"], "pairs", split="test")
-    insta: InstaFilterEnum = hparams["instagram_filter"]
+def load_dataset() -> datasets.Dataset:
+    v_config, v_split, v_column = hparams["validation"]
+    ds = (
+        datasets.load_dataset(
+            hparams["dataset"], name=v_config, split=v_split, num_proc=8
+        )
+        .rename_column(v_column, "target")
+        .select_columns(["path", "target"])
+    )
+
     dims: tuple[int] = hparams["input"]
 
-    batch = hparams["batch"]
+    process_image = A.Compose(
+        [
+            A.ToFloat(max_value=255, p=1),
+            A.LongestMaxSize(np.maximum(dims[0], dims[1])),
+        ]
+    )
 
-    if insta:
+    if hparams["predictions"]:
+        p_config, p_split, p_column = hparams["predictions"]
+        v_ds = (
+            datasets.load_dataset(
+                hparams["dataset"], name=p_config, split=p_split, num_proc=8
+            )
+            .rename_column(p_column, "prediction")
+            .select_columns("prediction")
+        )
+        ds = datasets.concatenate_datasets([ds, v_ds], axis=1).filter(
+            lambda x: x["prediction"] is not None
+        )
 
-        def transform(examples):
-            examples["img_0"] = insta.filter_transform(examples["img_0"])["target"]
-            examples = DatasetEnum.data_collater(examples, {"w": dims[0], "h": dims[1]})
-            return examples
+        def transform(batch):
+            true_col = np.stack(
+                [
+                    process_image(image=keras.utils.img_to_array(img, dtype="uint8"))[
+                        "image"
+                    ]
+                    for img in batch["target"]
+                ]
+            )
+            predictions = np.stack(
+                [
+                    process_image(image=keras.utils.img_to_array(img, dtype="uint8"))[
+                        "image"
+                    ]
+                    for img in batch["prediction"]
+                ]
+            )
+            return {
+                "path": batch["path"],
+                "target": true_col,
+                "prediction": predictions,
+            }
+    else:  # Load the model for computing filtered outputs if not precomputed in dataset
 
-    else:
+        def transform(batch):
+            true_col = np.stack(
+                [
+                    process_image(image=keras.utils.img_to_array(img, dtype="uint8"))[
+                        "image"
+                    ]
+                    for img in batch["target"]
+                ]
+            )
+            return {"path": batch["path"], "target": true_col}
 
-        def transform(examples):
-            examples = DatasetEnum.data_collater(examples, {"w": dims[0], "h": dims[1]})
-            return examples
-
-    ds.set_transform(transform)
-
-    ds = ds.iter(batch_size=batch)
-
+    ds = ds.with_transform(transform)
     return ds
 
 
 def main():
-    # Constant Defaults
-    hparams["input"] = (256, 256)
     hparams.update(parse_args().__dict__)
+    dims = hparams.pop("dims")
+    hparams["input"] = (dims, dims)
     log = hparams.pop("log")
     logdir = hparams.pop("log_dir")
     note = hparams.pop("note")
@@ -216,42 +384,64 @@ def main():
 
     set_seed()
 
-    ds = load_pairs_ds()
+    wandb.init(project="auramask", job_type="evaluation", dir=logdir)
 
-    # Get the logged weights
-    api = wandb.Api(overrides={"entity": "spuds", "project": "auramask"})
-    train_run: wandb.Run = api.run(hparams["run_id"])
-    model_artifact = None
-    for logged_artifact in train_run.logged_artifacts():
-        if logged_artifact.type == "model":
-            if hparams["alias"] in logged_artifact.aliases + [logged_artifact.version]:
-                model_artifact = logged_artifact
-                break
-    if not model_artifact:
-        raise Exception(
-            "Unable to find an artifact with alias or version {0}".format(
-                hparams["alias"]
-            )
+    ds = load_dataset()
+
+    metrics = initialize_metrics()
+
+    if hparams["predictions"]:
+        model = None
+    else:
+        model = load_model()
+
+    compute_output = (model is not None) and (hparams["predictions"] is None)
+
+    validation_tab = wandb.Table(["image_name"] + [m.name for m in metrics])
+
+    wandb.run.config.update(hparams)
+
+    for example in (
+        pbar := tqdm.tqdm(
+            ds.iter(batch_size=hparams["batch"]),
+            total=int(np.ceil(ds.num_rows / hparams["batch"])),
+            position=0,
         )
-    logged_weights = None
-    for file in model_artifact.manifest.entries.keys():
-        if "h5" in file:
-            logged_weights = model_artifact.get_entry(file)
-            break
-        elif "keras" in file:
-            logged_weights = model_artifact.get_entry(file)
-            break
-    logged_weights = logged_weights.download()
+    ):
+        target_batch = keras.ops.stop_gradient(
+            keras.ops.convert_to_tensor(example["target"])
+        )
+        if compute_output:
+            pred_batch = keras.ops.stop_gradient(model(target_batch, training=False)[0])
+        else:
+            pred_batch = keras.ops.stop_gradient(
+                keras.ops.convert_to_tensor(example["prediction"])
+            )
 
-    run = wandb.init(project="auramask", job_type="evaluation", dir=logdir)
-    run.use_model(model_artifact)
+        met_vals = []
+        for metric in metrics:
+            values = metric._fn(
+                target_batch, pred_batch, **metric._fn_kwargs
+            )  # Hacky way to compute a non-mean evaluation for saving
+            keras.metrics.Mean.update_state(
+                metric, values
+            )  # Hacky way to update state without having to recompute
+            met_vals.append(
+                [v for v in keras.ops.convert_to_numpy(keras.ops.squeeze(values))]
+            )
+            metric.reset_state()
 
-    model = load_model(train_run.config, logged_weights)
+        B = keras.ops.shape(target_batch)[0]
 
-    # metrics = initialize_metrics()
+        for i in range(B):
+            validation_tab.add_data(
+                example["path"][i],
+                *[v[i] for v in met_vals],
+            )
 
-    for example in tqdm.tqdm(ds):
-        adv_img_0, _ = model(example["img_0"], training=False)
+    wandb.run.log({"validation": validation_tab})
+
+    wandb.finish()
 
 
 if __name__ == "__main__":

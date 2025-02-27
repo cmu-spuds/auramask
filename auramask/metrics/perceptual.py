@@ -1,5 +1,6 @@
 from keras import metrics
 from auramask.models.lpips import LPIPS
+from auramask.metrics.pyiqa import IQAMetric
 
 
 class PerceptualSimilarity(metrics.MeanMetricWrapper):
@@ -29,3 +30,8 @@ class PerceptualSimilarity(metrics.MeanMetricWrapper):
             "name": self.name,
             "model": self.model.get_config(),
         }
+
+
+class IQAPerceptual(IQAMetric):
+    def __init__(self, name="LPIPS_IQA", **kwargs):
+        super().__init__(name=name, metric_name="lpips", **kwargs)
