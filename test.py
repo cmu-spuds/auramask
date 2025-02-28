@@ -174,7 +174,7 @@ def load_model() -> keras.Model:
         model = keras.Model.from_config(train_run.config["model_config"])
         model.load_weights(logged_weights)
     elif hparams["hf_model"]:
-        model = keras.saving.load_model(f"hf://{hparams["hf_model"]}")
+        model = keras.saving.load_model(f"hf://{hparams['hf_model']}")
     else:
         raise ValueError("No value given for run_id or for hf-model")
     return model
