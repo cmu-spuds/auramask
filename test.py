@@ -384,7 +384,16 @@ def main():
 
     set_seed()
 
-    wandb.init(project="auramask", job_type="evaluation", dir=logdir)
+    wandb.init(
+        project="auramask",
+        id=os.getenv("WANDB_RUN_ID", None),
+        dir=logdir,
+        name=os.getenv("WANDB_RUN_NAME", None),
+        notes=note,
+        resume="allow",
+        job_type="evaluation",
+        group=os.getenv("SLURM_JOB_NAME", None),
+    )
 
     ds = load_dataset()
 
