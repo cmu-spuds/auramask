@@ -69,6 +69,8 @@ def parse_args():
         type=bool,
         action=argparse.BooleanOptionalAction,
     )
+    parser.add_argument("--bbox-column", type=str, requried=False)
+    parser.add_argument("--bbox-format", type=str, required=False)
     parser.add_argument(
         "-M",
         "--metrics",
@@ -279,16 +281,29 @@ def initialize_metrics() -> list[keras.Metric]:
 
 def load_dataset() -> datasets.Dataset:
     v_config, v_split, v_column = hparams["validation"]
-    ds = (
-        datasets.load_dataset(
-            hparams["dataset"], name=v_config, split=v_split, num_proc=8
+    bbox = (hparams.pop(["bbox_column"]), hparams.pop(["bbox_format"]))
+    print(bbox)
+    ds = datasets.load_dataset(
+        hparams["dataset"], name=v_config, split=v_split, num_proc=8
+    ).rename_column(v_column, "target")
+
+    # Add filename as a column so we can differentiate on datasets that don't have explicit IDs
+    if "path" in ds.column_names:
+        ds = ds.select_columns(["path", "target"])
+    else:
+        ds = (
+            ds.select_columns("target")
+            .cast_column("target", datasets.features.Image(decode=False))
+            .map(lambda x: {"path": x["target"]["path"]})
+            .cast_column("target", datasets.features.Image())
         )
-        .rename_column(v_column, "target")
-        .select_columns(["path", "target"])
-    )
+
+    # Select only the two needed columns
+    ds = ds.select_columns(["path", "target"])
 
     dims: tuple[int] = hparams["input"]
 
+    # Pre-processing images to convert to float [0..1] and scale to the dimensions provided
     process_image = A.Compose(
         [
             A.ToFloat(max_value=255, p=1),
@@ -296,6 +311,7 @@ def load_dataset() -> datasets.Dataset:
         ]
     )
 
+    # If the predictions column exists we choose this column too and avoid recomputing model outputs
     if hparams["predictions"]:
         p_config, p_split, p_column = hparams["predictions"]
         v_ds = (
@@ -309,6 +325,7 @@ def load_dataset() -> datasets.Dataset:
             lambda x: x["prediction"] is not None
         )
 
+        # Transform function to apply to each batch in the dataset
         def transform(batch):
             true_col = np.stack(
                 [
@@ -332,7 +349,7 @@ def load_dataset() -> datasets.Dataset:
                 "prediction": predictions,
             }
     else:  # Load the model for computing filtered outputs if not precomputed in dataset
-
+        # Transform function to apply to each batch in the dataset
         def transform(batch):
             true_col = np.stack(
                 [
