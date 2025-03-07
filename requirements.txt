@@ -9,8 +9,6 @@ lpips
 pilgram2
 albumentations
 pyiqa
-ruff
-pre-commit
 pydot
 softadapt_keras @ git+https://github.com/logasja/SoftAdapt-Keras.git
 keras3_unets @ git+https://github.com/logasja/keras3-unets.git
