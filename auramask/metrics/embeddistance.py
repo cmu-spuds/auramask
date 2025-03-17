@@ -11,7 +11,7 @@ from auramask.utils.distance import (
 def embedding_distance(y_true, y_pred, embed_net, distance_fn):
     emb_adv = embed_net(y_true, training=False)
     emb_true = embed_net(y_pred, training=False)
-    distance = distance_fn(emb_true, emb_adv, -1)
+    distance = distance_fn(emb_true, emb_adv)
     return distance
 
 

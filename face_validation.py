@@ -84,6 +84,7 @@ def parse_args():
             "topiq_fr",
             "topiq_nr",
             "cwssim",
+            "facevalidation",
             "cosine",
             "euclidean",
             "euclidean_l2",
@@ -108,7 +109,7 @@ def parse_args():
     parser.add_argument(
         "-D",
         "--dataset",
-        default="logasja/fdf",
+        default="logasja/lfw",
         type=str,
     )
     parser.add_argument(
@@ -116,18 +117,17 @@ def parse_args():
         "--validation",
         default="validation",
         type=str,
-        nargs=3,
-        help="The config, split, and column that maps to validation images.",
+        nargs=2,
+        help="The config and split for the validation dataaset.",
     )
     parser.add_argument(
         "-P",
-        "--predictions",
+        "--pairs",
         required=False,
         type=str,
         nargs=3,
-        help="(Optional) The config, split, and column that maps to precomputed images.",
+        help="The columns mapping to pair groundtruth, first pair image, second pair image.",
     )
-
     args = parser.parse_args()
 
     return args
@@ -225,6 +225,19 @@ def initialize_metrics() -> list[keras.Metric]:
                 tmp_metric = aura_metrics.IQAPerceptual()
             elif metric == "alex":
                 tmp_metric = aura_metrics.PerceptualSimilarity(backbone="alex")
+            elif metric == "facevalidation":
+                if not F:
+                    raise Exception(
+                        "Face validation requires embeddings to be chosen with -F"
+                    )
+                for f in F:
+                    metrics.append(
+                        aura_metrics.CosineValidation(
+                            f=f
+                        )
+                    )
+                    metric_config[metrics[-1].name] = metrics[-1].get_config()
+                continue
             elif metric == "cosine":
                 if not F:
                     raise Exception(
@@ -264,13 +277,17 @@ def initialize_metrics() -> list[keras.Metric]:
 
 
 def load_dataset() -> datasets.Dataset:
-    v_config, v_split, v_column = hparams["validation"]
+    v_config, v_split = hparams["validation"]
     ds = (
         datasets.load_dataset(
             hparams["dataset"], name=v_config, split=v_split, num_proc=8
         )
-        .rename_column(v_column, "target")
-        .select_columns(["path", "target"])
+    )
+    pair, img_a, img_b = hparams["pairs"]
+    ds = (
+        ds
+        .rename_columns({pair: 'pair', img_a: 'A', img_b: 'B'})
+        .select_columns(['pair', 'A', 'B'])
     )
 
     dims: tuple[int] = hparams["input"]
@@ -279,57 +296,32 @@ def load_dataset() -> datasets.Dataset:
         [
             A.ToFloat(max_value=255, p=1),
             # A.CenterCrop(dims[0], dims[1]),
-            A.LongestMaxSize(np.maximum(dims[0], dims[1]), A.cv2.INTER_AREA),
+            A.LongestMaxSize(np.maximum(dims[0], dims[1]), interpolation=A.cv2.INTER_AREA),
         ]
     )
 
-    if hparams["predictions"]:
-        p_config, p_split, p_column = hparams["predictions"]
-        v_ds = (
-            datasets.load_dataset(
-                hparams["dataset"], name=p_config, split=p_split, num_proc=8
-            )
-            .rename_column(p_column, "prediction")
-            .select_columns("prediction")
+    def transform(batch):
+        A = np.stack(
+            [
+                process_image(image=keras.utils.img_to_array(img, dtype="uint8"))[
+                    "image"
+                ]
+                for img in batch["A"]
+            ]
         )
-        ds = datasets.concatenate_datasets([ds, v_ds], axis=1).filter(
-            lambda x: x["prediction"] is not None
+        B = np.stack(
+            [
+                process_image(image=keras.utils.img_to_array(img, dtype="uint8"))[
+                    "image"
+                ]
+                for img in batch["B"]
+            ]
         )
-
-        def transform(batch):
-            true_col = np.stack(
-                [
-                    process_image(image=keras.utils.img_to_array(img, dtype="uint8"))[
-                        "image"
-                    ]
-                    for img in batch["target"]
-                ]
-            )
-            predictions = np.stack(
-                [
-                    process_image(image=keras.utils.img_to_array(img, dtype="uint8"))[
-                        "image"
-                    ]
-                    for img in batch["prediction"]
-                ]
-            )
-            return {
-                "path": batch["path"],
-                "target": true_col,
-                "prediction": predictions,
-            }
-    else:  # Load the model for computing filtered outputs if not precomputed in dataset
-
-        def transform(batch):
-            true_col = np.stack(
-                [
-                    process_image(image=keras.utils.img_to_array(img, dtype="uint8"))[
-                        "image"
-                    ]
-                    for img in batch["target"]
-                ]
-            )
-            return {"path": batch["path"], "target": true_col}
+        return {
+            "pair": batch["pair"],
+            "A": A,
+            "B": B,
+        }
 
     ds = ds.with_transform(transform)
     return ds
@@ -386,14 +378,12 @@ def main():
 
     metrics = initialize_metrics()
 
-    if hparams["predictions"]:
-        model = None
-    else:
+    if hparams["hf_model"] or hparams["run_id"]:
         model = load_model()
+    else:
+        model = None
 
-    compute_output = (model is not None) and (hparams["predictions"] is None)
-
-    validation_tab = wandb.Table(["image_name"] + [m.name for m in metrics])
+    validation_tab = wandb.Table(["pair"] + [m.name for m in metrics])
 
     wandb.run.config.update(hparams)
 
@@ -404,20 +394,17 @@ def main():
             position=0,
         )
     ):
-        target_batch = keras.ops.stop_gradient(
-            keras.ops.convert_to_tensor(example["target"])
+        batch_a = keras.ops.stop_gradient(
+            keras.ops.convert_to_tensor(example["A"])
         )
-        if compute_output:
-            pred_batch = keras.ops.stop_gradient(model(target_batch, training=False)[0])
-        else:
-            pred_batch = keras.ops.stop_gradient(
-                keras.ops.convert_to_tensor(example["prediction"])
-            )
+        if model:
+            batch_a = keras.ops.stop_gradient(model(batch_a, training=False)[0])
+        batch_b = keras.ops.convert_to_tensor(example["B"])
 
         met_vals = []
         for metric in metrics:
             values = metric._fn(
-                target_batch, pred_batch, **metric._fn_kwargs
+                batch_a, batch_b, **metric._fn_kwargs
             )  # Hacky way to compute a non-mean evaluation for saving
             keras.metrics.Mean.update_state(
                 metric, values
@@ -427,11 +414,11 @@ def main():
             )
             metric.reset_state()
 
-        B = keras.ops.shape(target_batch)[0]
+        B = keras.ops.shape(batch_a)[0]
 
         for i in range(B):
             validation_tab.add_data(
-                example["path"][i],
+                example["pair"][i],
                 *[v[i] for v in met_vals],
             )
 

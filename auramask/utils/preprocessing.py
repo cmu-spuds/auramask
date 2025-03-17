@@ -18,7 +18,7 @@ def gen_image_loading_layers(w: int, h: int):
         [
             A.FancyPCA(p=1.0),
             A.ToFloat(max_value=255, p=1),
-            A.LongestMaxSize(np.maximum(h, w)),
+            A.LongestMaxSize(np.maximum(h, w), A.cv2.INTER_AREA),
             A.CenterCrop(int(h * 0.875), int(w * 0.875)),
         ]
     )
