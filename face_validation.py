@@ -419,7 +419,6 @@ def main():
     if hparams["crop_faces"]:
         if keras.backend.backend() == "tensorflow":
             from mtcnn.mtcnn import MTCNN
-            from tensorflow import ragged
 
             detector = MTCNN()
         elif keras.backend.backend() == "torch":
@@ -457,7 +456,7 @@ def main():
         B = ops.shape(batch_a)[0]
 
         for i in range(B):
-            print([v[i] for v in met_vals])
+            # print([v[i] for v in met_vals])
             validation_tab.add_data(
                 example["pair"][i],
                 *[v[i] for v in met_vals],
