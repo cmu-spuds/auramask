@@ -469,6 +469,8 @@ def main():
         B = ops.shape(batch_a)[0]
 
         if hparams["with_image"]:
+            batch_a = ops.convert_to_numpy(batch_a)
+            batch_b = ops.convert_to_numpy(batch_b)
             for i in range(B):
                 # print([v[i] for v in met_vals])
                 validation_tab.add_data(
