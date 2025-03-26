@@ -424,7 +424,7 @@ def main():
         elif keras.backend.backend() == "torch":
             from facenet_pytorch import MTCNN
 
-            detector = MTCNN(image_size=160, margin=14)
+            detector = MTCNN(image_size=dims, margin=14)
 
     for example in (
         _ := tqdm.tqdm(
