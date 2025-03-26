@@ -11,12 +11,12 @@ import wandb
 import datasets
 import tqdm
 
-# os.environ["KERAS_BACKEND"] = "torch"
+os.environ["KERAS_BACKEND"] = "torch"
 import keras
+from keras import ops
 import numpy as np
 import albumentations as A
 from auramask import metrics as aura_metrics
-from auramask.models import face_embeddings
 
 from auramask.utils.constants import (
     EnumAction,
@@ -198,9 +198,7 @@ def initialize_metrics() -> list[keras.Metric]:
             if metric == "mse":
 
                 def mse(y_true, y_pred):
-                    return keras.ops.mean(
-                        keras.ops.square(y_true - y_pred), axis=[1, 2, 3]
-                    )
+                    return ops.mean(ops.square(y_true - y_pred), axis=[1, 2, 3])
 
                 tmp_metric = keras.metrics.MeanMetricWrapper(
                     mse,
@@ -209,9 +207,7 @@ def initialize_metrics() -> list[keras.Metric]:
             elif metric == "mae":
 
                 def mae(y_true, y_pred):
-                    return keras.ops.mean(
-                        keras.ops.absolute(y_true - y_pred), axis=[1, 2, 3]
-                    )
+                    return ops.mean(ops.absolute(y_true - y_pred), axis=[1, 2, 3])
 
                 tmp_metric = keras.metrics.MeanMetricWrapper(
                     mae,
@@ -329,28 +325,35 @@ def load_dataset() -> datasets.Dataset:
 
 def batch_crop_to_face(img_batch, detector, max_value):
     if max_value == 1:
-        img_batch = img_batch * 255  # Scale to [0,255] pixel space
-    batch_faces = []
-    for img in img_batch:
-        face = detector.detect_faces(
-            img,
-            box_format="xywh",
-            min_face_size=15,  # Detect smaller faces
-            threshold_pnet=0.5,  # More proposals from PNet
-            threshold_rnet=0.6,  # Loosen RNet filtering
-            threshold_onet=0.7,  # More final faces accepted by ONet
-        )
-        if len(face) > 0:
-            bbox = face[0]["box"]
-            img = keras.ops.image.crop_images(
+        img_batch = ops.cast(img_batch * 255, "uint8")  # Scale to [0,255] pixel space
+
+    if keras.backend.backend() == "tensorflow":
+        batch_faces = []
+        for img in img_batch:
+            face = detector.detect_faces(
                 img,
-                left_cropping=bbox[0],
-                top_cropping=bbox[1],
-                target_width=bbox[2],
-                target_height=bbox[3],
+                box_format="xywh",
+                min_face_size=15,  # Detect smaller faces
+                threshold_pnet=0.5,  # More proposals from PNet
+                threshold_rnet=0.6,  # Loosen RNet filtering
+                threshold_onet=0.7,  # More final faces accepted by ONet
             )
-        batch_faces.append(img / 255.0)
-    return batch_faces
+            if len(face) > 0:
+                bbox = face[0]["box"]
+                img = ops.image.crop_images(
+                    img,
+                    left_cropping=bbox[0],
+                    top_cropping=bbox[1],
+                    target_width=bbox[2],
+                    target_height=bbox[3],
+                )
+            img = ops.image.resize(img, (224, 224))
+            batch_faces.append(img / 255.0)
+        return ops.stack(batch_faces)
+    elif keras.backend.backend() == "torch":
+        out = ops.stack(detector(ops.convert_to_numpy(img_batch)))
+        img_batch = ops.transpose(out, (0, 2, 3, 1))  # convert to channels last
+        return img_batch
 
 
 def main():
@@ -414,10 +417,15 @@ def main():
     wandb.run.config.update(hparams)
 
     if hparams["crop_faces"]:
-        from mtcnn.mtcnn import MTCNN
-        from tensorflow import ragged
+        if keras.backend.backend() == "tensorflow":
+            from mtcnn.mtcnn import MTCNN
+            from tensorflow import ragged
 
-        detector = MTCNN()
+            detector = MTCNN()
+        elif keras.backend.backend() == "torch":
+            from facenet_pytorch import MTCNN
+
+            detector = MTCNN(image_size=160, margin=14)
 
     for example in (
         _ := tqdm.tqdm(
@@ -426,43 +434,30 @@ def main():
             position=0,
         )
     ):
-        batch_a = keras.ops.stop_gradient(keras.ops.convert_to_tensor(example["A"]))
+        batch_a = ops.stop_gradient(ops.convert_to_tensor(example["A"]))
         if model:
-            batch_a = keras.ops.stop_gradient(model(batch_a, training=False)[0])
-        batch_b = keras.ops.convert_to_tensor(example["B"])
+            batch_a = ops.stop_gradient(model(batch_a, training=False)[0])
+        batch_b = ops.convert_to_tensor(example["B"])
 
         if hparams["crop_faces"]:
-            batch_a = ragged.stack(batch_crop_to_face(batch_a, detector, max_value=1))
-            batch_b = ragged.stack(batch_crop_to_face(batch_b, detector, max_value=1))
-            met_vals = []
-            for metric in metrics:
-                values = metric._fn(
-                    batch_a, batch_b, **metric._fn_kwargs
-                )  # Hacky way to compute a non-mean evaluation for saving
-                keras.metrics.Mean.update_state(
-                    metric, values
-                )  # Hacky way to update state without having to recompute
-                met_vals.append(
-                    [v for v in keras.ops.convert_to_numpy(keras.ops.squeeze(values))]
-                )
-                metric.reset_state()
-        else:
-            met_vals = []
-            for metric in metrics:
-                values = metric._fn(
-                    batch_a, batch_b, **metric._fn_kwargs
-                )  # Hacky way to compute a non-mean evaluation for saving
-                keras.metrics.Mean.update_state(
-                    metric, values
-                )  # Hacky way to update state without having to recompute
-                met_vals.append(
-                    [v for v in keras.ops.convert_to_numpy(keras.ops.squeeze(values))]
-                )
-                metric.reset_state()
+            batch_a = batch_crop_to_face(batch_a, detector, max_value=1)
+            batch_b = batch_crop_to_face(batch_b, detector, max_value=1)
 
-        B = keras.ops.shape(batch_a)[0]
+        met_vals = []
+        for metric in metrics:
+            values = metric._fn(
+                batch_a, batch_b, **metric._fn_kwargs
+            )  # Hacky way to compute a non-mean evaluation for saving
+            keras.metrics.Mean.update_state(
+                metric, values
+            )  # Hacky way to update state without having to recompute
+            met_vals.append([v for v in ops.convert_to_numpy(ops.squeeze(values))])
+            metric.reset_state()
+
+        B = ops.shape(batch_a)[0]
 
         for i in range(B):
+            print([v[i] for v in met_vals])
             validation_tab.add_data(
                 example["pair"][i],
                 *[v[i] for v in met_vals],
