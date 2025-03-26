@@ -93,10 +93,7 @@ def parse_args():
         nargs="+",
     )
     parser.add_argument(
-        "--crop-faces",
-        type=bool,
-        default=False,
-        action=argparse.BooleanOptionalAction,
+        "--crop-faces", type=str, default="", choices=["", "before", "after"]
     )
     parser.add_argument(
         "-S",
@@ -416,7 +413,7 @@ def main():
 
     wandb.run.config.update(hparams)
 
-    if hparams["crop_faces"]:
+    if hparams["crop_faces"] != "":
         if keras.backend.backend() == "tensorflow":
             from mtcnn.mtcnn import MTCNN
 
@@ -434,11 +431,16 @@ def main():
         )
     ):
         batch_a = ops.stop_gradient(ops.convert_to_tensor(example["A"]))
-        if model:
-            batch_a = ops.stop_gradient(model(batch_a, training=False)[0])
         batch_b = ops.convert_to_tensor(example["B"])
 
-        if hparams["crop_faces"]:
+        if hparams["crop_faces"] == "before":
+            batch_a = batch_crop_to_face(batch_a, detector, max_value=1)
+            batch_b = batch_crop_to_face(batch_b, detector, max_value=1)
+
+        if model:
+            batch_a = ops.stop_gradient(model(batch_a, training=False)[0])
+
+        if hparams["crop_faces"] == "after":
             batch_a = batch_crop_to_face(batch_a, detector, max_value=1)
             batch_b = batch_crop_to_face(batch_b, detector, max_value=1)
 
