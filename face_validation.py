@@ -408,6 +408,8 @@ def main():
 
     ds = load_dataset()
 
+    ds = ds.filter(lambda x: x["pair"] == 0)
+
     metrics = initialize_metrics()
 
     if hparams["hf_model"] or hparams["run_id"]:
@@ -432,7 +434,7 @@ def main():
         elif keras.backend.backend() == "torch":
             from facenet_pytorch import MTCNN
 
-            detector = MTCNN(image_size=dims, margin=14)
+            detector = MTCNN(image_size=dims, margin=14, post_process=False)
 
     for example in (
         _ := tqdm.tqdm(
@@ -481,6 +483,7 @@ def main():
                 )
         else:
             for i in range(B):
+                # print(example["pair"][i])
                 # print([v[i] for v in met_vals])
                 validation_tab.add_data(
                     example["pair"][i],
