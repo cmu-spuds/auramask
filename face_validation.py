@@ -408,8 +408,6 @@ def main():
 
     ds = load_dataset()
 
-    ds = ds.filter(lambda x: x["pair"] == 0)
-
     metrics = initialize_metrics()
 
     if hparams["hf_model"] or hparams["run_id"]:
