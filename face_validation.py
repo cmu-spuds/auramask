@@ -400,7 +400,7 @@ def main():
         notes=note,
         resume="allow",
         job_type="evaluation",
-        group=os.getenv("SLURM_JOB_NAME", None),
+        group=os.getenv("WANDB_RUN_GROUP", None),
     )
 
     ds = load_dataset()
