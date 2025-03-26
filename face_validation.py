@@ -356,7 +356,7 @@ def batch_crop_to_face(img_batch, detector, max_value):
     elif keras.backend.backend() == "torch":
         out = ops.stack(detector(ops.convert_to_numpy(img_batch)))
         img_batch = ops.transpose(out, (0, 2, 3, 1))  # convert to channels last
-        return img_batch
+        return img_batch / 255.0
 
 
 def main():
