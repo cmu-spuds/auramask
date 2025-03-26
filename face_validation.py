@@ -12,11 +12,11 @@ import datasets
 import tqdm
 
 # os.environ["KERAS_BACKEND"] = "torch"
-
 import keras
 import numpy as np
 import albumentations as A
 from auramask import metrics as aura_metrics
+from auramask.models import face_embeddings
 
 from auramask.utils.constants import (
     EnumAction,
@@ -237,11 +237,7 @@ def initialize_metrics() -> list[keras.Metric]:
                         "Face validation requires embeddings to be chosen with -F"
                     )
                 for f in F:
-                    metrics.append(
-                        aura_metrics.CosineValidation(
-                            f=f
-                        )
-                    )
+                    metrics.append(aura_metrics.CosineValidation(f=f))
                     metric_config[metrics[-1].name] = metrics[-1].get_config()
                 continue
             elif metric == "cosine":
@@ -284,16 +280,12 @@ def initialize_metrics() -> list[keras.Metric]:
 
 def load_dataset() -> datasets.Dataset:
     v_config, v_split = hparams["validation"]
-    ds = (
-        datasets.load_dataset(
-            hparams["dataset"], name=v_config, split=v_split, num_proc=8
-        )
+    ds = datasets.load_dataset(
+        hparams["dataset"], name=v_config, split=v_split, num_proc=8
     )
     pair, img_a, img_b = hparams["pairs"]
-    ds = (
-        ds
-        .rename_columns({pair: 'pair', img_a: 'A', img_b: 'B'})
-        .select_columns(['pair', 'A', 'B'])
+    ds = ds.rename_columns({pair: "pair", img_a: "A", img_b: "B"}).select_columns(
+        ["pair", "A", "B"]
     )
 
     dims: tuple[int] = hparams["input"]
@@ -302,7 +294,9 @@ def load_dataset() -> datasets.Dataset:
         [
             A.ToFloat(max_value=255, p=1),
             # A.CenterCrop(dims[0], dims[1]),
-            A.LongestMaxSize(np.maximum(dims[0], dims[1]), interpolation=A.cv2.INTER_AREA),
+            A.LongestMaxSize(
+                np.maximum(dims[0], dims[1]), interpolation=A.cv2.INTER_AREA
+            ),
         ]
     )
 
@@ -332,19 +326,22 @@ def load_dataset() -> datasets.Dataset:
     ds = ds.with_transform(transform)
     return ds
 
-def batch_crop_to_face(img_batch, detector, max_value, dims):
+
+def batch_crop_to_face(img_batch, detector, max_value):
     if max_value == 1:
-        img_batch = img_batch * 255         # Scale to [0,255] pixel space
+        img_batch = img_batch * 255  # Scale to [0,255] pixel space
     batch_faces = []
     for img in img_batch:
-        face = detector.detect_faces(img, box_format="xywh",
+        face = detector.detect_faces(
+            img,
+            box_format="xywh",
             min_face_size=15,  # Detect smaller faces
             threshold_pnet=0.5,  # More proposals from PNet
             threshold_rnet=0.6,  # Loosen RNet filtering
-            threshold_onet=0.7   # More final faces accepted by ONet
-            )
+            threshold_onet=0.7,  # More final faces accepted by ONet
+        )
         if len(face) > 0:
-            bbox = face[0]['box']
+            bbox = face[0]["box"]
             img = keras.ops.image.crop_images(
                 img,
                 left_cropping=bbox[0],
@@ -352,10 +349,9 @@ def batch_crop_to_face(img_batch, detector, max_value, dims):
                 target_width=bbox[2],
                 target_height=bbox[3],
             )
-        img = keras.ops.image.resize(img, dims)
-        # img = A.resize(np.maximum(dims[0], dims[1]), interpolation=A.cv2.INTER_AREA)
-        batch_faces.append(img)
-    return keras.ops.stack(batch_faces) / 255.
+        batch_faces.append(img / 255.0)
+    return batch_faces
+
 
 def main():
     hparams.update(parse_args().__dict__)
@@ -419,6 +415,8 @@ def main():
 
     if hparams["crop_faces"]:
         from mtcnn.mtcnn import MTCNN
+        from tensorflow import ragged
+
         detector = MTCNN()
 
     for example in (
@@ -428,29 +426,39 @@ def main():
             position=0,
         )
     ):
-        batch_a = keras.ops.stop_gradient(
-            keras.ops.convert_to_tensor(example["A"])
-        )
+        batch_a = keras.ops.stop_gradient(keras.ops.convert_to_tensor(example["A"]))
         if model:
             batch_a = keras.ops.stop_gradient(model(batch_a, training=False)[0])
         batch_b = keras.ops.convert_to_tensor(example["B"])
 
         if hparams["crop_faces"]:
-            batch_a = batch_crop_to_face(batch_a, detector, max_value=1, dims=(dims, dims))
-            batch_b = batch_crop_to_face(batch_b, detector, max_value=1, dims=(dims, dims))
-
-        met_vals = []
-        for metric in metrics:
-            values = metric._fn(
-                batch_a, batch_b, **metric._fn_kwargs
-            )  # Hacky way to compute a non-mean evaluation for saving
-            keras.metrics.Mean.update_state(
-                metric, values
-            )  # Hacky way to update state without having to recompute
-            met_vals.append(
-                [v for v in keras.ops.convert_to_numpy(keras.ops.squeeze(values))]
-            )
-            metric.reset_state()
+            batch_a = ragged.stack(batch_crop_to_face(batch_a, detector, max_value=1))
+            batch_b = ragged.stack(batch_crop_to_face(batch_b, detector, max_value=1))
+            met_vals = []
+            for metric in metrics:
+                values = metric._fn(
+                    batch_a, batch_b, **metric._fn_kwargs
+                )  # Hacky way to compute a non-mean evaluation for saving
+                keras.metrics.Mean.update_state(
+                    metric, values
+                )  # Hacky way to update state without having to recompute
+                met_vals.append(
+                    [v for v in keras.ops.convert_to_numpy(keras.ops.squeeze(values))]
+                )
+                metric.reset_state()
+        else:
+            met_vals = []
+            for metric in metrics:
+                values = metric._fn(
+                    batch_a, batch_b, **metric._fn_kwargs
+                )  # Hacky way to compute a non-mean evaluation for saving
+                keras.metrics.Mean.update_state(
+                    metric, values
+                )  # Hacky way to update state without having to recompute
+                met_vals.append(
+                    [v for v in keras.ops.convert_to_numpy(keras.ops.squeeze(values))]
+                )
+                metric.reset_state()
 
         B = keras.ops.shape(batch_a)[0]
 
