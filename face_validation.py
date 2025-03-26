@@ -70,6 +70,12 @@ def parse_args():
         action=argparse.BooleanOptionalAction,
     )
     parser.add_argument(
+        "--with-image",
+        default=False,
+        type=bool,
+        action=argparse.BooleanOptionalAction,
+    )
+    parser.add_argument(
         "-M",
         "--metrics",
         type=str,
@@ -409,7 +415,12 @@ def main():
     else:
         model = None
 
-    validation_tab = wandb.Table(["pair"] + [m.name for m in metrics])
+    if hparams["with_image"]:
+        validation_tab = wandb.Table(
+            ["pair", "face a", "face b"] + [m.name for m in metrics]
+        )
+    else:
+        validation_tab = wandb.Table(["pair"] + [m.name for m in metrics])
 
     wandb.run.config.update(hparams)
 
@@ -457,12 +468,22 @@ def main():
 
         B = ops.shape(batch_a)[0]
 
-        for i in range(B):
-            # print([v[i] for v in met_vals])
-            validation_tab.add_data(
-                example["pair"][i],
-                *[v[i] for v in met_vals],
-            )
+        if hparams["with_image"]:
+            for i in range(B):
+                # print([v[i] for v in met_vals])
+                validation_tab.add_data(
+                    example["pair"][i],
+                    wandb.Image(keras.utils.array_to_img(batch_a[i])),
+                    wandb.Image(keras.utils.array_to_img(batch_b[i])),
+                    *[v[i] for v in met_vals],
+                )
+        else:
+            for i in range(B):
+                # print([v[i] for v in met_vals])
+                validation_tab.add_data(
+                    example["pair"][i],
+                    *[v[i] for v in met_vals],
+                )
 
     wandb.run.log({"validation": validation_tab})
 
