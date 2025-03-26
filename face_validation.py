@@ -11,7 +11,7 @@ import wandb
 import datasets
 import tqdm
 
-os.environ["KERAS_BACKEND"] = "torch"
+# os.environ["KERAS_BACKEND"] = "torch"
 
 import keras
 import numpy as np
@@ -91,6 +91,12 @@ def parse_args():
             "none",
         ],
         nargs="+",
+    )
+    parser.add_argument(
+        "--crop-faces",
+        type=bool,
+        default=False,
+        action=argparse.BooleanOptionalAction,
     )
     parser.add_argument(
         "-S",
@@ -326,6 +332,30 @@ def load_dataset() -> datasets.Dataset:
     ds = ds.with_transform(transform)
     return ds
 
+def batch_crop_to_face(img_batch, detector, max_value, dims):
+    if max_value == 1:
+        img_batch = img_batch * 255         # Scale to [0,255] pixel space
+    batch_faces = []
+    for img in img_batch:
+        face = detector.detect_faces(img, box_format="xywh",
+            min_face_size=15,  # Detect smaller faces
+            threshold_pnet=0.5,  # More proposals from PNet
+            threshold_rnet=0.6,  # Loosen RNet filtering
+            threshold_onet=0.7   # More final faces accepted by ONet
+            )
+        if len(face) > 0:
+            bbox = face[0]['box']
+            img = keras.ops.image.crop_images(
+                img,
+                left_cropping=bbox[0],
+                top_cropping=bbox[1],
+                target_width=bbox[2],
+                target_height=bbox[3],
+            )
+        img = keras.ops.image.resize(img, dims)
+        # img = A.resize(np.maximum(dims[0], dims[1]), interpolation=A.cv2.INTER_AREA)
+        batch_faces.append(img)
+    return keras.ops.stack(batch_faces) / 255.
 
 def main():
     hparams.update(parse_args().__dict__)
@@ -387,8 +417,12 @@ def main():
 
     wandb.run.config.update(hparams)
 
+    if hparams["crop_faces"]:
+        from mtcnn.mtcnn import MTCNN
+        detector = MTCNN()
+
     for example in (
-        pbar := tqdm.tqdm(
+        _ := tqdm.tqdm(
             ds.iter(batch_size=hparams["batch"]),
             total=int(np.ceil(ds.num_rows / hparams["batch"])),
             position=0,
@@ -400,6 +434,10 @@ def main():
         if model:
             batch_a = keras.ops.stop_gradient(model(batch_a, training=False)[0])
         batch_b = keras.ops.convert_to_tensor(example["B"])
+
+        if hparams["crop_faces"]:
+            batch_a = batch_crop_to_face(batch_a, detector, max_value=1, dims=(dims, dims))
+            batch_b = batch_crop_to_face(batch_b, detector, max_value=1, dims=(dims, dims))
 
         met_vals = []
         for metric in metrics:
