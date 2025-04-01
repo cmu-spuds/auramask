@@ -12,8 +12,8 @@ import datasets
 import tqdm
 
 os.environ["KERAS_BACKEND"] = "torch"
-
 import keras
+from keras import ops
 import numpy as np
 import albumentations as A
 from auramask import metrics as aura_metrics
@@ -70,6 +70,12 @@ def parse_args():
         action=argparse.BooleanOptionalAction,
     )
     parser.add_argument(
+        "--with-image",
+        default=False,
+        type=bool,
+        action=argparse.BooleanOptionalAction,
+    )
+    parser.add_argument(
         "-M",
         "--metrics",
         type=str,
@@ -91,6 +97,9 @@ def parse_args():
             "none",
         ],
         nargs="+",
+    )
+    parser.add_argument(
+        "--crop-faces", type=str, default="", choices=["", "before", "after"]
     )
     parser.add_argument(
         "-S",
@@ -192,9 +201,7 @@ def initialize_metrics() -> list[keras.Metric]:
             if metric == "mse":
 
                 def mse(y_true, y_pred):
-                    return keras.ops.mean(
-                        keras.ops.square(y_true - y_pred), axis=[1, 2, 3]
-                    )
+                    return ops.mean(ops.square(y_true - y_pred), axis=[1, 2, 3])
 
                 tmp_metric = keras.metrics.MeanMetricWrapper(
                     mse,
@@ -203,9 +210,7 @@ def initialize_metrics() -> list[keras.Metric]:
             elif metric == "mae":
 
                 def mae(y_true, y_pred):
-                    return keras.ops.mean(
-                        keras.ops.absolute(y_true - y_pred), axis=[1, 2, 3]
-                    )
+                    return ops.mean(ops.absolute(y_true - y_pred), axis=[1, 2, 3])
 
                 tmp_metric = keras.metrics.MeanMetricWrapper(
                     mae,
@@ -231,11 +236,7 @@ def initialize_metrics() -> list[keras.Metric]:
                         "Face validation requires embeddings to be chosen with -F"
                     )
                 for f in F:
-                    metrics.append(
-                        aura_metrics.CosineValidation(
-                            f=f
-                        )
-                    )
+                    metrics.append(aura_metrics.CosineValidation(f=f))
                     metric_config[metrics[-1].name] = metrics[-1].get_config()
                 continue
             elif metric == "cosine":
@@ -278,16 +279,12 @@ def initialize_metrics() -> list[keras.Metric]:
 
 def load_dataset() -> datasets.Dataset:
     v_config, v_split = hparams["validation"]
-    ds = (
-        datasets.load_dataset(
-            hparams["dataset"], name=v_config, split=v_split, num_proc=8
-        )
+    ds = datasets.load_dataset(
+        hparams["dataset"], name=v_config, split=v_split, num_proc=8
     )
     pair, img_a, img_b = hparams["pairs"]
-    ds = (
-        ds
-        .rename_columns({pair: 'pair', img_a: 'A', img_b: 'B'})
-        .select_columns(['pair', 'A', 'B'])
+    ds = ds.rename_columns({pair: "pair", img_a: "A", img_b: "B"}).select_columns(
+        ["pair", "A", "B"]
     )
 
     dims: tuple[int] = hparams["input"]
@@ -296,7 +293,9 @@ def load_dataset() -> datasets.Dataset:
         [
             A.ToFloat(max_value=255, p=1),
             # A.CenterCrop(dims[0], dims[1]),
-            A.LongestMaxSize(np.maximum(dims[0], dims[1]), interpolation=A.cv2.INTER_AREA),
+            A.LongestMaxSize(
+                np.maximum(dims[0], dims[1]), interpolation=A.cv2.INTER_AREA
+            ),
         ]
     )
 
@@ -325,6 +324,39 @@ def load_dataset() -> datasets.Dataset:
 
     ds = ds.with_transform(transform)
     return ds
+
+
+def batch_crop_to_face(img_batch, detector, max_value):
+    if max_value == 1:
+        img_batch = ops.cast(img_batch * 255, "uint8")  # Scale to [0,255] pixel space
+
+    if keras.backend.backend() == "tensorflow":
+        batch_faces = []
+        for img in img_batch:
+            face = detector.detect_faces(
+                img,
+                box_format="xywh",
+                min_face_size=15,  # Detect smaller faces
+                threshold_pnet=0.5,  # More proposals from PNet
+                threshold_rnet=0.6,  # Loosen RNet filtering
+                threshold_onet=0.7,  # More final faces accepted by ONet
+            )
+            if len(face) > 0:
+                bbox = face[0]["box"]
+                img = ops.image.crop_images(
+                    img,
+                    left_cropping=bbox[0],
+                    top_cropping=bbox[1],
+                    target_width=bbox[2],
+                    target_height=bbox[3],
+                )
+            img = ops.image.resize(img, (224, 224))
+            batch_faces.append(img / 255.0)
+        return ops.stack(batch_faces)
+    elif keras.backend.backend() == "torch":
+        out = ops.stack(detector(ops.convert_to_numpy(img_batch)))
+        img_batch = ops.transpose(out, (0, 2, 3, 1))  # convert to channels last
+        return img_batch / 255.0
 
 
 def main():
@@ -371,7 +403,7 @@ def main():
         notes=note,
         resume="allow",
         job_type="evaluation",
-        group=os.getenv("SLURM_JOB_NAME", None),
+        group=os.getenv("WANDB_RUN_GROUP", None),
     )
 
     ds = load_dataset()
@@ -383,23 +415,45 @@ def main():
     else:
         model = None
 
-    validation_tab = wandb.Table(["pair"] + [m.name for m in metrics])
+    if hparams["with_image"]:
+        validation_tab = wandb.Table(
+            ["pair", "face a", "face b"] + [m.name for m in metrics]
+        )
+    else:
+        validation_tab = wandb.Table(["pair"] + [m.name for m in metrics])
 
     wandb.run.config.update(hparams)
 
+    if hparams["crop_faces"] != "":
+        if keras.backend.backend() == "tensorflow":
+            from mtcnn.mtcnn import MTCNN
+
+            detector = MTCNN()
+        elif keras.backend.backend() == "torch":
+            from facenet_pytorch import MTCNN
+
+            detector = MTCNN(image_size=dims, margin=14, post_process=False)
+
     for example in (
-        pbar := tqdm.tqdm(
+        _ := tqdm.tqdm(
             ds.iter(batch_size=hparams["batch"]),
             total=int(np.ceil(ds.num_rows / hparams["batch"])),
             position=0,
         )
     ):
-        batch_a = keras.ops.stop_gradient(
-            keras.ops.convert_to_tensor(example["A"])
-        )
+        batch_a = ops.stop_gradient(ops.convert_to_tensor(example["A"]))
+        batch_b = ops.convert_to_tensor(example["B"])
+
+        if hparams["crop_faces"] == "before":
+            batch_a = batch_crop_to_face(batch_a, detector, max_value=1)
+            batch_b = batch_crop_to_face(batch_b, detector, max_value=1)
+
         if model:
-            batch_a = keras.ops.stop_gradient(model(batch_a, training=False)[0])
-        batch_b = keras.ops.convert_to_tensor(example["B"])
+            batch_a = ops.stop_gradient(model(batch_a, training=False)[0])
+
+        if hparams["crop_faces"] == "after":
+            batch_a = batch_crop_to_face(batch_a, detector, max_value=1)
+            batch_b = batch_crop_to_face(batch_b, detector, max_value=1)
 
         met_vals = []
         for metric in metrics:
@@ -409,18 +463,30 @@ def main():
             keras.metrics.Mean.update_state(
                 metric, values
             )  # Hacky way to update state without having to recompute
-            met_vals.append(
-                [v for v in keras.ops.convert_to_numpy(keras.ops.squeeze(values))]
-            )
+            met_vals.append([v for v in ops.convert_to_numpy(ops.squeeze(values))])
             metric.reset_state()
 
-        B = keras.ops.shape(batch_a)[0]
+        B = ops.shape(batch_a)[0]
 
-        for i in range(B):
-            validation_tab.add_data(
-                example["pair"][i],
-                *[v[i] for v in met_vals],
-            )
+        if hparams["with_image"]:
+            batch_a = ops.convert_to_numpy(batch_a)
+            batch_b = ops.convert_to_numpy(batch_b)
+            for i in range(B):
+                # print([v[i] for v in met_vals])
+                validation_tab.add_data(
+                    example["pair"][i],
+                    wandb.Image(keras.utils.array_to_img(batch_a[i])),
+                    wandb.Image(keras.utils.array_to_img(batch_b[i])),
+                    *[v[i] for v in met_vals],
+                )
+        else:
+            for i in range(B):
+                # print(example["pair"][i])
+                # print([v[i] for v in met_vals])
+                validation_tab.add_data(
+                    example["pair"][i],
+                    *[v[i] for v in met_vals],
+                )
 
     wandb.run.log({"validation": validation_tab})
 
