@@ -326,14 +326,14 @@ def load_dataset() -> datasets.Dataset:
     return ds
 
 
-def batch_crop_to_face(img_batch, detector, max_value):
+def batch_get_bboxes(detector, img_batch, max_value):
     if max_value == 1:
         img_batch = ops.cast(img_batch * 255, "uint8")  # Scale to [0,255] pixel space
 
     if keras.backend.backend() == "tensorflow":
-        batch_faces = []
+        batch_boxes = []
         for img in img_batch:
-            face = detector.detect_faces(
+            bbox = detector.detect_faces(
                 img,
                 box_format="xywh",
                 min_face_size=15,  # Detect smaller faces
@@ -341,8 +341,33 @@ def batch_crop_to_face(img_batch, detector, max_value):
                 threshold_rnet=0.6,  # Loosen RNet filtering
                 threshold_onet=0.7,  # More final faces accepted by ONet
             )
-            if len(face) > 0:
-                bbox = face[0]["box"]
+            batch_boxes.append(bbox)
+        return ops.stack(batch_boxes)
+    elif keras.backend.backend() == "torch":
+        # Detect faces
+        batch_boxes, batch_probs, batch_points = detector.detect(
+            img_batch, landmarks=True
+        )
+        # Select highest prob
+        batch_boxes, batch_probs, batch_points = detector.select_boxes(
+            batch_boxes,
+            batch_probs,
+            batch_points,
+            img_batch,
+            method=detector.selection_method,
+        )
+        return batch_boxes
+
+
+def batch_crop_to_face(detector, img_batch, batch_boxes, max_value):
+    if max_value == 1:
+        img_batch = ops.cast(img_batch * 255, "uint8")  # Scale to [0,255] pixel space
+
+    if keras.backend.backend() == "tensorflow":
+        batch_faces = []
+        for img, box in zip(img_batch, batch_boxes):
+            if len(box) > 0:
+                bbox = box[0]["box"]
                 img = ops.image.crop_images(
                     img,
                     left_cropping=bbox[0],
@@ -354,7 +379,10 @@ def batch_crop_to_face(img_batch, detector, max_value):
             batch_faces.append(img / 255.0)
         return ops.stack(batch_faces)
     elif keras.backend.backend() == "torch":
-        out = ops.stack(detector(ops.convert_to_numpy(img_batch)))
+        # Extract faces
+        out = ops.stack(
+            detector.extract(ops.convert_to_numpy(img_batch), batch_boxes, None)
+        )
         img_batch = ops.transpose(out, (0, 2, 3, 1))  # convert to channels last
         return img_batch / 255.0
 
@@ -444,16 +472,20 @@ def main():
         batch_a = ops.stop_gradient(ops.convert_to_tensor(example["A"]))
         batch_b = ops.convert_to_tensor(example["B"])
 
+        if hparams["crop_faces"]:
+            bboxes_a = batch_get_bboxes(detector, batch_a, max_value=1)
+            bboxes_b = batch_get_bboxes(detector, batch_b, max_value=1)
+
         if hparams["crop_faces"] == "before":
-            batch_a = batch_crop_to_face(batch_a, detector, max_value=1)
-            batch_b = batch_crop_to_face(batch_b, detector, max_value=1)
+            batch_a = batch_crop_to_face(detector, batch_a, bboxes_a, max_value=1)
+            batch_b = batch_crop_to_face(detector, batch_b, bboxes_b, max_value=1)
 
         if model:
             batch_a = ops.stop_gradient(model(batch_a, training=False)[0])
 
         if hparams["crop_faces"] == "after":
-            batch_a = batch_crop_to_face(batch_a, detector, max_value=1)
-            batch_b = batch_crop_to_face(batch_b, detector, max_value=1)
+            batch_a = batch_crop_to_face(detector, batch_a, bboxes_a, max_value=1)
+            batch_b = batch_crop_to_face(detector, batch_b, bboxes_b, max_value=1)
 
         met_vals = []
         for metric in metrics:
