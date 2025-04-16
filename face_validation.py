@@ -137,6 +137,12 @@ def parse_args():
         nargs=3,
         help="The columns mapping to pair groundtruth, first pair image, second pair image.",
     )
+    parser.add_argument(
+        "--obfuscate-both",
+        default=False,
+        type=bool,
+        action=argparse.BooleanOptionalAction
+    )
     args = parser.parse_args()
 
     return args
@@ -480,8 +486,11 @@ def main():
             batch_a = batch_crop_to_face(detector, batch_a, bboxes_a, max_value=1)
             batch_b = batch_crop_to_face(detector, batch_b, bboxes_b, max_value=1)
 
-        if model:
+        if model and not hparams["obfuscate_both"]:
             batch_a = ops.stop_gradient(model(batch_a, training=False)[0])
+        elif model and hparams["obfuscate_both"]:
+            batch_a = ops.stop_gradient(model(batch_a, training=False)[0])            
+            batch_b = ops.stop_gradient(model(batch_b, training=False)[0])
 
         if hparams["crop_faces"] == "after":
             batch_a = batch_crop_to_face(detector, batch_a, bboxes_a, max_value=1)
