@@ -17,7 +17,7 @@ from keras import ops
 import numpy as np
 import albumentations as A
 from auramask import metrics as aura_metrics
-
+from auramask.models.auramask import AuraMask
 from auramask.utils.constants import (
     EnumAction,
     FaceEmbedEnum,
@@ -28,8 +28,6 @@ hparams: dict = {}
 keras.config.disable_traceback_filtering()
 # Normalize network to use channels last ordering
 keras.backend.set_image_data_format("channels_last")
-
-ARTIFACT_URL = "run_{0}_model:{1}"
 
 
 # Path checking and creation if appropriate
@@ -52,16 +50,21 @@ def dir_path(path):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        prog="AuraMask Validation",
-        description="An evaluation script to compute metrics on validation data.",
+        prog="AuraMask Face Verification",
+        description="An evaluation script to compute face verification given pairs of images.",
     )
-    parser.add_argument("--run-id", type=str, required=False)
-    parser.add_argument("--hf-model", type=str, required=False)
-    parser.add_argument("--version", type=str, default="latest")
     parser.add_argument(
-        "-F", type=FaceEmbedEnum, nargs="+", required=False, action=EnumAction
+        "-m",
+        "--models",
+        type=str,
+        required=False,
+        nargs="+",
+        help="One or two model paths (for wandb artifacts from a run use wandb://run_id:version, for huggingface use hf://)",
     )
-    parser.add_argument("-d", "--dims", type=int, default=256)
+    parser.add_argument(
+        "-F", type=FaceEmbedEnum, nargs="+", required=True, action=EnumAction
+    )
+    parser.add_argument("--dims", type=int, default=256)
     parser.add_argument("-B", "--batch-size", dest="batch", type=int, default=32)
     parser.add_argument(
         "--mixed-precision",
@@ -76,25 +79,14 @@ def parse_args():
         action=argparse.BooleanOptionalAction,
     )
     parser.add_argument(
-        "-M",
-        "--metrics",
+        "-d",
+        "--distance",
         type=str,
-        default=["none"],
+        default=["cosine"],
         choices=[
-            "mse",
-            "mae",
-            "lpips",
-            "alex",
-            "ssimc",
-            "dssim",
-            "topiq_fr",
-            "topiq_nr",
-            "cwssim",
-            "facevalidation",
             "cosine",
             "euclidean",
             "euclidean_l2",
-            "none",
         ],
         nargs="+",
     )
@@ -137,12 +129,6 @@ def parse_args():
         nargs=3,
         help="The columns mapping to pair groundtruth, first pair image, second pair image.",
     )
-    parser.add_argument(
-        "--obfuscate-both",
-        default=False,
-        type=bool,
-        action=argparse.BooleanOptionalAction
-    )
     args = parser.parse_args()
 
     return args
@@ -154,44 +140,58 @@ def set_seed():
     keras.utils.set_random_seed(seed)
 
 
-def load_model() -> keras.Model:
-    if hparams["run_id"] and hparams["hf_model"]:
-        raise ValueError("Either choose run_id or hf-model")
-    elif hparams["run_id"]:
-        # Get the logged weights
-        api = wandb.Api(overrides={"entity": "spuds", "project": "auramask"})
-        train_run: wandb.Run = api.run(hparams["run_id"])
-        model_artifact = None
-        for logged_artifact in train_run.logged_artifacts():
-            if logged_artifact.type == "model":
-                if hparams["version"] in logged_artifact.aliases + [
-                    logged_artifact.version
-                ]:
-                    model_artifact = logged_artifact
+def load_model() -> tuple[keras.Model] | tuple[keras.Model, keras.Model]:
+    model_paths: list[str] = hparams["models"]
+    models = []
+    if len(model_paths) > 2:
+        raise ValueError("Provided more than two models for pairwise evaluation")
+
+    prev_path = ""
+    for path in model_paths:
+        if path == prev_path:  # Handle case where the same model is given for pairs
+            models.append(models[-1])
+            continue
+        prev_path = path
+        if path.startswith("hf://"):
+            models.append(keras.saving.load_model(path))
+        elif path.startswith("wandb://"):
+            # Get the logged weights
+            api = wandb.Api(overrides={"entity": "spuds", "project": "auramask"})
+            run_id, version = path.removeprefix("wandb://").split(":")
+            train_run: wandb.Run = api.run(run_id)
+            model_artifact = None
+            for logged_artifact in train_run.logged_artifacts():
+                if logged_artifact.type == "model":
+                    if version in logged_artifact.aliases + [logged_artifact.version]:
+                        model_artifact = logged_artifact
+                        break
+            if not model_artifact:
+                raise Exception(
+                    "Unable to find an artifact with alias or version {0}".format(
+                        version
+                    )
+                )
+            logged_weights = None
+            for file in model_artifact.manifest.entries.keys():
+                if "h5" in file:
+                    logged_weights = model_artifact.get_entry(file)
                     break
-        if not model_artifact:
-            raise Exception(
-                "Unable to find an artifact with alias or version {0}".format(
-                    hparams["version"]
+                elif "keras" in file:
+                    logged_weights = model_artifact.get_entry(file)
+                    break
+            logged_weights = logged_weights.download()
+            wandb.use_model(model_artifact)
+            models.append(keras.Model.from_config(train_run.config["model_config"]))
+            models[-1].load_weights(logged_weights)
+        else:
+            models.append(
+                keras.saving.load_model(
+                    path,
+                    custom_objects={"AuraMask": AuraMask},
                 )
             )
-        logged_weights = None
-        for file in model_artifact.manifest.entries.keys():
-            if "h5" in file:
-                logged_weights = model_artifact.get_entry(file)
-                break
-            elif "keras" in file:
-                logged_weights = model_artifact.get_entry(file)
-                break
-        logged_weights = logged_weights.download()
-        wandb.use_model(model_artifact)
-        model = keras.Model.from_config(train_run.config["model_config"])
-        model.load_weights(logged_weights)
-    elif hparams["hf_model"]:
-        model = keras.saving.load_model(f"hf://{hparams['hf_model']}")
-    else:
-        raise ValueError("No value given for run_id or for hf-model")
-    return model
+
+    return tuple(models)
 
 
 def initialize_metrics() -> list[keras.Metric]:
@@ -200,83 +200,26 @@ def initialize_metrics() -> list[keras.Metric]:
 
     F = hparams.pop("F")
 
-    if "none" not in hparams["metrics"]:
-        metrics_in = hparams.pop("metrics")
+    metrics_in = hparams.pop("distance")
 
-        for metric in metrics_in:
-            if metric == "mse":
-
-                def mse(y_true, y_pred):
-                    return ops.mean(ops.square(y_true - y_pred), axis=[1, 2, 3])
-
-                tmp_metric = keras.metrics.MeanMetricWrapper(
-                    mse,
-                    name=metric,
-                )
-            elif metric == "mae":
-
-                def mae(y_true, y_pred):
-                    return ops.mean(ops.absolute(y_true - y_pred), axis=[1, 2, 3])
-
-                tmp_metric = keras.metrics.MeanMetricWrapper(
-                    mae,
-                    name=metric,
-                )
-            elif metric == "ssimc":
-                tmp_metric = aura_metrics.IQASSIMC()
-            elif metric == "cwssim":
-                tmp_metric = aura_metrics.IQACWSSIM()
-            elif metric == "dssim":
-                tmp_metric = aura_metrics.DSSIMObjective()
-            elif metric == "topiq_fr":
-                tmp_metric = aura_metrics.TOPIQFR()
-            elif metric == "topiq_nr":
-                tmp_metric = aura_metrics.TOPIQNR()
-            elif metric == "lpips":
-                tmp_metric = aura_metrics.IQAPerceptual()
-            elif metric == "alex":
-                tmp_metric = aura_metrics.PerceptualSimilarity(backbone="alex")
-            elif metric == "facevalidation":
-                if not F:
-                    raise Exception(
-                        "Face validation requires embeddings to be chosen with -F"
-                    )
-                for f in F:
-                    metrics.append(aura_metrics.CosineValidation(f=f))
-                    metric_config[metrics[-1].name] = metrics[-1].get_config()
-                continue
-            elif metric == "cosine":
-                if not F:
-                    raise Exception(
-                        "Embedding distance requires embeddings to be chosen with -F"
-                    )
-                for f in F:
-                    metrics.append(aura_metrics.CosineDistance(f=f))
-                    metric_config[metrics[-1].name] = metrics[-1].get_config()
-                continue
-            elif metric == "euclidean":
-                if not F:
-                    raise Exception(
-                        "Embedding distance requires embeddings to be chosen with -F"
-                    )
-                for f in F:
-                    metrics.append(aura_metrics.EuclideanDistance(f=f))
-                    metric_config[metrics[-1].name] = metrics[-1].get_config()
-                continue
-            elif metric == "euclidean_l2":
-                if not F:
-                    raise Exception(
-                        "Embedding distance requires embeddings to be chosen with -F"
-                    )
-                for f in F:
-                    metrics.append(aura_metrics.EuclideanL2Distance(f=f))
-                    metric_config[metrics[-1].name] = metrics[-1].get_config()
-                continue
-            else:
-                raise Exception("Metric not recognized")
-
-            metrics.append(tmp_metric)
-            metric_config[tmp_metric.name] = tmp_metric.get_config()
+    for metric in metrics_in:
+        if metric == "cosine":
+            for f in F:
+                metrics.append(aura_metrics.CosineDistance(f=f))
+                metric_config[metrics[-1].name] = metrics[-1].get_config()
+            continue
+        elif metric == "euclidean":
+            for f in F:
+                metrics.append(aura_metrics.EuclideanDistance(f=f))
+                metric_config[metrics[-1].name] = metrics[-1].get_config()
+            continue
+        elif metric == "euclidean_l2":
+            for f in F:
+                metrics.append(aura_metrics.EuclideanL2Distance(f=f))
+                metric_config[metrics[-1].name] = metrics[-1].get_config()
+            continue
+        else:
+            raise Exception("Metric not recognized")
 
     hparams["metrics"] = metric_config
 
@@ -444,10 +387,10 @@ def main():
 
     metrics = initialize_metrics()
 
-    if hparams["hf_model"] or hparams["run_id"]:
-        model = load_model()
+    if len(hparams["models"]) > 0:
+        models = load_model()
     else:
-        model = None
+        models = None
 
     if hparams["with_image"]:
         validation_tab = wandb.Table(
@@ -486,11 +429,12 @@ def main():
             batch_a = batch_crop_to_face(detector, batch_a, bboxes_a, max_value=1)
             batch_b = batch_crop_to_face(detector, batch_b, bboxes_b, max_value=1)
 
-        if model and not hparams["obfuscate_both"]:
-            batch_a = ops.stop_gradient(model(batch_a, training=False)[0])
-        elif model and hparams["obfuscate_both"]:
-            batch_a = ops.stop_gradient(model(batch_a, training=False)[0])            
-            batch_b = ops.stop_gradient(model(batch_b, training=False)[0])
+        if models:
+            if len(models) == 1:
+                batch_a = ops.stop_gradient(models[0](batch_a, training=False)[0])
+            elif len(models) == 2:
+                batch_a = ops.stop_gradient(models[0](batch_a, training=False)[0])
+                batch_b = ops.stop_gradient(models[1](batch_b, training=False)[0])
 
         if hparams["crop_faces"] == "after":
             batch_a = batch_crop_to_face(detector, batch_a, bboxes_a, max_value=1)
