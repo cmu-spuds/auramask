@@ -279,7 +279,9 @@ def load_dataset() -> datasets.Dataset:
         [
             A.ToFloat(max_value=255, p=1),
             # A.CenterCrop(dims[0], dims[1]),
-            A.LongestMaxSize(np.maximum(dims[0], dims[1]), A.cv2.INTER_AREA),
+            A.LongestMaxSize(
+                np.maximum(dims[0], dims[1]), interpolation=A.cv2.INTER_AREA
+            ),
         ]
     )
 
