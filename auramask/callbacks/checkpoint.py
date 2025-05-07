@@ -23,7 +23,22 @@ class AuramaskCheckpoint(callbacks.ModelCheckpoint):
         initial_value_threshold: float | None = None,
         **kwargs: Any,
     ) -> None:
-        # self._bk_filepath = filepath
+        """Custom checkpointing
+
+        Args:
+            filepath (str | PathLike[str]): _description_
+            monitor (str, optional): _description_. Defaults to "val_loss".
+            verbose (int, optional): _description_. Defaults to 0.
+            save_best_only (bool, optional): _description_. Defaults to False.
+            save_weights_only (bool, optional): _description_. Defaults to False.
+            mode (Literal[&quot;auto&quot;] | Literal[&quot;min&quot;] | Literal[&quot;max&quot;], optional): _description_. Defaults to "auto".
+            save_freq (int, optional): _description_. Defaults to 1.
+            freq_mode (Literal[&quot;batch&quot;] | Literal[&quot;epoch&quot;], optional): _description_. Defaults to "epoch".
+            initial_value_threshold (float | None, optional): _description_. Defaults to None.
+
+        Raises:
+            wandb.Error: _description_
+        """
         if save_weights_only:
             filepath = path.join(filepath, "{epoch:02d}-{val_loss:.2f}.weights.h5")
         else:

@@ -1,4 +1,4 @@
-from keras import Model, utils, layers, backend, ops
+from keras import Model, utils, layers, backend, ops, KerasTensor
 from keras.src.applications.imagenet_utils import obtain_input_shape
 import os
 from functools import partial
@@ -12,7 +12,7 @@ WEIGHTS_PATH_512 = (
 )
 
 
-def preprocess_input(x):
+def preprocess_input(x) -> KerasTensor:
     mean, std = (
         ops.mean(x, axis=[-3, -2, -1], keepdims=True),
         ops.std(x, axis=[-3, -2, -1], keepdims=True),
@@ -31,7 +31,7 @@ def FaceNet(
     classifier_activation="softmax",
     preprocess=False,
     name="FaceNet",
-):
+) -> Model:
     if not (weights in {"deepface", None} or os.path.exists(weights)):
         raise ValueError(
             "The `weights` argument should be either "

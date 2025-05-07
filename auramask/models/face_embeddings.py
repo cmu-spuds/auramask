@@ -1,6 +1,6 @@
 from enum import Enum
-from typing import Literal
-from keras import layers, backend, KerasTensor
+from typing import Literal, Tuple, Set
+from keras import layers, backend, KerasTensor, Model
 
 from auramask.models.arcface import ArcFace
 from auramask.models.facenet import FaceNet
@@ -12,7 +12,7 @@ from auramask.models.vggface import VggFace
 PREPROCESS = True
 
 
-def resize_center_pad(x: KerasTensor, shape: tuple):
+def resize_center_pad(x: KerasTensor, shape: Tuple[int, int]) -> KerasTensor:
     if shape[0] != shape[1]:
         h = shape[0]
         w = shape[1]
@@ -39,7 +39,7 @@ class FaceEmbedEnum(str, Enum):
     DEEPID = "DeepID"
     ARCFACE = "ArcFace"
 
-    def get_model(self):
+    def get_model(self) -> Model:
         global model_obj
 
         if "model_obj" not in globals():
@@ -118,12 +118,9 @@ class FaceEmbedEnum(str, Enum):
         return threshold
 
     @classmethod
-    def build_F(cls, targets: list):
+    def build_F(cls, targets: list) -> Set[Model]:
         F = set()
         for model_label in targets:
             assert model_label in cls
             F.add(model_label.get_model())
         return F
-
-    def toJSON(self):
-        return self.name

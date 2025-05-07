@@ -1,5 +1,5 @@
-from typing import Any, Callable
-from keras import ops, backend, Model, metrics as m
+from typing import Any, Callable, Optional, Tuple, List, Dict
+from keras import ops, backend, Model, metrics as m, KerasTensor, Loss
 from auramask.losses.embeddistance import FaceEmbeddingLoss
 from auramask.losses.zero_dce import IlluminationSmoothnessLoss
 
@@ -18,15 +18,15 @@ class AuraMask(Model):
         # self.colorspace = colorspace
 
     @property
-    def losses(self):
+    def losses(self) -> List[Loss]:
         return self._my_losses
 
     @property
-    def metrics(self):
+    def metrics(self) -> List[m.Metric]:
         return self._metrics + self._loss_trackers
 
     @property
-    def loss_weights(self):
+    def loss_weights(self) -> List[KerasTensor]:
         return list(self._loss_weights)
 
     @loss_weights.setter
@@ -34,10 +34,12 @@ class AuraMask(Model):
         assert len(value) == len(self._loss_weights)
         self._loss_weights = ops.convert_to_tensor(value)
 
-    def get_loss_bundle(self):
+    def get_loss_bundle(self) -> Tuple[List[Loss], List[KerasTensor], List[m.Metric]]:
         return (self._losses, self._loss_weights, self._loss_trackers)
 
-    def call(self, inputs, training=False):
+    def call(
+        self, inputs: KerasTensor, training: bool = False
+    ) -> Tuple[KerasTensor, KerasTensor]:
         # if not training:
         #     inputs = self.colorspace[0](inputs)
 
@@ -78,7 +80,13 @@ class AuraMask(Model):
         self._metrics = metrics if metrics else []
         self._gradient_alteration = gradient_alter
 
-    def compute_loss(self, x=None, y=None, y_pred=None, sample_weight=None) -> list:
+    def compute_loss(
+        self,
+        x: KerasTensor,
+        y: KerasTensor,
+        y_pred: KerasTensor,
+        sample_weight: Optional[KerasTensor] = None,
+    ) -> List[KerasTensor]:
         del sample_weight
         # Predictions are passed as tuple (y_pred, mask)
         y_pred, mask = y_pred
@@ -101,10 +109,20 @@ class AuraMask(Model):
 
         return losses
 
-    # def save(self, filepath, overwrite=True, **kwargs):
+    # def save(self, filepath: str, overwrite: bool=True, **kwargs):
+    #     config: dict = self.get_config()
+    #     weights: list = self.get_weights()
+    #     model: Model = Model.from_config(config)
+    #     model.load_weights = weights
     #     return self.model.save(filepath, overwrite, **kwargs)
 
-    def compute_metrics(self, x, y, y_pred, sample_weight):
+    def compute_metrics(
+        self,
+        x: KerasTensor,
+        y: KerasTensor,
+        y_pred: KerasTensor,
+        sample_weight: Optional[KerasTensor] = None,
+    ) -> Dict[str, KerasTensor]:
         del sample_weight
 
         y_pred, _ = y_pred
@@ -113,14 +131,14 @@ class AuraMask(Model):
             metric.update_state(y, y_pred)
         return self.get_metrics_result()
 
-    def get_metrics_result(self):
-        all_metrics = {}
+    def get_metrics_result(self) -> Dict[str, KerasTensor]:
+        all_metrics: dict = {}
         for metric in self.metrics:
             all_metrics[metric.name] = metric.result()
             metric.reset_state()
         return all_metrics
 
-    def train_step(self, *args, **kwargs):
+    def train_step(self, *args, **kwargs) -> Dict[str, KerasTensor]:
         if backend.backend() == "jax":
             return self._jax_train_step(*args, **kwargs)
         elif backend.backend() == "tensorflow":
@@ -128,7 +146,7 @@ class AuraMask(Model):
         elif backend.backend() == "torch":
             return self._torch_train_step(*args, **kwargs)
 
-    def _tensorflow_train_step(self, data):
+    def _tensorflow_train_step(self, data) -> Dict[str, KerasTensor]:
         from tensorflow import GradientTape
 
         X, y = data  # X is input image data, y is the target image
@@ -152,7 +170,9 @@ class AuraMask(Model):
         metrics["loss"] = loss
         return metrics
 
-    def __compute_gradient(self, loss: list):
+    def __compute_gradient(
+        self, loss: list
+    ) -> Tuple[List[KerasTensor], List[KerasTensor]]:
         if self._gradient_alteration is None:
             loss = ops.sum(loss)
             scaled_loss = self.optimizer.scale_loss(loss)
@@ -166,7 +186,7 @@ class AuraMask(Model):
             )
         return gradients, trainable_weights
 
-    def _torch_train_step(self, data):
+    def _torch_train_step(self, data) -> Dict[str, KerasTensor]:
         import torch
 
         X, y = data  # X is input image data, y is target image
@@ -193,7 +213,7 @@ class AuraMask(Model):
         elif backend.backend() == "torch":
             return self._torch_test_step(*args, **kwargs)
 
-    def _torch_test_step(self, data):
+    def _torch_test_step(self, data) -> Dict[str, KerasTensor]:
         import torch
 
         X, y = data  # X is input image data, y is target image

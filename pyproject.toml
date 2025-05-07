@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "auramask"
+description = "Toolkit for the development of Adversarial Transformation Networks to sabotage algorithmic inference."
+dynamic = ["version"]
+requires-python = ">=3.12"
+license-files = ["LICENSE.md"]
+authors = [
+    { name="Jacob Logas", email="jacob@logas.me" }
+]
+maintainers = [
+    { name="Jacob Logas", email="jacob@logas.me" }
+]
+keywords = [
+    "keras",
+    "adversarial machine learning",
+    "toolkit",
+]
+dependencies = [
+    "datasets[vision]",
+    "keras>=3",
+    "wandb",
+    "albumentations",
+    "numpy"
+]
+
+[tool]
+[tool.hatch]
